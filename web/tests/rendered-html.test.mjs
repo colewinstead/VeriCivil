@@ -99,7 +99,7 @@ test("renders superelevation at its permanent route and preserves compatibility 
   assert.match(source, /reverse_curve_pairs: reverseCurvePairs/i);
   assert.match(source, /Local test plan/i);
   assert.match(await readFile(new URL("../app/entitlements.ts", import.meta.url), "utf8"), /process\.env\.NODE_ENV === "production"/);
-  assert.match(source, /setLocalDevelopment\(hasLocalEntitlementOverride\(\)\)/);
+  assert.match(source, /setLocalDevelopment\(isLocalEntitlementDevelopment\(\)\)/);
   assert.match(source, /const proChip = \(capability: string\) => allows\(entitlement, capability\)/);
   assert.match(source, /PRO\} access|TOUPPERCASE\(\).*access/i);
   assert.match(source, /requestCapability/i);

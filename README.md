@@ -82,6 +82,8 @@ npm install
 npm run dev
 ```
 
+Local development defaults to Pro without an account or URL parameter. The calculator's Local test plan selector can switch to Free or Team for testing; explicit `?entitlement=free` overrides remain supported. The hosted website continues to use account entitlements.
+
 Create a production build with `npm run build`. The deployable files are written to `web/dist`. The build stages the shared Python modules from the repository, so calculation and export changes are made once and used by both the desktop and browser applications.
 
 The first browser visit downloads the Python runtime and scientific/export packages. After that initial load, calculations and file exports occur on the user's device. Saved `.superelevation.json` project files are portable between the desktop and browser versions.

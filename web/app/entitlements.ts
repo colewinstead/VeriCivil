@@ -60,14 +60,10 @@ export function isLocalEntitlementDevelopment() {
     || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
 }
 
-export function hasLocalEntitlementOverride() {
-  if (!isLocalEntitlementDevelopment()) return false;
-  return new URLSearchParams(window.location.search).has("entitlement");
-}
-
 function requestedLocalState(): { plan: CommercialPlan; status: EntitlementStatus } {
   if (!isLocalEntitlementDevelopment()) return { plan: "free", status: "active" };
   const value = new URLSearchParams(window.location.search).get("entitlement")?.toLowerCase();
+  if (value === undefined) return { plan: "pro", status: "active" };
   if (value === "pro" || value === "team") return { plan: value, status: "active" };
   if (value === "grace") return { plan: "pro", status: "grace" };
   if (value === "unavailable") return { plan: "free", status: "unavailable" };

@@ -10,7 +10,7 @@ import {
   CommercialPlan,
   EMPTY_FREE_ENTITLEMENT,
   EntitlementSnapshot,
-  hasLocalEntitlementOverride,
+  isLocalEntitlementDevelopment,
   LocalDevelopmentEntitlementProvider,
   localSnapshot,
   RemoteEntitlementProvider,
@@ -181,12 +181,12 @@ export default function CalculatorApp() {
         setRuntime("ready");
         setManifest(message.manifest);
         if (message.manifest?.commercial) {
-          const provider = hasLocalEntitlementOverride()
+          const provider = isLocalEntitlementDevelopment()
             ? new LocalDevelopmentEntitlementProvider(message.manifest.commercial)
             : new RemoteEntitlementProvider(message.manifest.commercial);
           entitlementProviderRef.current = provider;
           provider.getSnapshot().then(setEntitlement);
-          setLocalDevelopment(hasLocalEntitlementOverride());
+          setLocalDevelopment(isLocalEntitlementDevelopment());
         }
       } else if (message.type === "fatal") {
         setRuntime("error");

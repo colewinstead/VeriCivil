@@ -44,3 +44,11 @@ Test exports/
 !web/public/showcase/
 !web/public/showcase/*.png
 SuperElevation_legacy_*.exe
+
+# Local Excel prototype dependencies and generated workbooks
+/excel/
+
+# Local report assets and private fixture inputs
+/Website pics/
+/tests/fixtures/cw.xml
+/tests/fixtures/sr82.json
