@@ -142,7 +142,7 @@ class PilotReadinessTests(unittest.TestCase):
         self.assertNotIn("STANTEC_PNG_B64", source)
 
     def test_windows_version_resource_uses_authoritative_version(self):
-        self.assertEqual(version_tuple(APP_VERSION), (1, 5, 4, 0))
+        self.assertEqual(version_tuple(APP_VERSION), (1, 5, 5, 0))
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "version.txt"
             generate(path)
