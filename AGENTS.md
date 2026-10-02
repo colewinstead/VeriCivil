@@ -7,8 +7,9 @@
 
 ## Versioned merges
 
-- `main` is user-ready. Every pull request merged into `main` becomes a browser GitHub Release while the desktop edition is Coming soon.
-- Increase `APP_VERSION` in `app_info.py` beyond the latest release in every pull request, including documentation-only changes.
+- `main` is user-ready. Changes beyond documentation become a browser GitHub Release while the desktop edition is Coming soon.
+- Documentation-only changes (`.md`, `.rst`, and license files) do not require a version bump and do not create a GitHub Release. The `validate-version` job still runs and passes for these changes.
+- Increase `APP_VERSION` in `app_info.py` beyond the latest release for changes to application code, calculation data, tests, dependencies, builds, or workflows. Mixed documentation and code changes require a version bump.
 - Do not merge when `validate-version` or any other required check is red.
 - Use squash merges only.
 
