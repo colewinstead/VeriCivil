@@ -17,6 +17,7 @@ jobs:
   validate-version:
     runs-on: ubuntu-latest
     outputs:
+      release-required: ${{ steps.scope.outputs.release-required }}
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
@@ -25,7 +26,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Classify documentation-only changes
+        id: scope
+        env:
+          CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CHANGE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          ARGS=(--base "$CHANGE_BASE" --head "$CHANGE_HEAD")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            ARGS+=(--merge-base)
+          fi
+          REQUIRED=$(python scripts/classify_release_changes.py "${ARGS[@]}")
+          echo "release-required=$REQUIRED" >> "$GITHUB_OUTPUT"
+          if [[ "$REQUIRED" == "false" ]]; then
+            echo "Documentation-only change: no version bump or release required."
+          fi
+
       - name: Validate release version
+        if: steps.scope.outputs.release-required == 'true'
         id: version
         shell: bash
         run: |
@@ -39,7 +59,7 @@ jobs:
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
   build-browser:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.validate-version.outputs.release-required == 'true'
     needs: validate-version
     runs-on: ubuntu-latest
     steps:
@@ -99,7 +119,7 @@ jobs:
           retention-days: 90
 
   publish-release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.validate-version.outputs.release-required == 'true'
     needs: [validate-version, build-browser]
     runs-on: ubuntu-latest
     permissions:

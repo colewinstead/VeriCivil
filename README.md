@@ -220,7 +220,7 @@ The script detects Apple Silicon or Intel, packages `Superelevation Calculator.a
 
 ### Automatic GitHub releases
 
-Every pull request targeting `main` must increase `APP_VERSION` in `app_info.py` beyond the latest GitHub release. After that pull request is merged and all release jobs pass, GitHub publishes a release tagged `vMAJOR.MINOR.PATCH` with the browser build archive. Desktop distribution is paused, and Windows and macOS builds are manual-only. Because every merge becomes a user-facing release, do not merge documentation-only or intermediate work without assigning it the next version.
+Documentation-only changes (`.md`, `.rst`, and license files) pass the version check without a version bump and do not create a release. Changes to application code, calculation data, tests, dependencies, builds, or workflows must increase `APP_VERSION` in `app_info.py` beyond the latest GitHub release, including when combined with documentation edits. After those changes merge and all release jobs pass, GitHub publishes a release tagged `vMAJOR.MINOR.PATCH` with the browser build archive. Desktop distribution is paused, and Windows and macOS builds are manual-only.
 
 Publishing the browser archive to the existing ChatGPT Site remains a separate `Ship main` step in Codex.
 
