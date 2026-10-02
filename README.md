@@ -3,18 +3,15 @@
 </p>
 
 <p align="center">
-  <strong>Roadway superelevation calculations, design review, and CAD-ready exports for Windows and the browser.</strong>
+  <strong>Browser-based roadway superelevation calculations, design review, and CAD-ready exports.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/colewinstead/VeriCivil/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/colewinstead/VeriCivil?style=for-the-badge&color=2ea44f"></a>
   <a href="https://github.com/colewinstead/VeriCivil/actions/workflows/tests.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/colewinstead/VeriCivil/tests.yml?branch=main&style=for-the-badge&label=tests"></a>
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white">
-  <img alt="Platform" src="https://img.shields.io/badge/Windows-Desktop-0078D4?style=for-the-badge&logo=windows11&logoColor=white">
 </p>
 
 <p align="center">
-  <a href="https://github.com/colewinstead/VeriCivil/releases/latest"><strong>Download for Windows or macOS</strong></a>
+  <a href="https://vericivil.com"><strong>Open the live VeriCivil calculator</strong></a>
   &nbsp;&middot;&nbsp;
   <a href="#quick-start">Run from source</a>
   &nbsp;&middot;&nbsp;
@@ -52,9 +49,9 @@ flowchart LR
 4. Export a PDF report, ORD CSV, or CAD overlay DXF.
 5. Verify the result in OpenRoads Designer or MicroStation before production use.
 
-## Download
+## Live app
 
-Download the latest Windows executable or native macOS disk image from [GitHub Releases](https://github.com/colewinstead/VeriCivil/releases/latest). Separate macOS builds are provided for Apple Silicon and Intel processors. Desktop applications are distributed as release assets instead of being stored in the source tree.
+Use the [live VeriCivil browser calculator](https://vericivil.com), the current public version of VeriCivil.
 
 > [!IMPORTANT]
 > This is an engineering aid. Always validate criteria, stationing, coordinate systems, lane naming, and exported geometry against the governing standards and the project design file.
@@ -223,9 +220,9 @@ The script detects Apple Silicon or Intel, packages `Superelevation Calculator.a
 
 ### Automatic GitHub releases
 
-Every pull request targeting `main` must increase `APP_VERSION` in `app_info.py` beyond the latest GitHub release. After that pull request is merged and all release jobs pass, GitHub publishes a full release tagged `vMAJOR.MINOR.PATCH` with the Windows executable, Apple Silicon and Intel macOS disk images, checksums, and the matching browser build archive. Because every merge becomes a user-facing release, do not merge documentation-only or intermediate work without assigning it the next version.
+Every pull request targeting `main` must increase `APP_VERSION` in `app_info.py` beyond the latest GitHub release. After that pull request is merged and all release jobs pass, GitHub publishes a release tagged `vMAJOR.MINOR.PATCH` with the browser build archive. Desktop distribution is paused, and Windows and macOS builds are manual-only. Because every merge becomes a user-facing release, do not merge documentation-only or intermediate work without assigning it the next version.
 
-The automated Windows executable is currently unsigned. Signed pilot releases still require the private Windows signing computer, `scripts\build_windows.ps1 -BuildInstaller -Sign`, `scripts\verify_windows_release.ps1`, and the release acceptance checklist. Publishing the browser archive to the existing ChatGPT Site remains a separate `Ship main` step in Codex.
+Publishing the browser archive to the existing ChatGPT Site remains a separate `Ship main` step in Codex.
 
 ### Desktop update checks
 
