@@ -40,6 +40,8 @@ VeriCivil connects focused engineering calculations to practical design and fiel
 
 ## Brand Commitments
 
+VeriCivil is a brand of CW Aerial Media LLC, the operating legal entity behind the website and RoadStation.
+
 Use VeriCivil as the family name, Superelevation Calculator for the design workspace, and RoadStation by VeriCivil for the iPhone product. Existing public copy emphasizes “Roadway software you can verify.” Keep product language concrete about engineering work, assumptions, and limitations. Do not imply certification or survey-grade accuracy.
 
 ## Evidence on Hand
