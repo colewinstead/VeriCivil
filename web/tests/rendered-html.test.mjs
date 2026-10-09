@@ -21,8 +21,10 @@ test("renders the VeriCivil calculator hub without starting a calculation runtim
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /VeriCivil \| Roadway Engineering Tools/i);
-  assert.match(html, /Roadway calculations/i);
+  assert.match(html, /Roadway software/i);
   assert.match(html, /you can verify/i);
+  assert.match(html, /Tested engineering logic/i);
+  assert.doesNotMatch(html, /Shared Python engines|Roadway calculation toolkit/i);
   assert.match(html, /Crushed Stone Base/i);
   assert.match(html, /Superelevation Calculator/i);
   assert.match(html, /Manage Superelevation Pro/i);
@@ -65,6 +67,8 @@ test("RoadStation product and release resources keep the brand and positioning l
     assert.doesNotMatch(html, /apps\.apple\.com|testflight\.apple\.com/);
   }
   assert.match(landingHtml, /RoadStation by VeriCivil/);
+  assert.match(landingHtml, /class="marketing-button primary-action" href="#workflow">See how RoadStation works/);
+  assert.match(landingHtml, /<a(?=[^>]*class="marketing-button secondary-action")(?=[^>]*href="\/roadstation\/support")[^>]*>Explore the sample and worked check/);
   assert.match(landingHtml, /LandXML/);
   assert.match(landingHtml, /Confirm CRS/);
   assert.match(landingHtml, /MapKit/);

@@ -30,13 +30,13 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: "website",
       title: "VeriCivil",
-      description: "Roadway calculations you can verify.",
-      images: [{ url: new URL("/og.png", origin).toString(), width: 1200, height: 630, alt: "VeriCivil roadway calculation toolkit" }],
+      description: "Roadway software you can verify.",
+      images: [{ url: new URL("/og.png", origin).toString(), width: 1200, height: 630, alt: "VeriCivil roadway engineering tools" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "VeriCivil",
-      description: "Roadway calculations you can verify.",
+      description: "Roadway software you can verify.",
       images: [new URL("/og.png", origin).toString()],
     },
   };

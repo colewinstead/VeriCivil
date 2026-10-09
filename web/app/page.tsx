@@ -11,10 +11,10 @@ export default function Home() {
       <SiteHeader showGithub={false} />
       <section className="platform-hero" id="top">
         <div className="platform-hero-copy">
-          <p className="marketing-eyebrow"><span /> Roadway calculation toolkit</p>
-          <h1>Roadway calculations<br /><em>you can verify.</em></h1>
-          <p>VeriCivil makes focused software for roadway engineers and inspectors: browser-based calculation tools and RoadStation for iPhone. Each tool keeps its assumptions and limits in view.</p>
-          <div className="hero-actions"><a className="marketing-button primary-action" href="/calculators/superelevation">Open Superelevation <span>→</span></a><a className="marketing-button secondary-action" href="/calculators">Browse all calculators <span>↗</span></a></div>
+          <p className="marketing-eyebrow"><span /> Roadway engineering software</p>
+          <h1>Roadway software<br /><em>you can verify.</em></h1>
+          <p>VeriCivil makes focused software for roadway engineers and inspectors: browser-based engineering tools and RoadStation for iPhone. Each tool keeps its assumptions and limits in view.</p>
+          <div className="hero-actions"><a className="marketing-button primary-action" href="/roadstation">Explore RoadStation <span>→</span></a><a className="marketing-button secondary-action" href="/calculators">Browse engineering tools <span>↗</span></a></div>
           <div className="hero-trust"><span><i /> Files stay local</span><span><i /> Methods stay visible</span><span><i /> Engineering review required</span></div>
         </div>
         <div className="platform-hero-showcase" aria-label="Authentic Superelevation Calculator views">
@@ -24,12 +24,12 @@ export default function Home() {
           </a>
           <div className="hero-capture-row">
             <figure className="hero-capture"><div><img src="/showcase/lane-profile-diagram.png" alt="Expanded station-aware superelevation lane profile" width="1440" height="1200" /></div><figcaption>Lane profiles</figcaption></figure>
-            <figure className="hero-capture"><div><img src="/showcase/dxf-plan-view.png" alt="CAD plan view with superelevation transition callouts" width="1440" height="1200" /></div><figcaption>Overlay DXF</figcaption></figure>
+            <figure className="hero-capture"><div><img src="/showcase/dxf-plan-view.png" alt="Superelevation plan view for SR 82 with alignment, slope, and station callouts" width="2880" height="1376" /></div><figcaption>Overlay DXF</figcaption></figure>
           </div>
         </div>
       </section>
 
-      <section className="platform-signal-strip" aria-label="VeriCivil product principles"><div><span>LOCAL</span><strong>Calculation files stay on device</strong></div><i>→</i><div><span>VISIBLE</span><strong>Assumptions and provenance</strong></div><i>→</i><div><span>TESTED</span><strong>Shared Python engines</strong></div></section>
+      <section className="platform-signal-strip" aria-label="VeriCivil product principles"><div><span>LOCAL</span><strong>Project files stay on device</strong></div><i>→</i><div><span>VISIBLE</span><strong>Assumptions and provenance</strong></div><i>→</i><div><span>TESTED</span><strong>Tested engineering logic</strong></div></section>
 
       <section className="platform-product" id="products">
         <div className="platform-product-copy">
@@ -57,7 +57,7 @@ export default function Home() {
 
       <section className="platform-principles">
         <div className="section-intro"><p className="marketing-eyebrow"><span /> Built for verification</p><h2>Useful results need visible context.</h2></div>
-        <div className="principle-grid"><article><span>01</span><h3>Traceable methods</h3><p>Formulas, assumptions, units, source revisions, and engine versions stay connected to results.</p></article><article><span>02</span><h3>Local processing</h3><p>Engineering calculations and project files run inside the browser instead of being uploaded to a calculation server.</p></article><article><span>03</span><h3>Focused tools</h3><p>Each calculator owns its tested Python engine while sharing a consistent VeriCivil experience.</p></article></div>
+        <div className="principle-grid"><article><span>01</span><h3>Traceable methods</h3><p>Formulas, assumptions, units, source revisions, and engine versions stay connected to results.</p></article><article><span>02</span><h3>Local processing</h3><p>Browser calculations run on your device. RoadStation keeps imported alignments and saved projects on your iPhone.</p></article><article><span>03</span><h3>Focused tools</h3><p>From design exports to field station and offset, each product focuses on a practical roadway task.</p></article></div>
       </section>
 
       <section className="platform-account-callout"><div><p className="marketing-eyebrow"><span /> Superelevation Pro</p><h2>Professional project workflows remain available.</h2><p>Manage Superelevation Pro for LandXML, multi-curve projects, supported DOT profiles, PDF, ORD CSV, and overlay DXF exports.</p></div><a className="marketing-button primary-action" href="/account">Manage Superelevation Pro <span>↗</span></a></section>
