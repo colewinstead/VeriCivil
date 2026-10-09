@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 export default function PrivacyPage() {
   return (
     <LegalShell title="Privacy Policy" effectiveDate={PRIVACY_EFFECTIVE_DATE}>
-      <p>This Policy explains how the operator identified during checkout and on a customer&apos;s payment receipt handles personal information for the Superelevation Calculator Service.</p>
+      <p>This Policy explains how CW Aerial Media LLC (<strong>Provider</strong>), operating under the VeriCivil brand, handles personal information for the Superelevation Calculator Service.</p>
 
       <section><h2>1. Engineering work stays local</h2>
         <p><strong>Project files, project names, LandXML, engineering inputs, calculations, stationing, coordinates, project JSON, PDF reports, ORD CSV exports, and overlay DXF files are not automatically uploaded to authentication, billing, or entitlement services.</strong></p>

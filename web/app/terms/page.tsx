@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Terms of Service" };
 export default function TermsPage() {
   return (
     <LegalShell title="Terms of Service" effectiveDate={TERMS_EFFECTIVE_DATE}>
-      <p>These Terms govern the Superelevation Calculator website, browser application, paid features, documentation, and related services (the <strong>Service</strong>). The provider is the seller identified during checkout and on the customer&apos;s payment receipt (<strong>Provider</strong>). By accepting these Terms, creating a paid account, or using a paid feature, the customer agrees personally or for the organization it is authorized to bind.</p>
+      <p>These Terms govern the Superelevation Calculator website, browser application, paid features, documentation, and related services (the <strong>Service</strong>). The Service is operated by CW Aerial Media LLC (<strong>Provider</strong>) under the VeriCivil brand. By accepting these Terms, creating a paid account, or using a paid feature, the customer agrees personally or for the organization it is authorized to bind.</p>
 
       <section><h2>1. Engineering aid and responsible professional</h2>
         <p>The Service is an engineering aid. It does not replace professional judgment, project-specific review, governing standards, agency approval, or the duties of the licensed professional responsible for a project.</p>

@@ -24,6 +24,7 @@ test("renders the VeriCivil calculator hub without starting a calculation runtim
   assert.match(html, /Roadway software/i);
   assert.match(html, /you can verify/i);
   assert.match(html, /Tested engineering logic/i);
+  assert.match(html, /VeriCivil is a brand of CW Aerial Media LLC\./);
   assert.doesNotMatch(html, /Shared Python engines|Roadway calculation toolkit/i);
   assert.match(html, /Crushed Stone Base/i);
   assert.match(html, /Superelevation Calculator/i);
@@ -61,6 +62,7 @@ test("RoadStation product and release resources keep the brand and positioning l
   ]);
   for (const html of [landingHtml, supportHtml, privacyHtml]) {
     assert.match(html, /RoadStation/);
+    assert.match(html, /VeriCivil is a brand of CW Aerial Media LLC\./);
     assert.match(html, /VeriCivil/);
     assert.match(html, /href="\/roadstation\/support"/);
     assert.match(html, /href="\/roadstation\/privacy"/);
@@ -81,6 +83,8 @@ test("RoadStation product and release resources keep the brand and positioning l
   assert.match(supportHtml, /sample\.landxml/);
   assert.match(supportHtml, /support@vericivil\.com/);
   assert.match(privacyHtml, /not sent to the developer/);
+  assert.match(privacyHtml, /operated by CW Aerial Media LLC under the VeriCivil brand/);
+  assert.match(privacyHtml, /Effective October 9, 2026/);
   for (const asset of ["sample.landxml", "inspection.webp", "projects.webp", "crs.webp", "field-position.webp", "og.png"]) {
     await access(new URL(`../public/roadstation/${asset}`, import.meta.url));
   }
@@ -175,6 +179,11 @@ test("renders public legal pages and branded signed-out account access", async (
     accountResponse.text(),
     loginResponse.text(),
   ]);
+  for (const html of [terms, privacy]) {
+    assert.match(html, /CW Aerial Media LLC/);
+    assert.match(html, /VeriCivil brand/);
+    assert.match(html, /Effective (?:<!-- -->)?October 9, 2026/);
+  }
   assert.match(terms, /\$29 USD per month/i);
   assert.match(terms, /renews automatically/i);
   assert.match(terms, /nonrefundable/i);
