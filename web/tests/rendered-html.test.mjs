@@ -20,12 +20,14 @@ test("renders the VeriCivil calculator hub without starting a calculation runtim
   const response = await render("/");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /VeriCivil \| Roadway Calculation Toolkit/i);
+  assert.match(html, /VeriCivil \| Roadway Engineering Tools/i);
   assert.match(html, /Roadway calculations/i);
   assert.match(html, /you can verify/i);
   assert.match(html, /Crushed Stone Base/i);
   assert.match(html, /Superelevation Calculator/i);
   assert.match(html, /Manage Superelevation Pro/i);
+  assert.match(html, /RoadStation by VeriCivil/i);
+  assert.match(html, /href="\/roadstation"/i);
   assert.match(html, /licensed professional responsible for the project/i);
   assert.doesNotMatch(html, /<form/i);
   assert.match(html, /http:\/\/localhost\/og\.png/i);
@@ -45,6 +47,39 @@ test("renders the VeriCivil calculator hub without starting a calculation runtim
   assert.doesNotMatch(html, /Available Tool 01|Available Tool 02|Superelevated roadway calculation illustration|Example calculator results/i);
   assert.doesNotMatch(html, /Starting private browser workspace/i);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+});
+
+test("RoadStation product and release resources keep the brand and positioning limits clear", async () => {
+  const [landing, support, privacy] = await Promise.all([
+    render("/roadstation"), render("/roadstation/support"), render("/roadstation/privacy"),
+  ]);
+  for (const response of [landing, support, privacy]) assert.equal(response.status, 200);
+  const [landingHtml, supportHtml, privacyHtml] = await Promise.all([
+    landing.text(), support.text(), privacy.text(),
+  ]);
+  for (const html of [landingHtml, supportHtml, privacyHtml]) {
+    assert.match(html, /RoadStation/);
+    assert.match(html, /VeriCivil/);
+    assert.match(html, /href="\/roadstation\/support"/);
+    assert.match(html, /href="\/roadstation\/privacy"/);
+    assert.doesNotMatch(html, /apps\.apple\.com|testflight\.apple\.com/);
+  }
+  assert.match(landingHtml, /RoadStation by VeriCivil/);
+  assert.match(landingHtml, /LandXML/);
+  assert.match(landingHtml, /Confirm CRS/);
+  assert.match(landingHtml, /MapKit/);
+  assert.match(landingHtml, /not survey-grade/);
+  assert.match(landingHtml, /Fictional example · manual query/);
+  assert.match(landingHtml, /Coming before launch/);
+  assert.match(landingHtml, /vericivil\.com\/roadstation/);
+  assert.match(landingHtml, /roadstation\/og\.png/);
+  assert.match(supportHtml, /986377\.5959036754/);
+  assert.match(supportHtml, /sample\.landxml/);
+  assert.match(supportHtml, /support@vericivil\.com/);
+  assert.match(privacyHtml, /not sent to the developer/);
+  for (const asset of ["sample.landxml", "inspection.webp", "projects.webp", "crs.webp", "field-position.webp", "og.png"]) {
+    await access(new URL(`../public/roadstation/${asset}`, import.meta.url));
+  }
 });
 
 test("renders the calculator directory and crushed stone base workspace", async () => {

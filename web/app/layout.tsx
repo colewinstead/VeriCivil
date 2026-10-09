@@ -23,10 +23,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(origin),
     title: {
-      default: "VeriCivil | Roadway Calculation Toolkit",
+      default: "VeriCivil | Roadway Engineering Tools",
       template: "%s | VeriCivil",
     },
-    description: "Focused roadway design and construction calculators with visible assumptions, local processing, and tested Python engines.",
+    description: "VeriCivil makes focused software for roadway engineers and inspectors, including RoadStation for iPhone and browser-based calculation tools.",
     openGraph: {
       type: "website",
       title: "VeriCivil",
