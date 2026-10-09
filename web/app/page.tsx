@@ -3,6 +3,7 @@ import Link from "next/link";
 import CalculatorCards from "./CalculatorCards";
 import OutputShowcase from "./OutputShowcase";
 import SiteHeader from "./SiteHeader";
+import SiteFooter from "./SiteFooter";
 
 export default function Home() {
   return (
@@ -12,7 +13,7 @@ export default function Home() {
         <div className="platform-hero-copy">
           <p className="marketing-eyebrow"><span /> Roadway calculation toolkit</p>
           <h1>Roadway calculations<br /><em>you can verify.</em></h1>
-          <p>VeriCivil brings professional superelevation design and focused roadway utilities into one browser-first workspace, with visible assumptions and tested Python engines.</p>
+          <p>VeriCivil makes focused software for roadway engineers and inspectors: browser-based calculation tools and RoadStation for iPhone. Each tool keeps its assumptions and limits in view.</p>
           <div className="hero-actions"><a className="marketing-button primary-action" href="/calculators/superelevation">Open Superelevation <span>→</span></a><a className="marketing-button secondary-action" href="/calculators">Browse all calculators <span>↗</span></a></div>
           <div className="hero-trust"><span><i /> Files stay local</span><span><i /> Methods stay visible</span><span><i /> Engineering review required</span></div>
         </div>
@@ -29,6 +30,20 @@ export default function Home() {
       </section>
 
       <section className="platform-signal-strip" aria-label="VeriCivil product principles"><div><span>LOCAL</span><strong>Calculation files stay on device</strong></div><i>→</i><div><span>VISIBLE</span><strong>Assumptions and provenance</strong></div><i>→</i><div><span>TESTED</span><strong>Shared Python engines</strong></div></section>
+
+      <section className="platform-product" id="products">
+        <div className="platform-product-copy">
+          <p className="marketing-eyebrow"><span /> VeriCivil products</p>
+          <h2>RoadStation.<br /><em>Alignment context on iPhone.</em></h2>
+          <p>RoadStation by VeriCivil helps roadway engineers and inspectors read approximate station and LT/RT offset from supported LandXML alignments. Confirm the project CRS and units, then see the alignment in MapKit context.</p>
+          <p className="platform-product-caveat">Phone GPS is approximate and is not survey-grade.</p>
+          <Link className="marketing-button secondary-action" href="/roadstation">Explore RoadStation <span>↗</span></Link>
+        </div>
+        <Link className="platform-product-image" href="/roadstation" aria-label="Explore RoadStation for iPhone">
+          <img src="/roadstation/inspection.webp" alt="RoadStation manual inspection of a fictional alignment, showing a MapKit view and station 100+50.00 at 5.000 feet right" width="1170" height="2532" />
+          <span>Fictional sample · manual query</span>
+        </Link>
+      </section>
 
       <section className="platform-calculators" id="calculators">
         <div className="section-intro"><p className="marketing-eyebrow"><span /> Available calculators</p><h2>One toolkit.<br />A flagship workspace and focused utilities.</h2><p>Superelevation is VeriCivil’s professional design workspace. Supporting tools stay fast, focused, and free where noted.</p></div>
@@ -48,7 +63,7 @@ export default function Home() {
       <section className="platform-account-callout"><div><p className="marketing-eyebrow"><span /> Superelevation Pro</p><h2>Professional project workflows remain available.</h2><p>Manage Superelevation Pro for LandXML, multi-curve projects, supported DOT profiles, PDF, ORD CSV, and overlay DXF exports.</p></div><a className="marketing-button primary-action" href="/account">Manage Superelevation Pro <span>↗</span></a></section>
 
       <section className="engineering-note"><span>ENGINEERING AIDS</span><p>The licensed professional responsible for the project must independently verify criteria, inputs, assumptions, stationing, coordinate systems, results, quantities, and deliverables.</p></section>
-      <footer className="platform-footer"><Link className="platform-brand" href="/"><span className="platform-brand-mark">VC</span><span><strong>VeriCivil</strong><small>Roadway calculation tools</small></span></Link><p>Focused calculations with visible engineering context.</p><div><Link href="/calculators">Calculators</Link><Link href="/account">Account</Link><Link href="/terms">Terms</Link><Link href="/privacy">Privacy</Link></div></footer>
+      <SiteFooter />
     </main>
   );
 }
