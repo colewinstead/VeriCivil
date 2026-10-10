@@ -444,3 +444,22 @@ test("ships interactive diagram zoom and corridor QA controls", async () => {
   assert.match(appSource, /corridor_diagram/);
   assert.match(appSource, /plan_view/);
 });
+
+
+test("sitemap public pages render matching production canonical URLs", async () => {
+  const sitemap = await readFile(new URL("../dist/client/sitemap.xml", import.meta.url), "utf8");
+  const robots = await readFile(new URL("../dist/client/robots.txt", import.meta.url), "utf8");
+  assert.match(robots, /Sitemap: https:\/\/vericivil\.com\/sitemap\.xml/);
+  const urls = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
+  assert.equal(urls.length, 9);
+  assert.equal(new Set(urls).size, urls.length);
+  for (const url of urls) {
+    assert.equal(new URL(url).origin, "https://vericivil.com");
+    const response = await render(new URL(url).pathname);
+    assert.equal(response.status, 200, url);
+    const html = await response.text();
+    const canonicals = [...html.matchAll(/<link[^>]*rel="canonical"[^>]*href="([^"]+)"[^>]*>/g)];
+    assert.deepEqual(canonicals.map((match) => match[1]), [url]);
+  }
+  assert.doesNotMatch(sitemap, /\/(login|account|admin|api|auth)(?:<|\/)/);
+});
