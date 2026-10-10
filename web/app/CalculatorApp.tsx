@@ -327,6 +327,10 @@ export default function CalculatorApp() {
   };
 
   const calculationKey = useMemo(() => calculationInputKey(inputs), [inputs]);
+  const corridorInputs = useMemo(() => {
+    const { aashto, ...common } = JSON.parse(calculationKey);
+    return { ...common, ...aashto };
+  }, [calculationKey]);
 
   useEffect(() => {
     if (runtime !== "ready") return;
@@ -406,11 +410,14 @@ export default function CalculatorApp() {
       return;
     }
     let active = true;
-    call("corridor_qa", { content: landxml.source.content, filename: landxml.source.filename, curves, excluded_curve_indexes: excludedCurveIndexes })
-      .then((value) => { if (active) setCorridorQa(value); })
-      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { active = false; };
-  }, [landxml, curves, excludedCurveIndexes, runtime, call, entitlement]);
+    setCorridorQa(null);
+    const timer = window.setTimeout(() => {
+      call("corridor_qa", { content: landxml.source.content, filename: landxml.source.filename, curves, excluded_curve_indexes: excludedCurveIndexes, shared_inputs: corridorInputs })
+        .then((value) => { if (active) setCorridorQa(value); })
+        .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
+    }, AUTO_CALC_DELAY_MS);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [landxml, curves, excludedCurveIndexes, runtime, call, entitlement, corridorInputs]);
 
   useEffect(() => {
     if (!landxml || runtime !== "ready" || !allows(entitlement, CAPABILITIES.landxml)) {
@@ -858,6 +865,14 @@ export default function CalculatorApp() {
   const qaHighlights = (reviewQa?.findings || []).filter((finding: Dict) =>
     finding.start_ft != null && finding.end_ft != null
   );
+  const reverseOverlapFindings: Dict[] = landxml
+    ? (corridorQa?.findings || []).filter((finding: Dict) => finding.reverse_curve_candidate)
+    : [];
+  const detectedReverseLink = (index: number) => reverseOverlapFindings.some((finding: Dict) =>
+    finding.link_eligible
+    && finding.curve_indexes?.[0] === Number(curves[index]?.meta?.landxml_curve_index ?? index)
+    && finding.curve_indexes?.[1] === Number(curves[index + 1]?.meta?.landxml_curve_index ?? index + 1)
+  );
   const linkedGap = (index: number) => reverseCurvePairs.some(
     ([first, second]) => first === index && second === index + 1
   );
@@ -928,12 +943,12 @@ export default function CalculatorApp() {
             <div><p className="eyebrow">Alignment source</p><strong>{landxml?.source?.filename || "No LandXML selected"}</strong></div>
             {allows(entitlement, CAPABILITIES.landxml) ? <label className="button accent">{landxml ? "Replace XML" : "Select LandXML"}<input type="file" accept=".xml,text/xml,application/xml" onChange={selectLandxml} /></label> : <button className="button accent" onClick={() => requestCapability(CAPABILITIES.landxml)}>Select LandXML {proChip(CAPABILITIES.landxml)}</button>}
             {landxml && <><p>{landxml.summary.alignment_name || "Unnamed alignment"} · {landxml.summary.linear_unit || "units undeclared"}</p><p>CRS: {landxml.summary.coordinate_system?.display_name || "Not declared in LandXML"}</p><p>{landxml.summary.curve_count} curves · {excludedCurveIndexes.length} excluded from QA · SHA {landxml.source.sha256.slice(0, 10)}…</p><button onClick={addAll} disabled={!inputs.speed}>Add all LandXML curves</button></>}
-            <p className="reverse-curve-guidance"><strong>Reverse-curve pairs {proChip(CAPABILITIES.multiCurve)}</strong> Link eligible adjacent curves below. Each curve can belong to one pair; standard rates and the 0.7Lr minimum are checked in Corridor QA.</p>
+            {reverseOverlapFindings.map((finding: Dict) => <p className="reverse-curve-guidance" role="status" key={finding.curve_indexes.join("-")}><strong>{finding.message}</strong><br/>{finding.details}</p>)}
           </div>
           <div className="curve-list"><div className="list-title"><h3>Calculated curves</h3><span>{curves.length}</span></div>
             {curves.length === 0 ? <p className="empty">Add a calculated curve to build a combined export set.</p> : curves.map((curve, index) => <div className="curve-list-item" key={index}>
               <button className={selectedCurve === index ? "selected" : ""} onClick={() => loadCurve(index)}><strong>{curve.meta?.curve_name || `Curve ${index + 1}`}</strong><span>{curve.meta?.alignment_name} · {curve.meta?.curve_direction}</span></button>
-              {index < curves.length - 1 && <div className={`reverse-pair-link ${linkedGap(index) ? "linked" : ""}`}>
+              {index < curves.length - 1 && (!landxml || linkedGap(index) || detectedReverseLink(index)) && <div className={`reverse-pair-link ${linkedGap(index) ? "linked" : ""}`}>
                 <button
                   onClick={() => toggleReverseCurvePair(index)}
                   disabled={!linkedGap(index) && gapConflict(index)}

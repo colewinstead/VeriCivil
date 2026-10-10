@@ -136,9 +136,10 @@ test("renders superelevation at its permanent route and preserves compatibility 
   assert.match(source, /Review & export/i);
   assert.match(source, /Load synthetic sample/i);
   assert.match(source, /entitlement\.plan === "free".*Load synthetic sample/i);
-  assert.match(source, /Reverse-curve pairs/i);
-  assert.match(source, /Link eligible adjacent curves below/i);
-  assert.match(source, /0\.7Lr minimum/i);
+  assert.doesNotMatch(html, /reverse-curve-guidance/);
+  assert.match(source, /reverseOverlapFindings\.map/);
+  assert.match(source, /finding\.reverse_curve_candidate/);
+  assert.match(source, /detectedReverseLink\(index\)/);
   assert.match(source, /A curve can belong to only one reverse-curve pair/i);
   assert.match(source, /reverse_curve_pairs: reverseCurvePairs/i);
   assert.match(source, /Local test plan/i);

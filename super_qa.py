@@ -4,8 +4,10 @@ import math
 from typing import Any
 
 import Super
+import super_batch
 import super_exports
 import super_landxml
+from app_info import CALCULATION_ENGINE_VERSION
 from super_lane import lane_profile_points, slope_at_station
 
 
@@ -624,6 +626,70 @@ def _normal_crown_only(curve: dict) -> bool:
     return bool((curve.get("results", {}) or {}).get("normal_crown_only"))
 
 
+def _changing_transition_window(curve: dict, entering: bool) -> tuple[float, float] | None:
+    results = curve.get("results", {}) or {}
+    if _normal_crown_only(curve):
+        return None
+    boundary = results.get("full_super_ft" if entering else "full_super_out_ft")
+    if boundary is None:
+        return None
+    boundary = float(boundary)
+    lanes = results.get("section_lanes")
+    profiles = (
+        [[(float(e["station_ft"]), float(e["slope_pct"])) for e in lane["events"]] for lane in lanes]
+        if lanes else lane_profile_points(results, curve.get("meta", {}).get("curve_direction", "left")).values()
+    )
+    intervals = []
+    for profile in profiles:
+        points = sorted(profile)
+        for (a, slope_a), (b, slope_b) in zip(points, points[1:]):
+            if b <= a or math.isclose(slope_a, slope_b, rel_tol=0, abs_tol=1e-9):
+                continue
+            start, end = (a, min(b, boundary)) if entering else (max(a, boundary), b)
+            if end > start:
+                intervals.append((start, end))
+    # Constant initial/zero-crown holds do not increase runoff/runout demand.
+    return (min(a for a, _ in intervals), max(b for _, b in intervals)) if intervals else None
+
+
+def _reverse_overlap_finding(prior: dict, following: dict, presets: list[dict], index: int) -> dict | None:
+    if prior.get("meta", {}).get("curve_direction") == following.get("meta", {}).get("curve_direction"):
+        return None
+    exit_window = _changing_transition_window(prior, entering=False)
+    entry_window = _changing_transition_window(following, entering=True)
+    if not exit_window or not entry_window or exit_window[1] <= entry_window[0] + 1e-6:
+        return None
+    a, b = presets[index], presets[index + 1]
+    available = b["pc_station_ft"] - a["pt_station_ft"]
+    required = max(0.0, exit_window[1] - a["pt_station_ft"]) + max(0.0, b["pc_station_ft"] - entry_window[0])
+    spirals = a.get("alignment_type") == "spiral" or b.get("alignment_type") == "spiral"
+    recommendation = (
+        "Provide sufficient combined exit spiral, intervening tangent, and entry spiral length between the circular curves."
+        if spirals else "Provide sufficient tangent length between the two circular curves."
+    )
+    recommendation += " Review the horizontal geometry and transition placement under the governing standard; do not shorten runoff/runout automatically."
+    finding = _finding(
+        "TRANSITION_OVERLAP",
+        "block" if any(c.get("results", {}).get("transition_method") == "aashto_fixed_pivot" for c in (prior, following)) else "review",
+        f"{a['curve_name']} and {b['curve_name']}: opposing-curve runoff/runout overlap.",
+        [index, index + 1], entry_window[0], exit_window[1],
+        f"Overlap {exit_window[1]-entry_window[0]:.2f} ft. Available spacing {available:.2f} ft; "
+        f"current independent transitions require {required:.2f} ft outside the circular arcs. "
+        f"Recommendation: {recommendation} This is calculated placement demand, not a universal agency minimum.",
+    )
+    finding.update({
+        "reverse_curve_candidate": True,
+        "link_eligible": super_batch._pair_ineligibility(prior, following) is None,
+        "basis": "calculated_lane_events",
+        "available_spacing_ft": available,
+        "required_spacing_ft": required,
+        "overlap_ft": exit_window[1] - entry_window[0],
+        "alignment_type": "spiral" if spirals else "circular",
+        "recommendation": recommendation,
+    })
+    return finding
+
+
 def _zero_event(curve: dict, entering: bool) -> float | None:
     results = curve.get("results", {}) or {}
     direction = curve.get("meta", {}).get("curve_direction", "left")
@@ -636,7 +702,8 @@ def _zero_event(curve: dict, entering: bool) -> float | None:
     return max(candidates) if entering and candidates else (min(candidates) if candidates else None)
 
 
-def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], excluded_curve_indexes: list[int] | None = None) -> dict[str, Any]:
+def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], excluded_curve_indexes: list[int] | None = None,
+                     shared_inputs: dict | None = None) -> dict[str, Any]:
     presets = data.curve_records()
     excluded = {int(index) for index in (excluded_curve_indexes or []) if 0 <= int(index) < len(presets)}
     findings: list[dict] = []
@@ -729,11 +796,38 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         for warning in results.get("warnings", []) or []:
             findings.append(_finding("CALCULATION_WARNING", "review", f"Curve {index + 1}: {warning}", [index], bounds[0], bounds[1]))
 
+    previews: dict[int, dict | None] = {}
     for prior_index in range(len(matched) - 1):
         next_index = prior_index + 1
         prior = matched[prior_index]
         following = matched[next_index]
         if prior is None or following is None:
+            if (shared_inputs and str(shared_inputs.get("speed", "")).strip()
+                    and prior_index not in excluded and next_index not in excluded
+                    and presets[prior_index]["curve_direction"] != presets[next_index]["curve_direction"]):
+                pair = []
+                for index in (prior_index, next_index):
+                    if matched[index] is not None:
+                        pair.append(matched[index])
+                        continue
+                    if index not in previews:
+                        try:
+                            previews[index] = super_batch.build_curve_from_preset(presets[index], shared_inputs)
+                        except ValueError as exc:
+                            previews[index] = None
+                            findings.append(_finding(
+                                "REVERSE_SPACING_UNCHECKED", "review",
+                                f"{presets[index]['curve_name']}: reverse-transition spacing preview could not be calculated.",
+                                [index], details=f"Current inputs: {exc}. Calculate this curve before confirming spacing.",
+                            ))
+                    pair.append(previews[index])
+                if all(pair):
+                    candidate = _reverse_overlap_finding(pair[0], pair[1], presets, prior_index)
+                    if candidate:
+                        candidate.update({"severity": "review", "basis": "current_inputs_preview", "link_eligible": False})
+                        candidate["message"] = "Preview: " + candidate["message"]
+                        candidate["details"] += " Unsaved curves use the current shared inputs; add both calculations before linking or confirming the design."
+                        findings.append(candidate)
             continue
         if _normal_crown_only(prior) or _normal_crown_only(following):
             continue
@@ -750,6 +844,10 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         next_bounds = _transition_bounds(following)
         prior_direction = str(prior.get("meta", {}).get("curve_direction", "left"))
         next_direction = str(following.get("meta", {}).get("curve_direction", "left"))
+        if not coordinated_pair:
+            candidate = _reverse_overlap_finding(prior, following, presets, prior_index)
+            if candidate:
+                findings.append(candidate)
         if pair_check and pair_check.get("status") == "short_tangent":
             findings.append(_finding(
                 "SHORT_REVERSE_TANGENT",
@@ -826,7 +924,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                     f"{invalid_reason}. Recalculate the pair with the current calculation engine.",
                 ))
             continue
-        if prior_bounds and next_bounds and prior_bounds[1] > next_bounds[0] + 1e-6 and not coordinated_pair:
+        if prior_direction == next_direction and prior_bounds and next_bounds and prior_bounds[1] > next_bounds[0] + 1e-6 and not coordinated_pair:
             findings.append(_finding(
                 "TRANSITION_OVERLAP", "block" if any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in (prior,following)) else "review",
                 f"Curves {prior_index + 1} and {next_index + 1} have overlapping transition envelopes.",
@@ -886,7 +984,13 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         curve_statuses.append({"curve_index": index, "curve_name": preset["curve_name"], "status": status, "finding_count": len(relevant)})
     status = max((finding["severity"] for finding in findings), key=lambda value: SEVERITY_RANK[value], default="pass")
     counts = {severity: sum(1 for item in curve_statuses if item["status"] == severity) for severity in ("pass", "review", "block")}
+    report_profiles = profiles or {
+        curve["results"]["calculation_metadata"]["criteria"]["profile_id"]
+        for curve in previews.values() if curve is not None
+    }
     return {
+        "calculation_engine_version": CALCULATION_ENGINE_VERSION,
+        "criteria_profile": next(iter(report_profiles)) if len(report_profiles) == 1 else None,
         "status": status,
         "counts": counts,
         "curve_count": len(presets) - len(excluded),

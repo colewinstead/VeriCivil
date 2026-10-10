@@ -42,6 +42,17 @@ const browser = (operation, input) => {
   pyodide.globals.set("aashto_operation", operation);
   return JSON.parse(pyodide.runPython("__import__('json').dumps(super_service.dispatch(aashto_operation,aashto_payload))"));
 };
+const spacingXml = await readFile(new URL("../../tests/fixtures/reverse_spacing_synthetic.xml", import.meta.url), "utf8");
+const spacingInputs = { speed: "30", e_manual: "0.06", Lr_manual: "100", Lt_manual: "25" };
+const spacingCurves = browser("build_all_landxml_curves", { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs });
+for (const curves of [[], spacingCurves]) {
+  const request = { entitlement: proEntitlement, content: spacingXml, curves, shared_inputs: spacingInputs };
+  const report = browser("corridor_qa", request);
+  assert.deepEqual(report, native("corridor_qa", request));
+  const overlap = report.findings.find(finding => finding.reverse_curve_candidate);
+  assert.equal(overlap.overlap_ft, 170);
+  assert.equal(overlap.basis, curves.length ? "calculated_lane_events" : "current_inputs_preview");
+}
 // Run the public synthetic boundary/selection cases in the browser engine too.
 pyodide.FS.writeFile("/app/test_aashto_criteria.py", await readFile(new URL("../../test_aashto_criteria.py", import.meta.url), "utf8"), { encoding: "utf8" });
 pyodide.runPython(`

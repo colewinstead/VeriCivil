@@ -311,9 +311,10 @@ def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, A
     return super_qa.diagram_lookup(results, direction, float(station))
 
 
-def corridor_qa(content: str, filename: str, curves: list[dict], excluded_curve_indexes: list[int] | None = None) -> dict[str, Any]:
+def corridor_qa(content: str, filename: str, curves: list[dict], excluded_curve_indexes: list[int] | None = None,
+                shared_inputs: dict | None = None) -> dict[str, Any]:
     data = super_landxml.parse_landxml_text(content, filename)
-    return super_qa.analyze_corridor(data, curves, excluded_curve_indexes)
+    return super_qa.analyze_corridor(data, curves, excluded_curve_indexes, shared_inputs)
 
 
 def plan_view(content: str, filename: str, curves: list[dict]) -> dict[str, Any]:
@@ -452,6 +453,7 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
         "corridor_qa": lambda: corridor_qa(
             payload["content"], payload.get("filename", "alignment.xml"), payload.get("curves", []),
             payload.get("excluded_curve_indexes", []),
+            payload.get("shared_inputs"),
         ),
         "plan_view": lambda: plan_view(
             payload["content"], payload.get("filename", "alignment.xml"), payload.get("curves", [])

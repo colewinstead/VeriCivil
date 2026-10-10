@@ -146,6 +146,8 @@ The authoritative application and calculation-engine versions are defined in [`a
 
 The `aashto-green-book-2018-2019-10` profile supports automatic table-row selection and NC/RC thresholds through a locally imported, corrected workbook; equal-width fixed-pivot sections; and established clothoid transitions. Green Book §3.3.5 selects the first qualifying row in increasing rate order using a tabulated radius at or below the actual radius; interpolation is unnecessary. Results record the selected row and radius. It does not ship the copyrighted table grids, evaluate continuous Method 5 equations, or construct new alignments. Circular runoff placement is an explicit project input; spiral runout may be on tangent or in spiral. Short spirals block calculation, and longer zero-crown holds require acknowledgement and drainage review. See [AASHTO scope, sources, and acceptance limits](docs/AASHTO_2018.md) before use.
 
+LandXML reverse-curve notices appear only when opposing curves have overlapping calculated runoff/runout. Before both curves are added, the shared Python engine can provide a labelled spacing preview from the current design inputs; incomplete or unsupported inputs leave the spacing unchecked. Corridor QA and PDF record the overlap interval, available spacing, current independent transition demand, and a recommendation for sufficient tangent or combined spiral/tangent space. Constant-slope holds do not add transition demand. This demand is not a universal agency minimum. Actual eligible MDOT pairs may be linked explicitly; AASHTO/TDOT overlaps require engineering review. Detection does not modify horizontal geometry or shorten transitions.
+
 <details>
 <summary><strong>ORD import checklist</strong></summary>
 
