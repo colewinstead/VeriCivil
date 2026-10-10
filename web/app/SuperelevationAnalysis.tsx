@@ -40,13 +40,18 @@ function profileValue(points: Dict[], station: number) {
   return station >= start && station <= end ? interpolate(points, station) : null;
 }
 
+function chartProfiles(diagram: Dict): Dict[] {
+  if (diagram.section_profiles?.length) return diagram.section_profiles;
+  return ["left","right"].filter(side=>diagram.profiles[side]?.length).map(side=>({key:side==="left"?"Left":"Right",name:side==="left"?"L":"R",side,points:diagram.profiles[side]}));
+}
+
 function chartRows(corridor: Dict | null, visibleDomain: [number, number]) {
   const diagrams = corridor?.curves || [];
   if (!diagrams.length) return [];
   const [start, end] = visibleDomain;
   const samples = Array.from({ length: 721 }, (_, index) => start + ((end - start) * index / 720));
   const stations = new Set<number>(samples);
-  diagrams.forEach((diagram: Dict) => ([...diagram.profiles.left, ...diagram.profiles.right] as Dict[])
+  diagrams.forEach((diagram: Dict) => (chartProfiles(diagram).flatMap(profile=>profile.points) as Dict[])
     .forEach((point) => {
       const station = Number(point.station_ft);
       if (station >= start && station <= end) stations.add(station);
@@ -55,8 +60,7 @@ function chartRows(corridor: Dict | null, visibleDomain: [number, number]) {
     const row: Dict = { station };
     diagrams.forEach((diagram: Dict) => {
       const key = `curve${diagram.curve_index}`;
-      row[`${key}Left`] = profileValue(diagram.profiles.left, station);
-      row[`${key}Right`] = profileValue(diagram.profiles.right, station);
+      chartProfiles(diagram).forEach(profile=>{row[`${key}${profile.key}`]=profileValue(profile.points,station);});
     });
     return row;
   });
@@ -102,7 +106,7 @@ export default function SuperelevationAnalysis({
   const selectedCurveIndex = diagrams.some((item) => item.curve_index === activeCurveIndex)
     ? activeCurveIndex : Number(diagrams[0]?.curve_index ?? 0);
   const visibleMarkers = diagrams.flatMap((diagram) => (diagram.markers || [])
-    .filter((marker: Dict) => ["PC", "PT", "STATION EQUATION"].includes(marker.kind))
+    .filter((marker: Dict) => ["PC", "PT", "TS", "SC", "CS", "ST", "STATION EQUATION"].includes(marker.kind))
     .map((marker: Dict) => ({ ...marker, curve_index: diagram.curve_index, curve_name: diagram.curve_name })));
   const fullDomain = useMemo<[number, number]>(() => [
     Number(corridor?.domain?.start_ft || 0),
@@ -243,10 +247,7 @@ export default function SuperelevationAnalysis({
                   const color = CURVE_COLORS[index % CURVE_COLORS.length];
                   const active = Number(diagram.curve_index) === selectedCurveIndex;
                   const key = `curve${diagram.curve_index}`;
-                  return [
-                    <Line key={`${key}-left`} type="linear" dataKey={`${key}Left`} name={`${diagram.curve_name} · L`} stroke={color} strokeWidth={active ? 2.8 : 1.7} strokeOpacity={active ? 1 : 0.72} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} connectNulls={false} />,
-                    <Line key={`${key}-right`} type="linear" dataKey={`${key}Right`} name={`${diagram.curve_name} · R`} stroke={color} strokeWidth={active ? 2.8 : 1.7} strokeOpacity={active ? 1 : 0.72} strokeDasharray="7 4" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} connectNulls={false} />,
-                  ];
+                  return chartProfiles(diagram).map(profile=><Line key={`${key}-${profile.key}`} type="linear" dataKey={`${key}${profile.key}`} name={`${diagram.curve_name} · ${profile.name}`} stroke={color} strokeWidth={active ? 2.8 : 1.7} strokeOpacity={active ? 1 : 0.72} strokeDasharray={profile.side==="right"?"7 4":undefined} dot={false} activeDot={{r:4}} isAnimationActive={false} connectNulls={false}/>);
                 })}
               </LineChart>
             </ResponsiveContainer>
@@ -254,8 +255,8 @@ export default function SuperelevationAnalysis({
         </div>
         <div className="diagram-inspector">
           <div className="inspector-heading"><span>{inspector?.curve_name || "Selected station"}</span><strong>{inspector?.station || "Select the plot"}</strong>{inspector && <small>{Number(inspector.station_ft).toFixed(3)} internal ft</small>}</div>
-          {inspector ? <div className="inspector-lanes">{(["left", "right"] as const).map((lane) => <article key={lane}>
-            <div><span>{lane} lane</span><strong>{inspector.lanes[lane].slope_label}</strong></div>
+          {inspector ? <div className="inspector-lanes">{Object.keys(inspector.lanes).map((lane) => <article key={lane}>
+            <div><span>{lane}</span><strong>{inspector.lanes[lane].slope_label}</strong></div>
             <p>{inspector.lanes[lane].phase}</p>
             <b>{inspector.lanes[lane].criterion.reference}</b>
             <small>{inspector.lanes[lane].criterion.component} · {inspector.lanes[lane].criterion.mode.replace("_", " ")}</small>

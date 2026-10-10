@@ -125,6 +125,20 @@ def _source_map(results: dict) -> dict[str, dict]:
 
 def _criterion_for_segment(results: dict, start: dict, end: dict) -> dict:
     sources = _source_map(results)
+    if results.get("transition_method")=="aashto_fixed_pivot":
+        station=(float(start["station_ft"])+float(end["station_ft"]))/2
+        if results.get("normal_crown_only"):
+            component,phase="Superelevation rate","Normal crown"
+        elif results["full_super_ft"]<=station<=results["full_super_out_ft"]:
+            component,phase="Superelevation rate","Full super"
+        elif results["reverse_crown_ft"]<=station<=results["full_super_ft"] or results["full_super_out_ft"]<=station<=results["reverse_crown_out_ft"]:
+            component,phase="Runoff length","Runoff"
+        elif any(hold["start_ft"]<station<hold["end_ft"] for hold in results.get("hold_intervals",[])):
+            hold=next(hold for hold in results["hold_intervals"] if hold["start_ft"]<station<hold["end_ft"])
+            component,phase="Transition placement","Zero-crown hold" if hold["section"]=="zero_crown" else "Initial-section hold"
+        else:
+            component,phase="Tangent runout","Tangent runout"
+        return {**sources.get(component,{"component":component,"reference":"Recorded fixed-pivot section","mode":"calculated"}),"phase":phase}
     y0 = float(start.get("slope_pct", 0.0))
     y1 = float(end.get("slope_pct", 0.0))
     nc = abs(float(results.get("inputs", {}).get("normal_crown", 0.02) or 0.02) * 100.0)
@@ -219,6 +233,7 @@ def curve_diagram(results: dict, direction: str) -> dict[str, Any]:
     ]
     return {
         "profiles": profiles,
+        "section_profiles":[{"key":f"Lane{i}","name":lane["lane_name"],"side":lane["side"],"points":lane["events"]} for i,lane in enumerate(results.get("section_lanes",[]))],
         "intervals": intervals,
         "markers": sorted(markers, key=lambda marker: (marker["station_ft"], marker["label"])),
         "snap_points": snap_points,
@@ -491,6 +506,15 @@ def plan_view(data: super_landxml.LandXMLData, curves: list[dict]) -> dict[str, 
 
 def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, Any]:
     diagram = curve_diagram(results, direction)
+    if results.get("section_lanes"):
+        lanes={}
+        for lane in results["section_lanes"]:
+            events=lane["events"]
+            slope=slope_at_station([(e["station_ft"],e["slope_pct"]) for e in events],station)
+            pair=next(((a,b) for a,b in zip(events,events[1:]) if a["station_ft"]<=station<=b["station_ft"]),None)
+            criterion=_criterion_for_segment(results,*pair) if pair else {"component":"Initial section","reference":"Recorded fixed-pivot section","mode":"calculated","phase":"Transition endpoint"}
+            lanes[lane["lane_name"]]={"slope_pct":slope,"slope_label":super_exports.format_slope_label(slope),"slope_decimal":super_exports.slope_decimal(slope),"phase":criterion["phase"],"criterion":criterion}
+        return {"station_ft":float(station),"station":Super.format_result_station(results,station,True),"lanes":lanes}
     points = lane_profile_points(results, direction)
     lanes: dict[str, dict] = {}
     for lane in ("left", "right"):
@@ -619,14 +643,6 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
     matched: list[dict | None] = []
     used: set[int] = set()
 
-    if data.spirals:
-        findings.append(_finding(
-            "UNSUPPORTED_SPIRAL", "block",
-            f"{len(data.spirals)} spiral segment(s) are present but spiral-based transitions are not modeled.",
-            list(range(len(presets))),
-            details="Verify SC/CS stationing and calculate the spiral transition in the roadway design platform.",
-        ))
-
     for index, segment in enumerate(data._segments):
         if segment.length <= 0 or (isinstance(segment, super_landxml.ArcSegment) and segment.radius <= 0):
             findings.append(_finding(
@@ -668,6 +684,32 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         if curve is None:
             continue
         results = curve.get("results", {}) or {}
+        if presets[index].get("alignment_type")=="spiral" and results.get("inputs",{}).get("alignment_type")!="spiral":
+            findings.append(_finding("UNSUPPORTED_SPIRAL","block",f"Curve {index+1} has established spirals but circular transition placement.",[index],presets[index]["pc_station_ft"],presets[index]["pt_station_ft"],"Recalculate using the supported AASHTO spiral method."))
+        if results.get("transition_method")=="aashto_fixed_pivot":
+            preset=presets[index]
+            expected={"PC":preset["pc_station_ft"],"PT":preset["pt_station_ft"]}
+            if preset.get("alignment_type")=="spiral":
+                expected={"TS":preset["ts_station_ft"],"SC":preset["sc_station_ft"],"CS":preset["cs_station_ft"],"ST":preset["st_station_ft"]}
+            actual=results.get("alignment_anchors",{})
+            valid=actual.keys()==expected.keys() and all(abs(float(actual.get(key,0))-value)<0.01 for key,value in expected.items())
+            valid=valid and abs(float(results.get("inputs",{}).get("radius_ft",0))-preset["radius_ft"])<0.01 and curve.get("meta",{}).get("curve_direction")==preset["curve_direction"]
+            if not valid:
+                findings.append(_finding("ESTABLISHED_GEOMETRY_MISMATCH","block",f"Curve {index+1} calculation does not match its established LandXML stations, radius, or direction.",[index],preset["pc_station_ft"],preset["pt_station_ft"],"Reapply the imported curve; horizontal geometry is not modified."))
+            else:
+                # Recheck actual source space, even for manually entered or restored calculations.
+                import aashto_superelevation
+                values={**results["inputs"],"linear_unit":data.linear_unit,
+                        "geometry_provenance":{"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}}}
+                try:
+                    aashto_superelevation.calculate(values,data.station_equations,data.station_range())
+                except ValueError as exc:
+                    for item in getattr(exc,"findings",[]) or [{"code":"INVALID_IMPORTED_TRANSITION","severity":"block","message":str(exc)}]:
+                        if item["severity"]=="block":
+                            findings.append(_finding(item["code"],"block",item["message"],[index],item.get("station_start_ft"),item.get("station_end_ft"),str(item.get("details",""))))
+        for item in results.get("qa_findings",[]) or []:
+            findings.append(_finding(item["code"],item["severity"],item["message"],[index],
+                                     item.get("station_start_ft"),item.get("station_end_ft"),str(item.get("details",""))))
         bounds = _transition_bounds(curve)
         if _normal_crown_only(curve):
             for warning in results.get("warnings", []) or []:
@@ -786,7 +828,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
             continue
         if prior_bounds and next_bounds and prior_bounds[1] > next_bounds[0] + 1e-6 and not coordinated_pair:
             findings.append(_finding(
-                "TRANSITION_OVERLAP", "review",
+                "TRANSITION_OVERLAP", "block" if any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in (prior,following)) else "review",
                 f"Curves {prior_index + 1} and {next_index + 1} have overlapping transition envelopes.",
                 [prior_index, next_index], next_bounds[0], prior_bounds[1], "Coordinate the adjacent lane-slope transitions.",
             ))

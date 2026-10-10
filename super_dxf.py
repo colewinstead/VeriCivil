@@ -52,12 +52,15 @@ def overlay_export_issues(
 ) -> tuple[list[str], list[str]]:
     """Return blocking errors and non-blocking warnings for an overlay DXF export."""
     errors: list[str] = []
+    curves=list(curves)
     warnings = list(dict.fromkeys(landxml.warnings))
 
-    if landxml.spirals:
-        errors.append(
-            "The LandXML contains spiral geometry. Overlay DXF export currently supports only lines and circular arcs."
-        )
+    if any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in curves):
+        import super_qa
+        report=super_qa.analyze_corridor(landxml,curves)
+        errors.extend(f["message"] for f in report["findings"] if f["severity"]=="block" and f["code"]!="UNCALCULATED_CURVE")
+    elif landxml.spirals:
+        errors.append("Spiral geometry requires a supported AASHTO calculation; DOT circular placement cannot be overlaid on spirals.")
 
     start, end = landxml.station_range()
     for row in super_exports.build_normalized_rows(curves):
@@ -346,6 +349,9 @@ def _draw_profile(
 
 
 def export_detail_dxf(path: str | Path, curves: Iterable[dict], config: dict | None = None) -> list[str]:
+    from aashto_superelevation import validate_export_curves
+    curves=list(curves)
+    validate_export_curves(curves)
     cfg = _cfg(config)
     writer = DxfWriter()
     warnings: list[str] = []
@@ -554,6 +560,10 @@ def build_overlay_drawing(
             writer.add_line(start_x, start_y, end_x, end_y, cfg["layers"]["alignment"])
         else:
             samples = max(int(math.ceil(segment.length / 50.0)), 8)
+            if isinstance(segment, super_landxml.SpiralSegment):
+                max_curvature=max(abs(segment.start_curvature),abs(segment.end_curvature))
+                samples=max(8, math.ceil(segment.length / math.sqrt(0.08/max_curvature)))
+                warnings.append("Clothoid DXF sampled with chord-error bound 0.01 source units; authoritative coordinates use numerical clothoid evaluation.")
             points: list[tuple[float, float]] = []
             start_station = landxml.start_station
             for prior in landxml._segments:
@@ -854,6 +864,9 @@ def overlay_preview_model(
 
 
 def export_overlay_dxf(path: str | Path, curves: Iterable[dict], landxml: super_landxml.LandXMLData, config: dict | None = None) -> list[str]:
+    from aashto_superelevation import validate_export_curves
+    curves=list(curves)
+    validate_export_curves(curves)
     writer, cfg, warnings = build_overlay_drawing(curves, landxml, config)
     writer.save(
         path,

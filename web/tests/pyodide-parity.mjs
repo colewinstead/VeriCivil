@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { loadPyodide } from "pyodide";
 
 const runtimeRoot = new URL("../public/python/", import.meta.url);
@@ -27,6 +28,43 @@ import super_service
 
 const freeEntitlement = { plan: "free", status: "active" };
 const proEntitlement = { plan: "pro", status: "active" };
+
+const aashtoInputs = {
+  criteria_profile: "aashto-green-book-2018-2019-10", pc: "1000", pt: "2000",
+  speed: "60", radius: "1500", area: "rural", e_manual: "0.06",
+  lane_widths: "12,12", normal_crown: "0.02", runoff_tangent_percent: "70", curve_direction: "left",
+};
+const native = (operation, input) => JSON.parse(execFileSync("python3", ["-c",
+  "import json,sys,super_service; print(json.dumps(super_service.dispatch(sys.argv[1],sys.stdin.read())))", operation],
+{ cwd: new URL("../../", import.meta.url), input: JSON.stringify(input), encoding: "utf8" }));
+const browser = (operation, input) => {
+  pyodide.globals.set("aashto_payload", JSON.stringify(input));
+  pyodide.globals.set("aashto_operation", operation);
+  return JSON.parse(pyodide.runPython("__import__('json').dumps(super_service.dispatch(aashto_operation,aashto_payload))"));
+};
+const aashtoCases = [
+  ...[4, 6, 8, 10, 12].map(maximum => ({ max_superelevation: maximum, e_manual: String(maximum/100), area: maximum===4 ? "urban_freeway" : "rural" })),
+  ...[0, 25, 50, 100].map(percent => ({ runoff_tangent_percent: percent })),
+  ...["left", "right"].flatMap(direction => ["centerline", "left_edge", "right_edge"].map(pivot => ({ curve_direction: direction, rotation_axis: pivot }))),
+  ...["on_tangent", "in_spiral"].map(placement => ({ alignment_type: "spiral", ts: "700", st: "2250", runout_placement: placement, acknowledge_spiral_override: true })),
+  ...["-0.02", "0.02"].map(slope => ({ roadway: "one_way", initial_section: "single_slope", lane_widths: "12", rotation_axis: "left_edge", initial_slope: slope })),
+];
+for (const changes of aashtoCases) {
+  const request = { entitlement: proEntitlement, inputs: { ...aashtoInputs, ...changes } };
+  assert.deepEqual(browser("calculate", request), native("calculate", request), `AASHTO native/Pyodide parity: ${JSON.stringify(changes)}`);
+}
+const ramp = browser("calculate", { entitlement: proEntitlement, inputs: { ...aashtoInputs, roadway: "one_way", initial_section: "single_slope", lane_widths: "12", rotation_axis: "left_edge" } });
+const rampCurve = { results: ramp.results, meta: { curve_direction: "left" } };
+const rampExport = { entitlement: proEntitlement, curves: [rampCurve] };
+assert.deepEqual(browser("export_ord_csv", rampExport), native("export_ord_csv", rampExport));
+assert.deepEqual(Object.keys(browser("lookup", { results: ramp.results, direction: "left", station: "1000" }).station.slopes), ["Lane 1"]);
+const syntheticXml = execFileSync("python3", ["-c", "from test_aashto_criteria import synthetic_alignment; print(synthetic_alignment(200,300,'right')[0],end='')"], { cwd: new URL("../../", import.meta.url), encoding: "utf8" });
+assert.deepEqual(browser("parse_landxml", { entitlement: proEntitlement, content: syntheticXml, filename: "synthetic.xml" }), native("parse_landxml", { entitlement: proEntitlement, content: syntheticXml, filename: "synthetic.xml" }));
+pyodide.globals.set("synthetic_spiral_xml", syntheticXml);
+const coordinates = pyodide.runPython("[super_service.super_landxml.parse_landxml_text(synthetic_spiral_xml).xy_at_station(s) for s in (700,1100,1400)]");
+const xy = coordinates.toJs({ create_proxies: false }); coordinates.destroy();
+const expectedXy = JSON.parse(execFileSync("python3", ["-c", "import json,super_landxml,sys; d=super_landxml.parse_landxml_text(sys.stdin.read()); print(json.dumps([d.xy_at_station(s) for s in (700,1100,1400)]))"], { cwd: new URL("../../", import.meta.url), input: syntheticXml, encoding: "utf8" }));
+xy.forEach((point,i) => point.forEach((value,j) => assert.ok(Math.abs(value-expectedXy[i][j])<1e-7)));
 
 const payload = JSON.stringify({
   entitlement: freeEntitlement,

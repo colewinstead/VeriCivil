@@ -19,7 +19,7 @@ from commercial_entitlements import (
     require_profile_access,
     snapshot_from_payload,
 )
-from criteria_info import MDOT_PROFILE_ID, criteria_metadata, criteria_profiles, normalize_profile_id
+from criteria_info import MDOT_PROFILE_ID, AASHTO_PROFILE_ID, criteria_metadata, criteria_profiles, normalize_profile_id
 import super_batch
 import super_dxf
 import super_exports
@@ -59,6 +59,11 @@ def application_manifest() -> dict[str, Any]:
             "area": ["rural", "urban", "local"],
             "speed": [str(value) for value in range(15, 85, 5)],
             "profiles": {
+                AASHTO_PROFILE_ID: {"facility":["centerline","left_edge","right_edge"],"area":["rural","urban_freeway","urban_high_speed"],
+                    "speed":[str(v) for v in range(15,86,5)], "max_superelevation":[4,6,8,10,12],
+                    "roadway":["two_way","one_way"], "rotation_axis":["centerline","left_edge","right_edge"],
+                    "initial_section":["crowned","single_slope"],"runout_placement":["on_tangent","in_spiral"],
+                    "criteria_workbook_required":True},
                 MDOT_PROFILE_ID: {
                     "facility": ["centerline", "outside edge"],
                     "area": ["rural", "urban", "local"],
@@ -125,6 +130,10 @@ def calculate_curve(inputs: dict[str, Any]) -> dict[str, Any]:
     """Calculate one curve and return structured presentation data."""
     values = {**DEFAULT_INPUTS, **(inputs or {})}
     profile_id = normalize_profile_id(str(values.get("criteria_profile", MDOT_PROFILE_ID)))
+    if values.get("alignment_type")=="spiral" and profile_id != AASHTO_PROFILE_ID:
+        raise ValueError("Spiral transition calculations are currently supported only by the AASHTO profile.")
+    if profile_id==AASHTO_PROFILE_ID and values.get("linear_unit") not in (None,"","foot","Foot","USSurveyFoot","internationalFoot"):
+        raise ValueError("AASHTO calculations require foot-based stationing; metric LandXML geometry may be inspected but not used for this US-unit profile.")
     area = str(values.get("area", "rural"))
     facility = (
         "centerline"
@@ -150,22 +159,32 @@ def calculate_curve(inputs: dict[str, Any]) -> dict[str, Any]:
         _station_range(values.get("alignment_station_range")),
         profile_id,
     )
-    results = Super.calculate_superelevation(*arguments)
+    results = Super.calculate_superelevation(*arguments, profile_options=values)
     baseline_arguments = list(arguments)
     for index in (8, 9, 10, 12, 13):
         baseline_arguments[index] = ""
     try:
-        baseline = Super.calculate_superelevation(*baseline_arguments)
+        baseline = Super.calculate_superelevation(*baseline_arguments, profile_options={**values, "e_manual":"", "Lr_manual":"", "Lt_manual":""})
     except ValueError:
         baseline = results
     direction = str(values.get("curve_direction", "left") or "left")
     station_format = bool(values.get("station_format", True))
+    return {**present_results(results,direction,station_format), "baseline":baseline}
+
+
+def present_results(results: dict, direction: str = "left", station_format: bool = True) -> dict[str, Any]:
     left_rows, right_rows = super_exports.build_lane_rows(results, direction, station_format)
+    section_lanes=[]
+    for lane in results.get("section_lanes",[]):
+        rows=[{**event,"station":Super.format_result_station(results,event["station_ft"],station_format),
+               "slope_label":super_exports.format_slope_label(event["slope_pct"])} for event in lane["events"]]
+        section_lanes.append({**lane,"events":rows})
     return {
         "results": results,
-        "baseline": baseline,
+        "baseline": results,
         "formatted_results": Super.format_results(results, station_format),
         "lanes": {"left": left_rows, "right": right_rows},
+        "section_lanes": section_lanes,
     }
 
 
@@ -175,16 +194,6 @@ def calculate_with_entitlement(inputs: dict[str, Any], entitlement: Any = None) 
     profile_id = normalize_profile_id(str(values.get("criteria_profile", MDOT_PROFILE_ID)))
     require_profile_access(snapshot_from_payload(entitlement), profile_id)
     return calculate_curve(inputs)
-
-
-def present_results(results: dict, direction: str = "left", station_format: bool = True) -> dict[str, Any]:
-    left_rows, right_rows = super_exports.build_lane_rows(results, direction, station_format)
-    return {
-        "results": results,
-        "baseline": results,
-        "formatted_results": Super.format_results(results, station_format),
-        "lanes": {"left": left_rows, "right": right_rows},
-    }
 
 
 def parse_landxml(content: str, filename: str = "alignment.xml") -> dict[str, Any]:
@@ -209,7 +218,7 @@ def parse_landxml(content: str, filename: str = "alignment.xml") -> dict[str, An
 
 def build_all_landxml_curves(content: str, filename: str, shared_inputs: dict[str, Any]) -> list[dict]:
     data = super_landxml.parse_landxml_text(content, filename)
-    normalized = {key: str(value) for key, value in shared_inputs.items()}
+    normalized = dict(shared_inputs)
     return super_batch.build_curves_from_presets(data.curve_records(), normalized)
 
 
@@ -227,12 +236,12 @@ def lookup(results: dict, direction: str, station_text: str = "", slope_text: st
     if not station_text.strip() and not slope_text.strip():
         raise ValueError("Enter a station, a super value, or both.")
     points = lane_profile_points(results, direction)
+    if results.get("section_lanes"):
+        points={lane["lane_name"]:[(event["station_ft"],event["slope_pct"]) for event in lane["events"]] for lane in results["section_lanes"]}
     response: dict[str, Any] = {"station": None, "slope": None, "lanes": {}}
     reference = float(results.get("reverse_crown_ft", 0.0))
     if station_text.strip():
-        station = Super.civil_to_internal_station(
-            Super.parse_station(station_text), results.get("station_equations"), results.get("alignment_station_range")
-        )
+        station = Super.parse_station_reference(station_text, results.get("station_equations"), results.get("alignment_station_range"))
         reference = station
         response["station"] = {
             "label": Super.format_result_station(results, station, True),
@@ -243,7 +252,7 @@ def lookup(results: dict, direction: str, station_text: str = "", slope_text: st
                     "label": super_exports.format_slope_label(slope_at_station(points[lane], station)),
                     "decimal": super_exports.slope_decimal(slope_at_station(points[lane], station)),
                 }
-                for lane in ("left", "right")
+                for lane in points
             },
         }
     if slope_text.strip():
@@ -253,7 +262,7 @@ def lookup(results: dict, direction: str, station_text: str = "", slope_text: st
             "label": super_exports.format_slope_label(target),
             "decimal": super_exports.slope_decimal(target),
         }
-        for lane in ("left", "right"):
+        for lane in points:
             matches = slope_matches(points[lane], target)
             rendered = []
             nearest = None
@@ -285,6 +294,8 @@ def lookup(results: dict, direction: str, station_text: str = "", slope_text: st
                     }
                 )
             response["lanes"][lane] = rendered
+    if results.get("section_lanes") and response["station"]:
+        response["station"]["edge_elevations"]={lane["lane_name"]:{edge:slope_at_station([(event["station_ft"],event[edge]) for event in lane["events"]],reference) for edge in ("right_elevation_ft","left_elevation_ft")} for lane in results["section_lanes"]}
     return response
 
 
@@ -367,6 +378,10 @@ def _calculation_warnings(curves: list[dict]) -> list[str]:
 
 
 def export_pdf(curves: list[dict], corridor_qa_report: dict | None = None) -> dict[str, Any]:
+    from aashto_superelevation import validate_export_curves
+    if any(f.get("severity")=="block" for f in (corridor_qa_report or {}).get("findings",[])) and any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in curves):
+        curves=[]  # Only diagnostics are emitted while affected calculations are blocked.
+    validate_export_curves(curves)
     content, warnings = _temporary_export(
         ".pdf", lambda path: super_pdf.export_pdf(path, curves, corridor_qa_report)
     )
@@ -374,11 +389,15 @@ def export_pdf(curves: list[dict], corridor_qa_report: dict | None = None) -> di
 
 
 def export_detail_dxf(curves: list[dict]) -> dict[str, Any]:
+    from aashto_superelevation import validate_export_curves
+    validate_export_curves(curves)
     content, warnings = _temporary_export(".dxf", lambda path: super_dxf.export_detail_dxf(path, curves))
     return {"content": content, "warnings": list(dict.fromkeys(warnings + _calculation_warnings(curves)))}
 
 
 def export_overlay_dxf(curves: list[dict], landxml_source: dict[str, str]) -> dict[str, Any]:
+    from aashto_superelevation import validate_export_curves
+    validate_export_curves(curves)
     source = super_project.normalize_landxml_source(landxml_source)
     if not source:
         raise ValueError("Select LandXML before exporting an overlay DXF.")
@@ -400,6 +419,9 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
     required_capability = _OPERATION_CAPABILITIES.get(operation)
     if required_capability is not None:
         require_capability(entitlement, required_capability)
+    if operation.startswith("export_") and operation!="export_pdf" and any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in payload.get("curves",[])):
+        if any(f.get("severity")=="block" for f in (payload.get("corridor_qa") or {}).get("findings",[])):
+            raise ValueError("AASHTO export blocked by Corridor QA; resolve the blocking findings.")
     operations: dict[str, Callable[..., Any]] = {
         "manifest": lambda: application_manifest(),
         "entitlement_snapshot": lambda: LocalDevelopmentEntitlementProvider(
@@ -408,6 +430,7 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
         "calculate": lambda: calculate_with_entitlement(
             payload.get("inputs", payload), payload.get("entitlement")
         ),
+        "import_aashto_workbook": lambda: __import__("aashto_criteria").import_workbook(payload["content_base64"]),
         "present_results": lambda: present_results(
             payload["results"], payload.get("direction", "left"), bool(payload.get("station_format", True))
         ),
@@ -454,7 +477,14 @@ def dispatch_safe(operation: str, payload_json: str = "{}") -> dict[str, Any]:
     try:
         return {"ok": True, "result": dispatch(operation, payload_json)}
     except Exception as exc:
+        findings=getattr(exc,"findings",[])
+        try:
+            payload=json.loads(payload_json or "{}")
+            values=payload.get("inputs",payload.get("shared_inputs",{}))
+        except (ValueError,AttributeError):values={}
+        if isinstance(exc,ValueError) and not findings and str(values.get("criteria_profile","")).startswith(("aashto",)):
+            findings=[{"code":"INVALID_OR_UNSUPPORTED_INPUT","severity":"block","message":str(exc),"details":"Calculation and affected engineering exports are unavailable until resolved."}]
         return {
             "ok": False,
-            "error": {"type": type(exc).__name__, "message": str(exc) or "Operation failed."},
+            "error": {"type": type(exc).__name__, "message": str(exc) or "Operation failed.", "findings": findings},
         }

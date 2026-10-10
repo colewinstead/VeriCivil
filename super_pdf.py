@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape
 
 import Super
 from app_info import APP_VERSION
-from criteria_info import applicable_drawings_label, calculation_sources_label, criteria_for_result
+from criteria_info import applicable_drawings_label, calculation_sources_label, criteria_for_result, criteria_metadata
 from super_lane import build_lane_rows
 
 
@@ -56,7 +56,7 @@ def select_stamps(results: dict) -> list[str]:
     _, stamp_b64 = _asset_constants()
     inputs = results.get("inputs", {})
     profile_id = str(((results.get("calculation_metadata", {}) or {}).get("criteria", {}) or {}).get("profile_id", ""))
-    if profile_id.startswith("tdot"):
+    if profile_id.startswith(("tdot", "aashto")):
         return []
     area = str(inputs.get("area_type", "")).lower()
     facility = str(inputs.get("facility", "")).lower()
@@ -228,6 +228,8 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             self.restoreState()
 
     curve_list = list(curves)
+    from aashto_superelevation import validate_export_curves
+    validate_export_curves(curve_list)
     diagram_b64, _ = _asset_constants()
     diagram_bytes = _decode_asset(diagram_b64)
     stamps = stamp_images()
@@ -237,13 +239,13 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             str((curve.get("results") or {}).get("calculation_metadata", {}).get("engine_version") or "legacy-unversioned")
             for curve in curve_list
         }
-    ) or ["legacy-unversioned"]
+    ) or [(corridor_qa or {}).get("calculation_engine_version") or "legacy-unversioned"]
     criteria_ids = sorted(
         {
             str(criteria_for_result(curve.get("results") or {}).get("profile_id") or "legacy-unversioned")
             for curve in curve_list
         }
-    ) or ["legacy-unversioned"]
+    ) or [(corridor_qa or {}).get("criteria_profile") or "legacy-unversioned"]
     report_info = {"engines": ", ".join(engine_versions), "criteria": ", ".join(criteria_ids)}
 
     styles = getSampleStyleSheet()
@@ -320,6 +322,8 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
     story.extend([summary, Spacer(1, 0.2 * inch)])
 
     report_criteria = [criteria_for_result(curve.get("results") or {}) for curve in curve_list]
+    if not report_criteria and (corridor_qa or {}).get("criteria_profile"):
+        report_criteria=[criteria_metadata(corridor_qa["criteria_profile"])]
     agency_codes = sorted(
         {
             str(criteria.get("profile_id") or "legacy").split("-", 1)[0].upper()
@@ -400,6 +404,12 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         index_style.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.white if row_index % 2 else HexColor(LIGHT_GRAY)))
     curve_index.setStyle(TableStyle(index_style))
     story.append(curve_index)
+    if (corridor_qa or {}).get("findings"):
+        story.extend([Spacer(1,0.12*inch),Paragraph("Corridor QA findings",styles["Section"])])
+        if any(f.get("severity")=="block" for f in corridor_qa["findings"]):
+            story.append(Paragraph("BLOCKED: Resolve findings before using affected engineering outputs. This report retains diagnostic evidence.",styles["Small"]))
+        for finding in corridor_qa["findings"]:
+            story.append(Paragraph(f"<b>{_text(finding.get('severity','review')).upper()} · {_text(finding.get('code'))}</b>: {_text(finding.get('message'))}<br/>{_text(finding.get('details'))}",styles["Small"]))
 
     def key_value_table(rows: list[tuple[str, str]], width_value: float = 2.15 * inch) -> object:
         data = [[Paragraph(_text(label), styles["Tiny"]), Paragraph(value, styles["Small"])] for label, value in rows]
@@ -418,10 +428,14 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         return table
 
     def lane_table(title: str, rows: list[dict]) -> object:
+        edges=bool(rows and "left_elevation_ft" in rows[0])
         data = [
             [Paragraph(title.upper(), styles["LaneHeader"]), "", "", ""],
             [Paragraph("POINT", styles["LaneHeader"]), Paragraph("STATION", styles["LaneHeader"]), Paragraph("SLOPE", styles["LaneHeaderRight"]), Paragraph("NOTE", styles["LaneHeader"])],
         ]
+        if edges:
+            data[0].extend(["", ""])
+            data[1].extend([Paragraph("LEFT EDGE (ft)",styles["LaneHeaderRight"]),Paragraph("RIGHT EDGE (ft)",styles["LaneHeaderRight"])])
         for row in rows:
             data.append([
                 Paragraph(_text(row.get("label")), styles["LaneCell"]),
@@ -429,7 +443,10 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                 Paragraph(_text(row.get("slope")), styles["LaneCellRight"]),
                 Paragraph(_text(row.get("note")), styles["LaneCell"]),
             ])
-        table = Table(data, colWidths=[0.55 * inch, 0.9 * inch, 0.55 * inch, 1.25 * inch], repeatRows=2, splitByRow=1)
+            if edges:
+                data[-1].extend([Paragraph(f"{row[key]:+.4f}",styles["LaneCellRight"]) for key in ("left_elevation_ft","right_elevation_ft")])
+        widths=[1.15,1.05,.65,2,.85,.85] if edges else [.55,.9,.55,1.25]
+        table = Table(data, colWidths=[w*inch for w in widths], repeatRows=2, splitByRow=1)
         commands = [
             ("SPAN", (0, 0), (-1, 0)),
             ("BACKGROUND", (0, 0), (-1, 1), HexColor(CHARCOAL)),
@@ -691,8 +708,8 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             story.extend([alert, Spacer(1, 0.1 * inch)])
 
         input_rows = [
-            ("PC station", _text(inputs.get("pc"))),
-            ("PT station", _text(inputs.get("pt"), "N/A")),
+            ("SC station" if inputs.get("alignment_type")=="spiral" else "PC station", _text(inputs.get("pc"))),
+            ("CS station" if inputs.get("alignment_type")=="spiral" else "PT station", _text(inputs.get("pt"), "N/A")),
             ("Design speed", _number(inputs.get("speed_mph"), 0, " mph")),
             ("Curve radius", _number(inputs.get("radius_ft"), 2, " ft")),
             ("Facility / area", f"{_text(inputs.get('facility'))} / {_text(inputs.get('area_type'))}"),
@@ -702,6 +719,18 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
 
         if results.get("normal_crown_only"):
             station_rows = [("Normal crown begins", _station(results, results.get("reverse_crown_ft"))), ("Normal crown ends", _station(results, results.get("pt_ft")))]
+        elif results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
+            station_rows=[(label,_station(results,results.get(key))) for label,key in [("Start transition","pnc_ft"),("Start runoff","reverse_crown_ft"),("Full super entry","full_super_ft"),("Full super exit","full_super_out_ft"),("End runoff","reverse_crown_out_ft"),("End transition","pnc_out_ft")]]
+            input_rows.extend([("Roadway / section",_text(f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
+                               ("Rotation axis",_text(f"{inputs.get('rotation_axis',results.get('facility'))} / {results.get('pivot_relationship','')}")),
+                               ("Placement",_text(inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% runoff on tangent")),
+                               ("Criteria workbook",_text(results.get("calculation_metadata",{}).get("criteria_workbook",{}).get("file_sha256","Manual rate")))])
+            if results.get("section_lanes"):
+                input_rows.extend([("Actual lanes",_text(len(results["section_lanes"]))),("Rotated width / lane factor",_text(f"n1={results['n1']:g}, bw={results['bw']:.8f}")),("Units",_text("; ".join(str(v) for v in results.get("units",{}).values()))), ("Geometry source",_text(inputs.get("geometry_provenance","Manual station-only")))])
+                station_rows.extend((name,_station(results,station)) for name,station in results.get("alignment_anchors",{}).items())
+                if results.get("spiral_lengths"):
+                    lengths=results["spiral_lengths"]
+                    input_rows.append(("Spiral actual / required",_text(f"Entry {lengths['entry_actual_ft']:.3f} ft; exit {lengths['exit_actual_ft']:.3f} ft; required {lengths['required_ft']:.3f} ft ({lengths['placement']})")))
         elif results.get("transition_method") == "tdot_simple_curve_half_total":
             station_rows = [
                 ("Start normal crown", _station(results, results.get("pnc_ft"))),
@@ -782,7 +811,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         reference_elements.append(Spacer(1, 0.05 * inch))
         reference_elements.append(Paragraph(f"<b>Sources:</b> {_text(calculation_sources_label(criteria))}", styles["Tiny"]))
         is_tdot = profile_id.startswith("tdot")
-        if diagram_bytes and not is_tdot:
+        if diagram_bytes and not is_tdot and not profile_id.startswith("aashto"):
             reference_elements.extend([Spacer(1, 0.08 * inch), Image(io.BytesIO(diagram_bytes), width=2.25 * inch, height=1.18 * inch, kind="proportional")])
         for stamp_key in select_stamps(results):
             asset = stamps.get(stamp_key)
@@ -830,7 +859,15 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ("TOPPADDING", (0, 0), (-1, -1), 0),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ]))
-        story.extend([Paragraph("Lane transitions", styles["Section"]), lane_columns])
+        if results.get("section_lanes"):
+            story.append(Paragraph("Lane transitions",styles["Section"]))
+            story.append(Paragraph("Slope signs follow the recorded lane side, outward from alignment. Edge heights are physical left/right, relative to the fixed pivot.",styles["SmallMuted"]))
+            for lane in results["section_lanes"]:
+                rows=[{**event,"station":Super.format_result_station(results,event["station_ft"],True),
+                       "slope":f"{event['slope_pct']:.3f}","slope_label":f"{event['slope_pct']:+.3f}%"} for event in lane["events"]]
+                story.extend([lane_table(lane["lane_name"],rows),Spacer(1,.08*inch)])
+        else:
+            story.extend([Paragraph("Lane transitions", styles["Section"]), lane_columns])
 
         if not notes_in_reference:
             provenance_text = (

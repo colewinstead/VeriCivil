@@ -34,6 +34,11 @@ const EXPORT_DETAILS: Record<string, { suffix: string; description: string }> = 
 
 const INITIAL_INPUTS: Dict = {
   criteria_profile: "mdot-rdsd-2026-04-22",
+  max_superelevation: "8", roadway: "two_way", initial_section: "crowned", rotation_axis: "centerline",
+  lane_widths: "12,12", crown_from_left: "", left_normal_slope: "0.02", right_normal_slope: "0.02",
+  initial_slope: "-0.02", alignment_type: "circular", ts: "", st: "", runout_placement: "on_tangent",
+  runoff_tangent_percent: "", override_standard_placement: false, acknowledge_spiral_override: false,
+  aashto_tables: null,
   project_name: "",
   route_name: "",
   alignment_name: "",
@@ -104,6 +109,7 @@ function cleanName(value: string, fallback: string) {
 
 function calculationInputKey(inputs: Dict) {
   return JSON.stringify({
+    aashto: Object.fromEntries(["max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override","aashto_tables"].map(key => [key, inputs[key]])),
     criteria_profile: inputs.criteria_profile,
     curve_direction: inputs.curve_direction,
     pc: inputs.pc,
@@ -158,6 +164,7 @@ export default function CalculatorApp() {
   const [corridorDiagram, setCorridorDiagram] = useState<Dict | null>(null);
   const [diagramInspector, setDiagramInspector] = useState<Dict | null>(null);
   const [corridorQa, setCorridorQa] = useState<Dict | null>(null);
+  const [blockedFindings, setBlockedFindings] = useState<Dict[]>([]);
   const [planView, setPlanView] = useState<Dict | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -198,7 +205,7 @@ export default function CalculatorApp() {
         if (message.ok) {
           pending.resolve(message.result);
         } else {
-          pending.reject(new Error(message.error?.message || "Operation failed."));
+          pending.reject(Object.assign(new Error(message.error?.message || "Operation failed."),{findings:message.error?.findings || []}));
         }
       }
     };
@@ -263,6 +270,7 @@ export default function CalculatorApp() {
       criteria_profile: profileId,
       facility: tdot ? "undivided" : "centerline",
       area: tdot && current.area === "local" ? "rural" : current.area,
+      ...(profileId.startsWith("aashto") ? {area:"rural"} : {}),
       speed: "",
     }));
     setCalculation(null);
@@ -287,6 +295,7 @@ export default function CalculatorApp() {
     try {
       return await task();
     } catch (reason) {
+      if (label === "Calculating" || label === "Building all curves") setBlockedFindings((reason as Dict)?.findings || []);
       setError(reason instanceof Error ? reason.message : String(reason));
       return null;
     } finally {
@@ -298,6 +307,7 @@ export default function CalculatorApp() {
     const sequence = ++calculationSequence.current;
     const result = await run("Calculating", () => call("calculate", { inputs }));
     if (result && sequence === calculationSequence.current) {
+      setBlockedFindings([]);
       setCalculation(result);
       setLookupResult(null);
       setDirty(true);
@@ -307,6 +317,7 @@ export default function CalculatorApp() {
         trackCalculatorEvent("superelevation", "calculation_completed");
       }
     } else if (!result) {
+      setCalculation(null);
       const key = calculationInputKey(inputs);
       if (lastTrackedFailure.current !== key) {
         lastTrackedFailure.current = key;
@@ -328,6 +339,7 @@ export default function CalculatorApp() {
       && String(inputs.radius ?? "").trim();
     const sequence = ++calculationSequence.current;
     if (!readyToCalculate) {
+      setBlockedFindings([]);
       setCalculation(null);
       setLookupResult(null);
       setBusy("");
@@ -341,6 +353,7 @@ export default function CalculatorApp() {
         const result = await call("calculate", { inputs });
         if (sequence !== calculationSequence.current) return;
         setCalculation(result);
+        setBlockedFindings([]);
         setLookupResult(null);
         if (lastTrackedCalculation.current !== calculationKey) {
           lastTrackedCalculation.current = calculationKey;
@@ -348,6 +361,8 @@ export default function CalculatorApp() {
         }
       } catch (reason) {
         if (sequence === calculationSequence.current) {
+          setCalculation(null);
+          setBlockedFindings((reason as Dict)?.findings || []);
           setError(reason instanceof Error ? reason.message : String(reason));
           if (lastTrackedFailure.current !== calculationKey) {
             lastTrackedFailure.current = calculationKey;
@@ -416,10 +431,14 @@ export default function CalculatorApp() {
     setInputs((current) => ({
       ...current,
       alignment_name: preset.alignment_name || "",
+      linear_unit: preset.linear_unit,
+      geometry_provenance:{source:"LandXML",alignment:preset.alignment_name,curve_id:preset.landxml_curve_id,linear_unit:preset.linear_unit,available_entry_tangent_ft:preset.available_entry_tangent_ft,available_exit_tangent_ft:preset.available_exit_tangent_ft},
       curve_name: preset.curve_name || "",
       curve_direction: preset.curve_direction || "left",
       pc: preset.pc_station_label || "",
       pt: preset.pt_station_label || "",
+      alignment_type: preset.alignment_type || "circular",
+      ts: preset.ts_station_label || "", st: preset.st_station_label || "",
       radius: String(preset.radius_ft ?? ""),
       station_equations: preset.station_equations || [],
       alignment_station_range: preset.alignment_station_range || null,
@@ -572,6 +591,7 @@ export default function CalculatorApp() {
     setInputs((current) => {
       const nextInputs = {
         ...current,
+        ...values,
         ...curve.meta,
         criteria_profile: values.criteria_profile ?? curve.results?.calculation_metadata?.criteria?.profile_id ?? "mdot-rdsd-2026-04-22",
         pc: values.pc ?? "", pt: values.pt ?? "", speed: String(values.speed_mph ?? ""), radius: String(values.radius_ft ?? ""),
@@ -601,6 +621,7 @@ export default function CalculatorApp() {
       shared_inputs: inputs,
     }));
     if (result) {
+      setBlockedFindings([]);
       setCurves(result);
       setReverseCurvePairs([]);
       setExcludedCurveIndexes([]);
@@ -629,7 +650,7 @@ export default function CalculatorApp() {
       application_version: manifest?.application_version,
       calculation_engine_version: manifest?.calculation_engine_version,
       criteria: calculation?.results?.calculation_metadata?.criteria || manifest?.criteria,
-      vars: Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== "coordinate_reverse_curves")),
+      vars: {...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== "coordinate_reverse_curves")),diagnostic_findings:blockedFindings},
       curves,
       excluded_landxml_curve_indexes: excludedCurveIndexes,
       reverse_curve_pairs: reverseCurvePairs,
@@ -673,6 +694,7 @@ export default function CalculatorApp() {
     const restoredInputs = { ...INITIAL_INPUTS, ...(loaded.project.vars || {}) };
     const restoredCurves = loaded.project.curves || [];
     setInputs(restoredInputs);
+    setBlockedFindings(restoredInputs.diagnostic_findings || []);
     setCurves(restoredCurves);
     setReverseCurvePairs(loaded.project.reverse_curve_pairs || []);
     setExcludedCurveIndexes(loaded.project.excluded_landxml_curve_indexes || []);
@@ -772,9 +794,10 @@ export default function CalculatorApp() {
         : CAPABILITIES.overlayDxf;
     if (!requestCapability(capability)) return;
     const available = exportCurves();
-    if (!available.length) return setError("Run a calculation before exporting.");
-    const payload: Dict = { curves: available };
-    if (operation === "export_pdf" && corridorQa) payload.corridor_qa = corridorQa;
+    if (blockedFindings.length && operation !== "export_pdf") return setError("Resolve blocking calculation findings before exporting engineering results. PDF can retain diagnostics.");
+    if (!available.length && !(operation === "export_pdf" && reviewQa)) return setError("Run a calculation before exporting.");
+    const payload: Dict = { curves: blockedFindings.length && operation === "export_pdf" ? [] : available };
+    if (reviewQa) payload.corridor_qa = reviewQa;
     if (operation === "export_overlay_dxf") {
       if (!landxml) return setError("Select LandXML before exporting an overlay DXF.");
       payload.landxml_source = landxml.source;
@@ -820,6 +843,7 @@ export default function CalculatorApp() {
   const activeProfile = manifest?.criteria_profiles?.find((profile: Dict) => profile.profile_id === activeProfileId);
   const profileOptions = manifest?.options?.profiles?.[activeProfileId] || {};
   const isTdot = activeProfileId.startsWith("tdot");
+  const isAashto = activeProfileId.startsWith("aashto");
   const speedOptions = isTdot && inputs.area === "urban"
     ? (profileOptions.urban_speed || profileOptions.speed || [])
     : (profileOptions.speed || manifest?.options?.speed || []);
@@ -828,7 +852,10 @@ export default function CalculatorApp() {
   const applicableLabel = applicableDrawings.length
     ? applicableDrawings.join(" / ")
     : "No mapped standard drawing";
-  const qaHighlights = (corridorQa?.findings || []).filter((finding: Dict) =>
+  const diagnosticFindings=blockedFindings.map((finding:Dict)=>({...finding,start_ft:finding.station_start_ft,end_ft:finding.station_end_ft,curve_indexes:finding.curve_indexes || (selectedCurve>=0?[selectedCurve]:[]),details:typeof finding.details==="object"?JSON.stringify(finding.details):finding.details}));
+  const reviewFindings=[...(corridorQa?.findings || []),...diagnosticFindings];
+  const reviewQa=reviewFindings.length ? {...(corridorQa || {}),criteria_profile:activeProfileId,calculation_engine_version:manifest?.calculation_engine_version,curve_count:curves.length,status:reviewFindings.some(f=>f.severity==="block")?"block":"review",counts:Object.fromEntries(["pass","review","block"].map(severity=>[severity,reviewFindings.filter(f=>f.severity===severity).length])),findings:reviewFindings} : corridorQa;
+  const qaHighlights = (reviewQa?.findings || []).filter((finding: Dict) =>
     finding.start_ft != null && finding.end_ft != null
   );
   const linkedGap = (index: number) => reverseCurvePairs.some(
@@ -929,37 +956,50 @@ export default function CalculatorApp() {
             else { setLandxmlPreset(-1); setCalculation(null); setDiagramInspector(null); }
           }}><option value={-1}>No LandXML curve selected</option>{landxml?.curve_presets?.map((preset: Dict, index: number) => <option value={index} key={index}>{preset.curve_name} · {preset.curve_direction} · R {preset.radius_ft}{excludedCurveIndexes.includes(index) ? " · excluded from QA" : ""}</option>)}</select></label>}
           <div className="form-grid">{input("alignment_name", "Alignment name")}{input("curve_name", "Curve name")}
-            <label className="field full"><span>Governing standard</span><select value={activeProfileId} onChange={(e) => updateCriteriaProfile(e.target.value)}>{manifest?.criteria_profiles?.map((profile: Dict) => <option value={profile.profile_id} key={profile.profile_id}>{profile.governing_authority} · {profile.revision}{profile.profile_id.startsWith("tdot") && !allows(entitlement, CAPABILITIES.allDotProfiles) ? " · Pro" : ""}</option>)}</select><small>{activeProfile?.profile_name}</small></label>
+            <label className="field full"><span>Governing standard</span><select value={activeProfileId} onChange={(e) => updateCriteriaProfile(e.target.value)}>{manifest?.criteria_profiles?.map((profile: Dict) => <option value={profile.profile_id} key={profile.profile_id}>{profile.governing_authority} · {profile.revision}{!profile.profile_id.startsWith("mdot") && !allows(entitlement, CAPABILITIES.allDotProfiles) ? " · Pro" : ""}</option>)}</select><small>{activeProfile?.profile_name}</small></label>
             <label className="field"><span>Curve direction</span><select value={inputs.curve_direction} onChange={(e) => update("curve_direction", e.target.value)}><option value="left">Left</option><option value="right">Right</option></select></label>
-            {input("pc", "PC station", true)}{input("pt", "PT station")}
+            {input("pc", inputs.alignment_type === "spiral" ? "SC station" : "PC station", true)}{input("pt", inputs.alignment_type === "spiral" ? "CS station" : "PT station",isAashto)}
             <label className="field"><span>Design speed <b>*</b></span><select value={inputs.speed} onChange={(e) => update("speed", e.target.value)}><option value="">Select mph</option>{speedOptions.map((speed: string) => <option key={speed}>{speed}</option>)}</select></label>
             {input("radius", "Curve radius (ft)", true, "number")}
-            <label className="field"><span>{isTdot ? "Roadway layout" : "Facility / rotation"}</span><select value={inputs.facility} disabled={!isTdot && inputs.area === "local"} onChange={(e) => update("facility", e.target.value)}>{(profileOptions.facility || manifest?.options?.facility || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>
+            {!isAashto && <label className="field"><span>{isTdot ? "Roadway layout" : "Facility / rotation"}</span><select value={inputs.facility} disabled={!isTdot && inputs.area === "local"} onChange={(e) => update("facility", e.target.value)}>{(profileOptions.facility || manifest?.options?.facility || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>}
             <label className="field"><span>Area type</span><select value={inputs.area} onChange={(e) => { const area = e.target.value; setInputs((current) => ({ ...current, area, speed: isTdot && area === "urban" && Number(current.speed) > 60 ? "" : current.speed })); setDirty(true); }}>{(profileOptions.area || manifest?.options?.area || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>
-            {input("lane_width", "Lane width (ft)", false, "number")}{input("lanes_rotated", "Lanes rotated", false, "number")}
+            {!activeProfileId.startsWith("aashto") && <>{input("lane_width", "Lane width (ft)", false, "number")}{input("lanes_rotated", "Lanes rotated", false, "number")}</>}
+            {activeProfileId.startsWith("aashto") && <>
+              <label className="field"><span>Maximum superelevation</span><select value={inputs.max_superelevation} onChange={e=>update("max_superelevation",e.target.value)}>{profileOptions.max_superelevation?.map((v:number)=><option value={v} key={v}>{v}%</option>)}</select></label>
+              <label className="field full"><span>Local criteria workbook</span><input type="file" accept=".xlsx" onChange={async e=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;const bytes=new Uint8Array(await file.arrayBuffer());let text="";for(const byte of bytes)text+=String.fromCharCode(byte);const pack=await run("Checking criteria",()=>call("import_aashto_workbook",{content_base64:btoa(text)}));if(pack)update("aashto_tables",pack);}}/><small>{inputs.aashto_tables ? `Verified transcription · ${inputs.aashto_tables.file_sha256.slice(0,12)}` : "Import the reviewed corrected workbook. Tables remain local; redistribution rights are unresolved."}</small></label>
+              <label className="field"><span>Roadway</span><select value={inputs.roadway} onChange={e=>update("roadway",e.target.value)}><option value="two_way">Two-way undivided</option><option value="one_way">One-way / ramp</option></select></label>
+              <label className="field"><span>Initial section</span><select value={inputs.initial_section} onChange={e=>update("initial_section",e.target.value)}><option value="crowned">Crowned</option><option value="single_slope">Single slope (one-way)</option></select></label>
+              <label className="field"><span>Rotation axis</span><select value={inputs.rotation_axis} onChange={e=>update("rotation_axis",e.target.value)}><option value="centerline">Carriageway centerline</option><option value="left_edge">Left pavement edge</option><option value="right_edge">Right pavement edge</option></select><small>Left/right follow increasing alignment station.{result?.pivot_relationship && ` Selected pivot: ${result.pivot_relationship}.`}</small></label>
+              {input("lane_widths","Lane widths, left to right (ft)")}
+              {inputs.initial_section === "single_slope" ? input("initial_slope","Initial slope (positive rises left)") : <>{input("crown_from_left","Crown distance from left edge (ft)")}{input("left_normal_slope","Left normal slope (decimal)")}{input("right_normal_slope","Right normal slope (decimal)")}</>}
+              <label className="field"><span>Existing alignment type</span><select value={inputs.alignment_type} onChange={e=>update("alignment_type",e.target.value)}><option value="circular">Circular curve</option><option value="spiral">Spiral–circular–spiral</option></select></label>
+              {inputs.alignment_type === "spiral" && <>{input("ts","TS station",true)}{input("st","ST station",true)}<label className="field"><span>Tangent runout placement</span><select value={inputs.runout_placement} onChange={e=>update("runout_placement",e.target.value)}><option value="on_tangent">On tangent</option><option value="in_spiral">In spiral</option></select></label><label className="check full"><input type="checkbox" checked={inputs.acknowledge_spiral_override} onChange={e=>update("acknowledge_spiral_override",e.target.checked)}/>Acknowledge project-specific minimum-length placement and zero-crown drainage review.</label></>}
+            </>}
+            {!activeProfileId.startsWith("aashto") && <label className="check full"><input type="checkbox" checked={inputs.override_standard_placement} onChange={e=>update("override_standard_placement",e.target.checked)}/>Override standard circular transition placement</label>}
+            {(activeProfileId.startsWith("aashto") && inputs.alignment_type !== "spiral" || !activeProfileId.startsWith("aashto") && inputs.override_standard_placement) && <label className="field full"><span>Runoff on tangent (%) <b>*</b></span><input type="number" min="0" max="100" value={inputs.runoff_tangent_percent} onChange={e=>update("runoff_tangent_percent",e.target.value)}/><small>{inputs.runoff_tangent_percent !== "" ? `${100-Number(inputs.runoff_tangent_percent)}% on curve` : "Explicit project input required"}. TDOT standard default splits total runout + runoff; this input splits runoff only.</small></label>}
           </div>
           <button className="advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><span>Advanced settings</span><small>Optional criteria overrides and stationing</small><b>{advancedOpen ? "−" : "+"}</b></button>
-          {advancedOpen && <div className="advanced-grid">{input("e_manual", "Manual e")}{input("friction", "Side friction")}{input("rel_grad", "Relative gradient")}{input("normal_crown", "Normal crown")}{input("Lr_manual", "Runoff Lr (ft)")}{input("Lt_manual", "Runout Lt (ft)")}{input("station_equations", "Station equations")}{input("alignment_station_range", "Internal station range")}</div>}
+          {advancedOpen && <div className="advanced-grid">{input("e_manual", "Manual e")}{!isAashto && <>{input("friction", "Side friction")}{input("rel_grad", "Relative gradient")}{input("normal_crown", "Normal crown")}</>}{input("Lr_manual", "Runoff Lr (ft)")}{input("Lt_manual", "Runout Lt (ft)")}{input("station_equations", "Station equations")}{input("alignment_station_range", "Internal station range")}<small>Repeated station labels require a region suffix, for example 10+00R2, or a narrower internal range.</small></div>}
           <label className="field full"><span>Curve notes</span><textarea value={inputs.curve_notes} onChange={(e) => update("curve_notes", e.target.value)} rows={3} /></label>
           <div className="compute-bar"><label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station format</label><span className="auto-status">Calculates automatically</span><button onClick={() => { setInputs((current) => ({ ...INITIAL_INPUTS, project_name: current.project_name, route_name: current.route_name })); setCalculation(null); }}>Clear curve</button><button className="primary" onClick={calculate} disabled={runtime !== "ready" || !!busy}>{busy || (calculation ? "Recompute now" : "Compute now")}</button></div>
         </section>
 
         <section className="panel results-panel">
           <div className="panel-heading"><div><p className="step">03</p><h2>Results</h2></div>{result && <span className="criteria-tag">{criteria.governing_authority || "Criteria"} sources recorded</span>}</div>
-          {!result ? <><div className="results-empty"><div className="road-crown"><i></i><i></i></div><h3>Ready for curve inputs</h3><p>Enter PC, speed, and radius to calculate transition stations and signed lane slopes.</p></div>{landxml && <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={corridorQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />}</> : <>
+          {!result ? <><div className="results-empty"><div className="road-crown"><i></i><i></i></div><h3>{blockedFindings.length ? "Calculation blocked" : "Ready for curve inputs"}</h3><p>{blockedFindings.length ? "Review the findings below. Diagnostics can be saved in the project and PDF." : "Enter PC, speed, and radius to calculate transition stations and signed lane slopes."}</p></div>{(landxml || reviewQa) && <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />}</> : <>
             <div className="metric-grid"><article><span>Rate e</span><strong>{Number(result.e || 0).toFixed(4)}</strong><small>{result.e_source || "automatic"}</small></article><article><span>Runoff Lr</span><strong>{Number(result.Lr || 0).toFixed(2)}′</strong><small>{inputs.Lr_manual ? "override" : "automatic"}</small></article><article><span>Runout Lt</span><strong>{Number(result.Lt || 0).toFixed(2)}′</strong><small>{inputs.Lt_manual ? "override" : "automatic"}</small></article></div>
             <div className="criteria-reference">
               <p>Applicable drawing</p><strong>{applicableLabel}</strong>
               <p>Calculation sources</p>
-              <ul>{criteriaSources.map((source: Dict, index: number) => <li key={`${source.component}-${source.reference}-${index}`}><span>{source.component}</span><b>{source.reference}</b>{source.mode === "user_override" && <em>User override</em>}</li>)}</ul>
+              <ul>{criteriaSources.map((source: Dict, index: number) => <li key={`${source.component}-${source.reference}-${index}`}><span>{source.component}</span><b>{source.reference}</b><em>{String(source.mode || "automatic").replaceAll("_"," ")}</em></li>)}</ul>
             </div>
             {(result.warnings || []).length > 0 && <div className="result-warning"><strong>Engineering review</strong><ul>{result.warnings.map((warning: string, index: number) => <li key={index}>{warning}</li>)}</ul></div>}
-            <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={corridorQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />
+            <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />
             <div className="result-tabs"><h3>Lane events</h3><label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station labels</label></div>
-            <div className="lane-tables">{(["left", "right"] as const).map((lane) => <div key={lane}><h4>{lane} lane</h4><table><thead><tr><th>Point</th><th>Station</th><th>Slope</th></tr></thead><tbody>{(lanes[lane] || []).map((row: Dict, index: number) => <tr key={index}><td>{row.label}</td><td>{row.station}</td><td className={String(row.slope_label).startsWith("+") ? "positive" : ""}>{row.slope_label}</td></tr>)}</tbody></table></div>)}</div>
+            {calculation?.section_lanes?.length > 0 && <p className="helper">Slope signs follow the recorded lane side, outward from alignment. Left/right edge heights are relative to the fixed pivot.</p>}<div className="lane-tables">{(calculation?.section_lanes?.length ? calculation.section_lanes.map((lane:Dict)=>({name:lane.lane_name,rows:lane.events})) : ["left","right"].map(lane=>({name:`${lane} lane`,rows:lanes[lane] || []}))).map((lane:Dict) => <div key={lane.name}><h4>{lane.name}</h4><table><thead><tr><th>Point</th><th>Station</th><th>Slope</th>{calculation?.section_lanes?.length > 0 && <><th>Left edge (ft)</th><th>Right edge (ft)</th></>}</tr></thead><tbody>{lane.rows.map((row: Dict, index: number) => <tr key={index}><td>{row.label}</td><td>{row.station}</td><td className={String(row.slope_label).startsWith("+") ? "positive" : ""}>{row.slope_label}</td>{row.left_elevation_ft !== undefined && <><td>{Number(row.left_elevation_ft).toFixed(4)}</td><td>{Number(row.right_elevation_ft).toFixed(4)}</td></>}</tr>)}</tbody></table></div>)}</div>
             <div className="lookup"><h3>Engineering lookup</h3><div><input aria-label="Lookup station" placeholder="Station" value={lookupStation} onChange={(e) => setLookupStation(e.target.value)} /><input aria-label="Lookup superelevation" placeholder="Super (2%, 2, or 0.02)" value={lookupSlope} onChange={(e) => setLookupSlope(e.target.value)} /><button onClick={performLookup}>Lookup</button></div>{lookupResult && <div className="lookup-output">
-              {lookupResult.station && <section className="lookup-card"><div className="lookup-heading"><span>Station</span><strong>{lookupResult.station.label}</strong></div><div className="lookup-lanes">{(["left", "right"] as const).map((lane) => <article key={lane}><span>{lane} lane</span><strong>{lookupResult.station.slopes[lane].label}</strong><small>{lookupResult.station.slopes[lane].decimal} ft/ft</small></article>)}</div></section>}
-              {lookupResult.slope && <section className="lookup-card"><div className="lookup-heading"><span>Slope target</span><strong>{lookupResult.slope.label}</strong><small>{lookupResult.slope.decimal} ft/ft</small></div><div className="lookup-match-grid">{(["left", "right"] as const).map((lane) => <article className="lookup-matches" key={lane}><h4>{lane} lane</h4>{(lookupResult.lanes[lane] || []).length ? <ul>{lookupResult.lanes[lane].map((match: Dict, index: number) => <li key={index}><span>{match.label}</span><strong>{match.is_range ? `${match.start} – ${match.end}` : match.start}</strong>{match.nearest && <em>Nearest</em>}</li>)}</ul> : <p>No matching station</p>}</article>)}</div></section>}
+              {lookupResult.station && <section className="lookup-card"><div className="lookup-heading"><span>Station</span><strong>{lookupResult.station.label}</strong></div><div className="lookup-lanes">{Object.entries(lookupResult.station.slopes).map(([lane,slope]) => <article key={lane}><span>{lane}</span><strong>{(slope as Dict).label}</strong><small>{(slope as Dict).decimal} ft/ft</small>{lookupResult.station.edge_elevations?.[lane] && <small>Relative edges: left {Number(lookupResult.station.edge_elevations[lane].left_elevation_ft).toFixed(4)} ft; right {Number(lookupResult.station.edge_elevations[lane].right_elevation_ft).toFixed(4)} ft</small>}</article>)}</div></section>}
+              {lookupResult.slope && <section className="lookup-card"><div className="lookup-heading"><span>Slope target</span><strong>{lookupResult.slope.label}</strong><small>{lookupResult.slope.decimal} ft/ft</small></div><div className="lookup-match-grid">{Object.keys(lookupResult.lanes).map((lane) => <article className="lookup-matches" key={lane}><h4>{lane}</h4>{(lookupResult.lanes[lane] || []).length ? <ul>{lookupResult.lanes[lane].map((match: Dict, index: number) => <li key={index}><span>{match.label}</span><strong>{match.is_range ? `${match.start} – ${match.end}` : match.start}</strong>{match.nearest && <em>Nearest</em>}</li>)}</ul> : <p>No matching station</p>}</article>)}</div></section>}
             </div>}</div>
           </>}
         </section>

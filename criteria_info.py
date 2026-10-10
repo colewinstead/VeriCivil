@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from tdot_criteria import TDOT_PROFILE_ID
+from aashto_criteria import PROFILE_ID as AASHTO_PROFILE_ID
 
 
 MDOT_PROFILE_ID = "mdot-rdsd-2026-04-22"
@@ -193,12 +194,23 @@ _TDOT_CRITERIA_METADATA = {
 _PROFILE_METADATA = {
     MDOT_PROFILE_ID: _MDOT_CRITERIA_METADATA,
     TDOT_PROFILE_ID: _TDOT_CRITERIA_METADATA,
+    AASHTO_PROFILE_ID: {
+        "profile_id":AASHTO_PROFILE_ID,"profile_name":"AASHTO Green Book 2018 (October 2019 errata)",
+        "revision":"2018 / October 2019 errata","governing_authority":"AASHTO",
+        "source_status":"LOCAL CRITERIA WORKBOOK REQUIRED; INDEPENDENT ENGINEERING REVIEW REQUIRED; REDISTRIBUTION RIGHTS UNRESOLVED",
+        "source_documents":[{"title":"A Policy on Geometric Design of Highways and Streets, 7th edition","edition":"2018","applicable_sections":["3.3.5.1","3.3.8.2","3.3.8.4.6","3.3.8.6"],"url":"https://store.transportation.org/"},
+                            {"title":"GDHS-7-E1 October 2019 errata","url":"https://downloads.transportation.org/GDHS-7-Errata.pdf"},
+                            {"title":"FHWA 2018 Green Book superelevation workbook","revision":"2022-04-15","url":"https://highways.dot.gov/federal-lands/design/tools/superelevation-tables"}],
+        "referenced_identifiers":["Tables 3-8–3-12","Table 3-15","Table 3-16a","Equation 3-23","Equation 3-24","Equation 3-25","Figure 3-8"],
+        "implementation_modules":["aashto_criteria.py","aashto_superelevation.py"],
+        "engineering_change_notice":"Tables 3-13 and 3-17–3-20, continuous Method 5 / between-row interpolation, automatic alignment design, asymmetric crowns and unequal widths are excluded. Automatic rates require unambiguous exact published radius rows or verified NC/RC thresholds. 4% maximum is urban only. Longer spiral placement requires project review. One-way carriageways use unadjusted gradients. ORD CSV requires the pivot on every exported lane edge.",
+    },
 }
 
 
 def normalize_profile_id(profile_id: str | None) -> str:
     value = str(profile_id or MDOT_PROFILE_ID).strip().lower()
-    aliases = {"mdot": MDOT_PROFILE_ID, "tdot": TDOT_PROFILE_ID}
+    aliases = {"mdot": MDOT_PROFILE_ID, "tdot": TDOT_PROFILE_ID, "aashto": AASHTO_PROFILE_ID}
     value = aliases.get(value, value)
     if value not in _PROFILE_METADATA:
         choices = ", ".join(sorted(_PROFILE_METADATA))
@@ -241,6 +253,8 @@ def applicable_standard_drawings(results: dict[str, Any]) -> list[str]:
             facility.startswith("divided") or "edge" in facility
         ) else ["RD11-SE-2", "RD11-SE-2A"]
         return [f"TDOT STD. DWG {drawing}" for drawing in [rate_drawing, "RD11-SE-1", *transition_drawings]]
+    if profile_id == AASHTO_PROFILE_ID:
+        return []
 
     drawings: list[str] = []
     if area.startswith("local"):
@@ -264,6 +278,11 @@ def _source(component: str, reference: str, mode: str = "automatic") -> dict[str
 def calculation_sources(results: dict[str, Any]) -> list[dict[str, str]]:
     """Describe the tables, drawings, formulas, and overrides that produced a result."""
     inputs = results.get("inputs", {}) or {}
+    if results.get("runoff_tangent_fraction") is not None:
+        original=deepcopy(results)
+        original.pop("runoff_tangent_fraction")
+        sources=calculation_sources(original)
+        return [s for s in sources if s.get("component")!="Transition placement"]+[_source("Transition placement",f"USER OVERRIDE: {results['runoff_tangent_fraction']*100:g}% runoff on tangent","user_override")]
     profile_id = _result_profile_id(results)
     metadata = results.get("calculation_metadata", {}) or {}
     overrides = metadata.get("manual_overrides", {}) or {}
@@ -277,6 +296,8 @@ def calculation_sources(results: dict[str, Any]) -> list[dict[str, str]]:
 
     if profile_id == TDOT_PROFILE_ID:
         return _tdot_calculation_sources(results, overrides, area, facility, normal_crown_only)
+    if profile_id == AASHTO_PROFILE_ID:
+        return deepcopy(metadata.get("calculation_sources", []))
 
     sources = [_source("Crown thresholds", "MDOT Table 3-4-A")]
 

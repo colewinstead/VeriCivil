@@ -398,8 +398,9 @@ def _append_entry(
             rotation_start = zero + runoff * nc_pct / target_magnitude
         rows.append(_event("BEGIN ROTATION", rotation_start, -nc_pct, "MDOT SE-3A X1 = Lr(NC/e)", "Inside-lane rotation"))
         pc_slope = _linear_value(pc, rotation_start, -nc_pct, full, target_slope)
-    rows.append(_event("PC", pc, pc_slope, "70% of runoff occurs before PC", "PC 70% runoff"))
-    rows.append(_event("FULL SUPER", full, target_slope, "PC + 0.3Lr", "Full super"))
+    fraction = results.get("runoff_tangent_fraction",0.7)
+    rows.append(_event("PC", pc, pc_slope, f"{fraction*100:g}% of runoff occurs before PC", "PC 70% runoff" if fraction==0.7 else "PC project placement"))
+    rows.append(_event("FULL SUPER", full, target_slope, "PC + 0.3Lr" if fraction==0.7 else f"PC + {(1-fraction):g}Lr", "Full super"))
 
 
 def _append_exit(
@@ -457,7 +458,8 @@ def _append_exit(
             rotation_end = zero - runoff * nc_pct / target_magnitude
         end_slope = -nc_pct
     pt_slope = _linear_value(pt, full, target_slope, rotation_end, end_slope)
-    rows.append(_event("PT", pt, pt_slope, "70% of runoff occurs after PT", "PT 70% runoff"))
+    fraction = results.get("runoff_tangent_fraction",0.7)
+    rows.append(_event("PT", pt, pt_slope, f"{fraction*100:g}% of runoff occurs after PT", "PT 70% runoff" if fraction==0.7 else "PT project placement"))
     if side == outside:
         rows.append(_event("0%", zero, 0.0, "End of runoff; start of tangent runout", "End runoff"))
     else:

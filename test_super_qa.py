@@ -686,9 +686,8 @@ class CorridorQATests(unittest.TestCase):
     def test_spiral_geometry_blocks_corridor(self):
         spiral = '<Spiral length="100"><Start>1453411.9250950934 993735.04373338632 0</Start><End>1453411.9250950934 993835.04373338632 0</End></Spiral>'
         content = self.content.replace("<Curve crvType=", f"{spiral}<Curve crvType=", 1)
-        report = super_service.corridor_qa(content, "spiral.xml", [])
-        self.assertEqual(report["status"], "block")
-        self.assertIn("UNSUPPORTED_SPIRAL", {finding["code"] for finding in report["findings"]})
+        with self.assertRaisesRegex(ValueError,"explicitly defined LandXML clothoids"):
+            super_service.corridor_qa(content, "spiral.xml", [])
 
     def test_out_of_alignment_transition_blocks_corridor(self):
         curves = copy.deepcopy(self.curves())

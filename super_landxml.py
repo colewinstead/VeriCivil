@@ -10,6 +10,7 @@ from typing import Any
 from pyproj import CRS
 
 import Super
+from super_spiral import SpiralSegment
 
 
 NS = {"lx": "http://www.landxml.org/schema/LandXML-1.2"}
@@ -210,6 +211,8 @@ def _parse_coordinate_system(node: ET.Element | None) -> CoordinateSystemInfo:
 
 def _parse_point(text: str) -> tuple[float, float]:
     values = [float(value) for value in text.split()]
+    if len(values)<2 or any(not math.isfinite(v) for v in values):
+        raise ValueError("LandXML point requires finite Northing/Easting coordinates.")
     # LandXML stores horizontal coordinates as Northing, Easting. DXF/CAD
     # expects X=Easting and Y=Northing, so swap at the import boundary.
     return values[1], values[0]
@@ -254,7 +257,7 @@ class LandXMLData:
     superelevation_nodes: list[dict]
     coordinate_system: CoordinateSystemInfo | None
     warnings: list[str]
-    _segments: list[LineSegment | ArcSegment]
+    _segments: list[LineSegment | ArcSegment | SpiralSegment]
 
     def station_range(self) -> tuple[float, float]:
         return self.start_station, self.start_station + sum(segment.length for segment in self._segments)
@@ -277,6 +280,8 @@ class LandXMLData:
         remaining = station - self.start_station
         for segment in self._segments:
             if remaining <= segment.length + 1e-9:
+                if isinstance(segment, SpiralSegment):
+                    return segment.xy(max(0.0, remaining))
                 if isinstance(segment, LineSegment):
                     ratio = 0.0 if segment.length == 0 else remaining / segment.length
                     x = segment.start[0] + (segment.end[0] - segment.start[0]) * ratio
@@ -297,6 +302,8 @@ class LandXMLData:
         remaining = station - self.start_station
         for segment in self._segments:
             if remaining <= segment.length + 1e-9:
+                if isinstance(segment, SpiralSegment):
+                    return segment.tangent(max(0.0, remaining))
                 if isinstance(segment, LineSegment):
                     dx = segment.end[0] - segment.start[0]
                     dy = segment.end[1] - segment.start[1]
@@ -322,8 +329,8 @@ class LandXMLData:
         records: list[dict] = []
         station = self.start_station
         curve_index = 1
-        for segment in self._segments:
-            if isinstance(segment, LineSegment):
+        for segment_index, segment in enumerate(self._segments):
+            if not isinstance(segment, ArcSegment):
                 station += segment.length
                 continue
             pc_station = station
@@ -339,9 +346,9 @@ class LandXMLData:
                     "curve_name": f"Curve {curve_index}",
                     "curve_direction": direction,
                     "pc_station_ft": pc_station,
-                    "pc_station_label": Super.format_station(Super.internal_to_civil_station(pc_station, self.station_equations), True),
+                    "pc_station_label": Super.station_input_label(pc_station,self.station_equations,self.station_range()),
                     "pt_station_ft": pt_station,
-                    "pt_station_label": Super.format_station(Super.internal_to_civil_station(pt_station, self.station_equations), True),
+                    "pt_station_label": Super.station_input_label(pt_station,self.station_equations,self.station_range()),
                     # LandXML commonly serializes exact design radii with
                     # floating-point noise (for example 3499.9999999999995).
                     # Use the intended three-decimal design value for lookup
@@ -353,6 +360,25 @@ class LandXMLData:
                     "alignment_station_range": self.station_range(),
                 }
             )
+            before = self._segments[segment_index - 1] if segment_index else None
+            after = self._segments[segment_index + 1] if segment_index + 1 < len(self._segments) else None
+            if isinstance(before, SpiralSegment) or isinstance(after, SpiralSegment):
+                if not isinstance(before, SpiralSegment) or not isinstance(after, SpiralSegment):
+                    raise ValueError("A circular curve with spirals requires both entry and exit clothoids.")
+                signed_curvature=self._arc_sweep_sign(segment)/segment.radius
+                if abs(before.end_curvature-signed_curvature)>1e-8 or abs(after.start_curvature-signed_curvature)>1e-8:
+                    raise ValueError("Spiral curvature does not match its circular curve.")
+                records[-1].update({"alignment_type": "spiral", "ts_station_ft": pc_station - before.length,
+                                    "sc_station_ft": pc_station, "cs_station_ft": pt_station,
+                                    "st_station_ft": pt_station + after.length,
+                                    "entering_spiral_length_ft": before.length, "exiting_spiral_length_ft": after.length})
+                records[-1]["ts_station_label"]=Super.station_input_label(pc_station-before.length,self.station_equations,self.station_range())
+                records[-1]["st_station_label"]=Super.station_input_label(pt_station+after.length,self.station_equations,self.station_range())
+            records[-1]["linear_unit"]=self.linear_unit
+            tangent_before=self._segments[segment_index-2] if records[-1].get("alignment_type")=="spiral" and segment_index>=2 else before
+            tangent_after=self._segments[segment_index+2] if records[-1].get("alignment_type")=="spiral" and segment_index+2<len(self._segments) else after
+            records[-1]["available_entry_tangent_ft"]=tangent_before.length if isinstance(tangent_before,LineSegment) else 0.0
+            records[-1]["available_exit_tangent_ft"]=tangent_after.length if isinstance(tangent_after,LineSegment) else 0.0
             curve_index += 1
             station = pt_station
         return records
@@ -379,8 +405,9 @@ def _parse_landxml_root(root: ET.Element, source_name: str) -> LandXMLData:
 
     lines: list[LineSegment] = []
     curves: list[ArcSegment] = []
-    segments: list[LineSegment | ArcSegment] = []
+    segments: list[LineSegment | ArcSegment | SpiralSegment] = []
     spirals = []
+    unsupported=[]
 
     for child in list(coord_geom):
         tag = child.tag.rsplit("}", 1)[-1]
@@ -405,9 +432,82 @@ def _parse_landxml_root(root: ET.Element, source_name: str) -> LandXMLData:
             segments.append(curve)
         elif tag == "Spiral":
             spirals.append(dict(child.attrib))
-            warnings.append("Spiral geometry found; overlay export currently supports only lines and circular arcs.")
+            if child.get("spiType", "").lower() != "clothoid":
+                raise ValueError("Only explicitly defined LandXML clothoids are supported.")
+            if not segments:
+                raise ValueError("A clothoid requires a preceding tangent or circular arc to establish orientation.")
+            length = float(child.get("length", "0"))
+            start = _parse_point(child.findtext("lx:Start", namespaces=NS, default=""))
+            end = _parse_point(child.findtext("lx:End", namespaces=NS, default=""))
+            def curvature(value):
+                if str(value).upper() in {"INF", "INFINITY"}:
+                    return 0.0
+                radius = float(value)
+                if not math.isfinite(radius) or radius <= 0:
+                    raise ValueError("Clothoid radius must be positive or INF.")
+                return 1 / radius
+            k0, k1 = curvature(child.get("radiusStart")), curvature(child.get("radiusEnd"))
+            if not math.isfinite(length) or length <= 0 or (k0 == 0) == (k1 == 0):
+                raise ValueError("Only finite positive tangent-to-circle or circle-to-tangent clothoids are supported.")
+            prior = segments[-1]
+            if math.dist(prior.end, start) > 0.001:
+                raise ValueError("Disconnected clothoid start; alignment geometry was not modified.")
+            if isinstance(prior, LineSegment):
+                heading = math.atan2(prior.end[1] - prior.start[1], prior.end[0] - prior.start[0])
+            elif isinstance(prior, SpiralSegment):
+                raise ValueError("Adjacent compound spirals are unsupported.")
+            else:
+                probe = LandXMLData(file_path, "", 0, 0, "", [], [], [], [], [], None, [], [prior])
+                tx, ty = probe.tangent_at_station(prior.length)
+                heading = math.atan2(ty, tx)
+            candidates = [SpiralSegment(start, end, length, heading, sign*k0, sign*k1, str(child.get("rot", ""))) for sign in (-1, 1)]
+            matches = [s for s in candidates if math.dist(s.xy(length), end) <= 0.001]
+            if len(matches) != 1 or child.get("rot") not in {"cw", "ccw"}:
+                raise ValueError("Clothoid endpoint/length/direction constraints are inconsistent or ambiguous.")
+            spiral = matches[0]
+            convention = ("EN" if (spiral.end_curvature or spiral.start_curvature) * (1 if child.get("rot") == "ccw" else -1) > 0 else "NE")
+            if spirals[0].get("verified_rotation_convention", convention) != convention:
+                raise ValueError("Mixed LandXML spiral rotation conventions are unsupported.")
+            spirals[-1]["verified_rotation_convention"] = convention
+            segments.append(spiral)
+        else:
+            unsupported.append(tag)
+    if spirals:
+        if unsupported:raise ValueError(f"Unsupported geometry elements in spiral alignment: {', '.join(unsupported)}.")
+        for prior, following in zip(segments, segments[1:]):
+            if math.dist(prior.end, following.start) > 0.001:
+                raise ValueError("Disconnected spiral alignment; geometry was not modified.")
+            for segment in (prior,following):
+                if not math.isfinite(segment.length) or segment.length<=0:
+                    raise ValueError("Spiral alignment segments require finite positive lengths.")
+                if isinstance(segment,ArcSegment):
+                    if not math.isfinite(segment.radius) or segment.radius<=0:
+                        raise ValueError("Spiral alignment arcs require finite positive radii.")
+                    probe=LandXMLData(file_path,"",0,0,"",[],[],[],[],[],None,[],[segment])
+                    if math.dist(probe.xy_at_station(segment.length),segment.end)>.001 or abs(math.dist(segment.start,segment.center)-segment.radius)>.001:
+                        raise ValueError("Circular arc endpoint/length/radius constraints are inconsistent.")
+                    sign=probe._arc_sweep_sign(segment)
+                    expected=(1 if segment.rotation=="ccw" else -1)*(1 if spirals[0]["verified_rotation_convention"]=="EN" else -1)
+                    if segment.rotation not in {"cw","ccw"} or sign!=expected:
+                        raise ValueError("Circular/spiral rotation conventions conflict.")
+            probe=LandXMLData(file_path,"",0,0,"",[],[],[],[],[],None,[],[prior])
+            a=probe.tangent_at_station(prior.length)
+            probe._segments=[following]
+            b=probe.tangent_at_station(0)
+            if isinstance(prior,SpiralSegment) or isinstance(following,SpiralSegment):
+                if math.dist(a,b)>1e-5:
+                    raise ValueError("Clothoid tangent discontinuity; geometry was not modified.")
+                def curvature(segment,at_end):
+                    if isinstance(segment,LineSegment):return 0.0
+                    if isinstance(segment,SpiralSegment):return segment.end_curvature if at_end else segment.start_curvature
+                    return probe._arc_sweep_sign(segment)/segment.radius
+                if abs(curvature(prior,True)-curvature(following,False))>1e-8:
+                    raise ValueError("Clothoid curvature discontinuity; compound/partial definitions are unsupported.")
+        warnings.append("Clothoids evaluated without endpoint adjustment; adaptive integration tolerance 1e-7 native units per axis; endpoint consistency checked within 0.001 native units. Rotation convention verified from geometry.")
 
     station_equations = [dict(node.attrib) for node in alignment.findall("lx:StaEquation", NS)]
+    if spirals:
+        Super.strict_station_equations(station_equations)
     if station_equations:
         warnings.append("Station equations found; displayed civil stationing will be applied to inputs and export labels.")
 
