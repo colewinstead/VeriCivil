@@ -17,6 +17,10 @@ test("stages the authoritative runtime even when launched outside the web direct
     const source = await readFile(new URL("../../app_info.py", import.meta.url), "utf8");
     const staged = await readFile(new URL("../public/python/app_info.py", import.meta.url), "utf8");
     assert.equal(staged, source);
+    assert.equal(
+      await readFile(new URL("../public/python/aashto_tables.py", import.meta.url), "utf8"),
+      await readFile(new URL("../../aashto_tables.py", import.meta.url), "utf8"),
+    );
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

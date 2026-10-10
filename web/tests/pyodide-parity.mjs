@@ -65,7 +65,19 @@ assert selection_checks.testsRun > 0
 `);
 console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
 
-// Licensed grids stay local; compare real automatic results when the workbook is available.
+for (const maximum of [4, 6, 8, 10, 12]) {
+  const request = { entitlement: proEntitlement, inputs: {
+    ...aashtoInputs, e_manual: "", speed: 40, radius: 1824.076,
+    max_superelevation: maximum, area: maximum === 4 ? "urban_freeway" : "rural",
+  } };
+  const result = browser("calculate", request);
+  assert.deepEqual(result, native("calculate", request), `Embedded AASHTO ${maximum}% parity`);
+  assert.equal(result.results.calculation_metadata.criteria_workbook.storage, "embedded_python");
+  if (maximum === 8) assert.deepEqual([result.results.e, result.results.Lr, result.results.Lt], [0.04, 84, 42]);
+}
+console.log("Embedded AASHTO criteria passed native/Pyodide parity for all five maxima without a workbook.");
+
+// Independently compare the embedded data with the private reviewed source when available.
 let localWorkbook;
 try {
   localWorkbook = await readFile(new URL("../../docs/AASHTO Super Tables.xlsx", import.meta.url));

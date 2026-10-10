@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 import math
 import json
-import base64
 import os
 import queue
 import sys
@@ -1381,15 +1380,6 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             widget=ttk.Combobox(dialog,textvariable=local[key],values=fields[key],state="readonly") if key in fields else ttk.Entry(dialog,textvariable=local[key])
             widget.grid(row=row,column=1,sticky="ew",padx=10)
         dialog.columnconfigure(1,weight=1)
-        def load_tables():
-            path=filedialog.askopenfilename(parent=dialog,filetypes=[("Criteria workbook","*.xlsx")])
-            if path:
-                try:
-                    from aashto_criteria import import_workbook
-                    pack=import_workbook(base64.b64encode(Path(path).read_bytes()).decode())
-                    self.vars["aashto_tables"].set(json.dumps(pack))
-                except ValueError as exc:messagebox.showerror("Criteria workbook",str(exc),parent=dialog)
-        ttk.Button(dialog,text="Import local corrected criteria workbook",command=load_tables).grid(row=len(keys),column=0,columnspan=2,pady=8)
         ttk.Label(dialog,text="AASHTO only: widths in ft; slopes in decimals. Left/right follow increasing station.\nCircular AASHTO requires a runoff percentage. DOT placement requires an override.\nLonger-spiral zero-crown holds require acknowledgement and drainage review.",wraplength=590).grid(row=len(keys)+1,column=0,columnspan=2,padx=10,pady=8)
         def apply():
             for key,var in local.items():self.vars[key].set(var.get())

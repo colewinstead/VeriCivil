@@ -63,7 +63,7 @@ def application_manifest() -> dict[str, Any]:
                     "speed":[str(v) for v in range(15,86,5)], "max_superelevation":[4,6,8,10,12],
                     "roadway":["two_way","one_way"], "rotation_axis":["centerline","left_edge","right_edge"],
                     "initial_section":["crowned","single_slope"],"runout_placement":["on_tangent","in_spiral"],
-                    "criteria_workbook_required":True},
+                    "criteria_workbook_required":False, "criteria_data_source":"embedded_python"},
                 MDOT_PROFILE_ID: {
                     "facility": ["centerline", "outside edge"],
                     "area": ["rural", "urban", "local"],

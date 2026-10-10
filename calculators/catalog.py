@@ -17,6 +17,7 @@ _SUPER_MODULES = [
     "criteria_info.py",
     "tdot_criteria.py",
     "aashto_criteria.py",
+    "aashto_tables.py",
     "aashto_superelevation.py",
     "super_spiral.py",
     "super_batch.py",

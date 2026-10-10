@@ -140,6 +140,7 @@ test("renders superelevation at its permanent route and preserves compatibility 
   assert.match(source, /reverseOverlapFindings\.map/);
   assert.match(source, /finding\.reverse_curve_candidate/);
   assert.match(source, /detectedReverseLink\(index\)/);
+  assert.doesNotMatch(source, /Local criteria workbook|import_aashto_workbook|accept="\.xlsx"/);
   assert.match(source, /A curve can belong to only one reverse-curve pair/i);
   assert.match(source, /reverse_curve_pairs: reverseCurvePairs/i);
   assert.match(source, /Local test plan/i);

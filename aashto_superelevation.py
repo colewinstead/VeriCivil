@@ -156,6 +156,9 @@ def calculate(values: dict, station_equations=None, alignment_range=None) -> dic
         )
     pack = values.get("aashto_tables")
     manual = values.get("e_manual") not in (None, "")
+    # Preserve explicit manual requests; only automatic rates default to embedded data.
+    if not pack and not manual:
+        pack = criteria.built_in_tables()
     if manual:
         e = _number(values, "e_manual")
         if not 0.02 <= e <= maximum / 100:
@@ -751,7 +754,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None) -> dic
                         "file_sha256", "Original file hash unavailable"
                     ),
                     "source_version": "2018 / October 2019 errata",
-                    "distribution_status": "Local user material; redistribution rights not established",
+                    "storage": pack.get("storage", "user_workbook"),
+                    "table_digest": pack.get("table_digest"),
+                    "runoff_digest": criteria.RUNOFF_DIGEST,
+                    "distribution_status": pack.get("distribution_status", "Local user material; redistribution rights not established"),
                 }
                 if pack
                 else {}

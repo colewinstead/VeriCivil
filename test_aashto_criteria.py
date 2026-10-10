@@ -1,4 +1,4 @@
-"""Independent equation/geometry checks and local licensed-table validation."""
+"""Independent equation/geometry checks and reviewed criteria validation."""
 
 import base64
 import copy
@@ -724,17 +724,71 @@ class TableSelectionTests(unittest.TestCase):
         self.assertAlmostEqual(max(abs(row["slope_percent"]) for row in rows), 2.4)
 
 
-class LocalTableValidation(unittest.TestCase):
+class ReviewedTableValidation(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.pack = criteria.built_in_tables()
+
+    def test_embedded_criteria_matches_reviewed_local_workbook(self):
         path = Path(__file__).parent / "docs/AASHTO Super Tables.xlsx"
         if not path.exists():
-            raise unittest.SkipTest(
-                "Restricted local criteria workbook is not distributed; independent table validation requires the reviewed workbook."
-            )
-        cls.pack = criteria.import_workbook(
-            base64.b64encode(path.read_bytes()).decode()
-        )
+            self.skipTest("Source workbook absent; embedded boundaries remain covered.")
+        source = criteria.import_workbook(base64.b64encode(path.read_bytes()).decode())
+        for key in ("tables", "runoff", "table_digest", "file_sha256", "source_version"):
+            self.assertEqual(self.pack[key], source[key], key)
+
+    def test_automatic_calculation_without_import_all_maxima(self):
+        legacy = {key: value for key, value in self.pack.items() if key != "storage"}
+        legacy["distribution_status"] = "User supplied locally; redistribution permission not established"
+        with patch.object(criteria, "import_workbook", side_effect=AssertionError("Import is unnecessary")):
+            for maximum in criteria.MAX_RATES:
+                values = inputs(e_manual="", speed=40, radius=1824.076,
+                                max_superelevation=maximum, area="urban_freeway" if maximum == 4 else "rural")
+                automatic = super_service.calculate_curve(values)["results"]
+                supplied = super_service.calculate_curve({**values, "aashto_tables": legacy})["results"]
+                for key in automatic.keys() - {"inputs", "calculation_metadata"}:
+                    self.assertEqual(automatic[key], supplied[key], (maximum, key))
+                provenance = automatic["calculation_metadata"]["criteria_workbook"]
+                self.assertEqual(provenance["storage"], "embedded_python")
+                self.assertEqual(provenance["table_digest"], criteria.WORKBOOK_TABLE_DIGEST)
+                self.assertEqual(provenance["runoff_digest"], criteria.RUNOFF_DIGEST)
+                self.assertIsNone(automatic["inputs"].get("aashto_tables"))
+                self.assertFalse(automatic["calculation_metadata"]["manual_overrides"]["superelevation_rate"])
+                if maximum == 8:
+                    self.assertEqual((automatic["e"], automatic["Lr"], automatic["Lt"]), (0.04, 84, 42))
+
+    def test_embedded_integrity_and_request_isolation(self):
+        self.assertEqual(set(self.pack["tables"]), {str(value) for value in criteria.MAX_RATES})
+        self.assertEqual(hashlib.sha256(json.dumps(self.pack["runoff"], separators=(",", ":")).encode()).hexdigest(), criteria.RUNOFF_DIGEST)
+        edited = criteria.built_in_tables()
+        edited["tables"]["8"]["rows"][2][1] += 1
+        with self.assertRaisesRegex(ValueError, "changed"):
+            criteria.rate(edited, 8, 40, 1824.076, 0.02)
+        self.assertEqual(criteria.built_in_tables(), self.pack)
+
+    def test_embedded_project_round_trip_and_exports(self):
+        result = super_service.calculate_curve(inputs(e_manual="", speed=40, radius=1824.076))["results"]
+        curve = {"results": result, "meta": {"curve_direction": "left"}}
+        original = {"version": 5, "curves": [curve]}
+        project = super_project.normalize_project(json.loads(json.dumps(original)))
+        saved = project["curves"][0]["results"]
+        self.assertEqual(saved["calculation_metadata"], result["calculation_metadata"])
+        recalculated = super_service.calculate_curve(saved["inputs"])["results"]
+        self.assertEqual(super_exports.build_normalized_rows([curve]), super_exports.build_normalized_rows([{"results": recalculated, "meta": curve["meta"]}]))
+        self.assertTrue(super_service.export_ord_csv([curve])["content"])
+        from pypdf import PdfReader
+        report = super_service.export_pdf([curve])
+        text = " ".join(page.extract_text() for page in PdfReader(io.BytesIO(report["content"])).pages)
+        self.assertIn("embedded_python", text)
+        self.assertIn(self.pack["file_sha256"], text.replace("\n", ""))
+
+    def test_existing_manual_inputs_and_legacy_data_are_preserved(self):
+        result = super_service.calculate_curve(inputs())["results"]
+        self.assertEqual((result["e"], result["Lr"], result["Lt"]), (0.06, 144, 48))
+        self.assertEqual(result["calculation_metadata"]["criteria_workbook"], {})
+        manifest = super_service.application_manifest()["options"]["profiles"][criteria.PROFILE_ID]
+        self.assertFalse(manifest["criteria_workbook_required"])
+        self.assertEqual(manifest["criteria_data_source"], "embedded_python")
 
     def test_every_published_radius_boundary_all_maxima(self):
         for maximum in criteria.MAX_RATES:

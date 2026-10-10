@@ -197,12 +197,12 @@ _PROFILE_METADATA = {
     AASHTO_PROFILE_ID: {
         "profile_id":AASHTO_PROFILE_ID,"profile_name":"AASHTO Green Book 2018 (October 2019 errata)",
         "revision":"2018 / October 2019 errata","governing_authority":"AASHTO",
-        "source_status":"LOCAL CRITERIA WORKBOOK REQUIRED; INDEPENDENT ENGINEERING REVIEW REQUIRED; REDISTRIBUTION RIGHTS UNRESOLVED",
+        "source_status":"EMBEDDED CRITERIA; INDEPENDENT ENGINEERING REVIEW REQUIRED; PUBLIC REDISTRIBUTION RIGHTS UNRESOLVED",
         "source_documents":[{"title":"A Policy on Geometric Design of Highways and Streets, 7th edition","edition":"2018","applicable_sections":["3.3.5","3.3.5.1","3.3.8.2","3.3.8.4.6","3.3.8.6"],"url":"https://store.transportation.org/"},
                             {"title":"GDHS-7-E1 October 2019 errata","url":"https://downloads.transportation.org/GDHS-7-Errata.pdf"},
                             {"title":"FHWA 2018 Green Book superelevation workbook","revision":"2022-04-15","url":"https://highways.dot.gov/federal-lands/design/tools/superelevation-tables"}],
         "referenced_identifiers":["Tables 3-8–3-12","Table 3-15","Table 3-16a","Equation 3-23","Equation 3-24","Equation 3-25","Figure 3-8"],
-        "implementation_modules":["aashto_criteria.py","aashto_superelevation.py"],
+        "implementation_modules":["aashto_criteria.py","aashto_tables.py","aashto_superelevation.py"],
         "engineering_change_notice":"Automatic rates use §3.3.5's next-smaller tabulated radius without interpolation; NC/RC thresholds and minimum radii are retained. Tables 3-13 and 3-17–3-20, continuous Method 5 equations, automatic alignment design, asymmetric crowns and unequal widths are excluded. 4% maximum is urban only. Longer spiral placement requires project review. One-way carriageways use unadjusted gradients. ORD CSV requires the pivot on every exported lane edge.",
     },
 }

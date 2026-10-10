@@ -20,7 +20,7 @@
     "profile_name": "AASHTO Green Book 2018 (October 2019 errata)",
     "governing_authority": "AASHTO",
     "revision": "2018 / October 2019 errata",
-    "source_status": "LOCAL CRITERIA WORKBOOK REQUIRED; INDEPENDENT ENGINEERING REVIEW REQUIRED; REDISTRIBUTION RIGHTS UNRESOLVED",
+    "source_status": "EMBEDDED CRITERIA; INDEPENDENT ENGINEERING REVIEW REQUIRED; PUBLIC REDISTRIBUTION RIGHTS UNRESOLVED",
     "engineering_change_notice": "Automatic rates use \u00a73.3.5's next-smaller tabulated radius without interpolation; NC/RC thresholds and minimum radii are retained. Tables 3-13 and 3-17\u20133-20, continuous Method 5 equations, automatic alignment design, asymmetric crowns and unequal widths are excluded. 4% maximum is urban only. Longer spiral placement requires project review. One-way carriageways use unadjusted gradients. ORD CSV requires the pivot on every exported lane edge."
   }
 ]

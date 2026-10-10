@@ -1,12 +1,9 @@
-"""AASHTO 2018 criteria using a locally supplied, validated table workbook.
-
-No copyrighted radius/runoff table is distributed in this module. Equations
-3-23/3-24 and §3.3.8.2.1 are implemented separately from table transcription.
-"""
+"""AASHTO 2018 criteria and validated embedded/local workbook lookups."""
 
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -22,6 +19,13 @@ WORKBOOK_TABLE_DIGEST = (
 )
 RUNOFF_DIGEST = "a79a4a42e40cd9fac6c343e0910811509496261cde60a3686cb64003c2a27576"
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+
+
+def built_in_tables() -> dict:
+    """Return a copy so projects/requests cannot mutate the embedded criteria."""
+    from aashto_tables import DATA
+
+    return copy.deepcopy(DATA)
 
 
 def import_workbook(content_base64: str) -> dict:
@@ -179,14 +183,14 @@ def rate(
         raise ValueError("Maximum superelevation must be 4, 6, 8, 10, or 12 percent.")
     if not pack or pack.get("table_digest") != WORKBOOK_TABLE_DIGEST:
         raise ValueError(
-            "Import the reviewed AASHTO criteria workbook before automatic rate calculation."
+            "AASHTO criteria data is missing or unrecognized; use the embedded reviewed criteria or a compatible saved workbook."
         )
     digest = hashlib.sha256(
         json.dumps(pack.get("tables"), sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     if digest != WORKBOOK_TABLE_DIGEST:
         raise ValueError(
-            "Saved criteria tables were changed; reimport the reviewed workbook."
+            "Criteria radius tables were changed; reopen an unchanged project or start a new calculation using the embedded criteria."
         )
     if (
         hashlib.sha256(
@@ -195,7 +199,7 @@ def rate(
         != RUNOFF_DIGEST
     ):
         raise ValueError(
-            "Saved runoff tables were changed; reimport the reviewed workbook."
+            "Criteria runoff tables were changed; reopen an unchanged project or start a new calculation using the embedded criteria."
         )
     table = pack["tables"][str(maximum)]
     speeds = [int(re.search(r"\d+", str(s)).group()) for s in table["speeds"]]
