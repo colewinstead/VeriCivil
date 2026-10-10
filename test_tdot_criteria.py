@@ -42,7 +42,7 @@ class TDOTCriteriaTests(unittest.TestCase):
         self.assertEqual(criteria_metadata("tdot")["profile_id"], tdot_criteria.TDOT_PROFILE_ID)
         self.assertEqual(
             [profile["profile_id"] for profile in criteria_profiles()],
-            ["mdot-rdsd-2026-04-22", tdot_criteria.TDOT_PROFILE_ID],
+            ["mdot-rdsd-2026-04-22", tdot_criteria.TDOT_PROFILE_ID, "aashto-green-book-2018-2019-10"],
         )
 
     def test_transcribed_radius_tables_are_structurally_monotonic(self):

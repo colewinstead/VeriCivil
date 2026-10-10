@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import math
+import json
 import os
 import queue
 import sys
@@ -15,7 +16,7 @@ from tkinter import filedialog, messagebox, ttk
 import Super
 from app_info import APP_VERSION, CALCULATION_ENGINE_VERSION, version_label
 import app_logging
-from criteria_info import MDOT_PROFILE_ID, TDOT_PROFILE_ID
+from criteria_info import MDOT_PROFILE_ID, TDOT_PROFILE_ID, AASHTO_PROFILE_ID
 import super_batch
 import super_dxf
 import super_exports
@@ -49,6 +50,7 @@ MONO_FONT = ("Menlo", 10) if IS_MACOS else ("Consolas", 9)
 CRITERIA_PROFILE_LABELS = {
     MDOT_PROFILE_ID: "Mississippi DOT (MDOT) - revised April 22, 2026",
     TDOT_PROFILE_ID: "Tennessee DOT (TDOT) - revised April 30, 2026",
+    AASHTO_PROFILE_ID: "AASHTO Green Book 2018 - October 2019 errata",
 }
 CRITERIA_PROFILE_IDS = {label: profile_id for profile_id, label in CRITERIA_PROFILE_LABELS.items()}
 
@@ -78,6 +80,7 @@ class ModernSuperElevationUI(tk.Tk):
         self.last_results: dict | None = None
         self.last_meta: dict = {}
         self.curves: list[dict] = []
+        self._diagnostic_findings: list[dict] = []
         self.project_path: str | None = None
         self.excluded_landxml_curve_indexes: list[int] = []
         self._auto_job: str | None = None
@@ -124,6 +127,11 @@ class ModernSuperElevationUI(tk.Tk):
             "curve_notes": tk.StringVar(),
         }
         self.criteria_profile_display = tk.StringVar(value=CRITERIA_PROFILE_LABELS[MDOT_PROFILE_ID])
+        for key,value in {"max_superelevation":"8","roadway":"two_way","initial_section":"crowned","rotation_axis":"centerline",
+                          "lane_widths":"12,12","crown_from_left":"","left_normal_slope":"0.02","right_normal_slope":"0.02","initial_slope":"-0.02",
+                          "alignment_type":"circular","ts":"","st":"","runout_placement":"on_tangent","runoff_tangent_percent":"",
+                          "override_standard_placement":"false","acknowledge_spiral_override":"false","aashto_tables":"","linear_unit":""}.items():
+            self.vars[key]=tk.StringVar(value=value)
         self.computed_vars = {
             "e": tk.StringVar(value="auto"),
             "Lr": tk.StringVar(value="auto"),
@@ -573,6 +581,8 @@ class ModernSuperElevationUI(tk.Tk):
         row = self._combo(body, row, "Area type", "area", ["rural", "urban", "local"])
         row = self._field(body, row, "Lane width (ft)", "lane_width")
         row = self._field(body, row, "Lanes rotated", "lanes_rotated")
+        ttk.Button(body,text="AASHTO / transition placement settings…",command=self._show_aashto_settings).grid(row=row,column=0,columnspan=3,sticky="ew",pady=8)
+        row+=1
 
         advanced = ttk.Frame(body, style="Panel.TFrame")
         advanced.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(12, 4))
@@ -809,11 +819,9 @@ class ModernSuperElevationUI(tk.Tk):
                 snap_label = f" [{'/'.join(nearest['labels'])}]"
         self._desktop_diagram_station = station
         lookup = super_qa.diagram_lookup(self.last_results, self.last_meta.get("curve_direction", "left"), station)
-        left = lookup["lanes"]["left"]
-        right = lookup["lanes"]["right"]
         self.diagram_inspector.set(
-            f"{lookup['station']}{snap_label}  |  Left {left['slope_label']} - {left['phase']} - {left['criterion']['reference']}  |  "
-            f"Right {right['slope_label']} - {right['phase']} - {right['criterion']['reference']}"
+            f"{lookup['station']}{snap_label}  |  "+"  |  ".join(
+                f"{name.title()} {lane['slope_label']} - {lane['phase']} - {lane['criterion']['reference']}" for name,lane in lookup["lanes"].items())
         )
         self._draw_desktop_diagram()
 
@@ -832,6 +840,8 @@ class ModernSuperElevationUI(tk.Tk):
         if end <= start:
             return
         profiles = self._desktop_diagram_data["profiles"]
+        if self._desktop_diagram_data.get("section_profiles"):
+            profiles={lane["name"]:lane["points"] for lane in self._desktop_diagram_data["section_profiles"]}
         max_slope = max(3.0, max(abs(float(point["slope_pct"])) for lane in profiles.values() for point in lane) * 1.2)
 
         def x(station: float) -> float:
@@ -855,14 +865,15 @@ class ModernSuperElevationUI(tk.Tk):
 
         for marker in self._desktop_diagram_data.get("markers", []):
             station = float(marker["station_ft"])
-            if start <= station <= end and marker["kind"] in {"PC", "PT", "STATION EQUATION"}:
+            if start <= station <= end and marker["kind"] in {"PC", "PT", "TS", "SC", "CS", "ST", "STATION EQUATION"}:
                 px = x(station)
                 color = AMBER_ACCENT if marker["kind"] == "STATION EQUATION" else "#69837b"
                 canvas.create_line(px, top, px, bottom, fill=color, dash=(3, 3))
                 canvas.create_text(px + 3, top + 3, text=marker["label"], fill=color, anchor="nw", font=(MONO_FONT[0], 8))
 
-        for lane, color in (("left", DARK_ACCENT), ("right", AMBER_ACCENT)):
-            raw = [(float(point["station_ft"]), float(point["slope_pct"])) for point in profiles[lane]]
+        for index,(lane,points) in enumerate(profiles.items()):
+            color=(DARK_ACCENT,AMBER_ACCENT)[index%2]
+            raw = [(float(point["station_ft"]), float(point["slope_pct"])) for point in points]
             if not raw:
                 continue
             sampled = [(start, slope_at_station(raw, start))]
@@ -871,10 +882,9 @@ class ModernSuperElevationUI(tk.Tk):
             coords = [coordinate for station, slope in sampled for coordinate in (x(station), y(slope))]
             if len(coords) >= 4:
                 canvas.create_line(*coords, fill=color, width=2, smooth=False)
-        canvas.create_line(left, bottom + 31, left + 18, bottom + 31, fill=DARK_ACCENT, width=2)
-        canvas.create_text(left + 23, bottom + 31, text="Left lane", fill=DARK_MUTED, anchor="w", font=(UI_FONT[0], 8))
-        canvas.create_line(left + 90, bottom + 31, left + 108, bottom + 31, fill=AMBER_ACCENT, width=2)
-        canvas.create_text(left + 113, bottom + 31, text="Right lane", fill=DARK_MUTED, anchor="w", font=(UI_FONT[0], 8))
+            legend_x=left+index*90
+            canvas.create_line(legend_x,bottom+31,legend_x+18,bottom+31,fill=color,width=2)
+            canvas.create_text(legend_x+23,bottom+31,text=lane.title(),fill=DARK_MUTED,anchor="w",font=(UI_FONT[0],8))
         if self._desktop_diagram_station is not None and start <= self._desktop_diagram_station <= end:
             px = x(self._desktop_diagram_station)
             canvas.create_line(px, top, px, bottom, fill="#ffffff", width=1)
@@ -1247,6 +1257,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         if key == "landxml_curve":
             self.landxml_curve_combo = combo
             combo.configure(state="disabled")
+        elif key=="area":self.area_combo=combo
         return row + 1
 
     def _profile_combo(self, parent: ttk.Frame, row: int, label: str) -> int:
@@ -1287,6 +1298,9 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         if self._suspend_auto:
             return
         is_tdot = self.vars["criteria_profile"].get().startswith("tdot")
+        is_aashto=self.vars["criteria_profile"].get().startswith("aashto")
+        self.area_combo.configure(values=["rural","urban_freeway","urban_high_speed"] if is_aashto else ["rural","urban","local"])
+        if is_aashto and self.vars["area"].get() not in {"rural","urban_freeway","urban_high_speed"}:self.vars["area"].set("rural")
         if is_tdot:
             if self.vars["facility"].get() != "undivided":
                 self.vars["facility"].set("undivided")
@@ -1318,6 +1332,8 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         rel_grad = self.vars["rel_grad"].get() if include_overrides else ""
         friction = self.vars["friction"].get() if include_overrides else ""
         normal_crown = self.vars["normal_crown"].get()
+        preset=next((p for p in self._landxml_curve_presets if self._curve_preset_label(p)==self.vars["landxml_curve"].get()),None)
+        geometry={"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}} if preset else {}
         if (
             self.vars["criteria_profile"].get() == MDOT_PROFILE_ID
             and self.vars["area"].get().strip().lower().startswith("local")
@@ -1341,7 +1357,45 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             self._station_equations(),
             self._alignment_station_range(),
             self.vars["criteria_profile"].get(),
+            profile_options={**{key:var.get() for key,var in self.vars.items()},"e_manual":e_manual,"Lr_manual":Lr_manual,"Lt_manual":Lt_manual,"rel_grad":rel_grad,"friction":friction,
+                             "linear_unit":self._landxml_data.linear_unit if self._landxml_data else self.vars["linear_unit"].get(),
+                             "geometry_provenance":geometry,
+                             "aashto_tables":json.loads(self.vars["aashto_tables"].get()) if self.vars["aashto_tables"].get() else None},
         )
+
+    def _show_aashto_settings(self) -> None:
+        dialog=tk.Toplevel(self)
+        dialog.title("AASHTO / transition placement")
+        dialog.geometry("620x780")
+        fields={"max_superelevation":["4","6","8","10","12"],"roadway":["two_way","one_way"],
+                "initial_section":["crowned","single_slope"],"rotation_axis":["centerline","left_edge","right_edge"],
+                "alignment_type":["circular","spiral"],"runout_placement":["on_tangent","in_spiral"],
+                "override_standard_placement":["false","true"],"acknowledge_spiral_override":["false","true"]}
+        keys=["max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left",
+              "left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement",
+              "runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override"]
+        local={key:tk.StringVar(value=self.vars[key].get()) for key in keys}
+        for row,key in enumerate(keys):
+            ttk.Label(dialog,text=key.replace("_"," ").capitalize()).grid(row=row,column=0,sticky="w",padx=10,pady=5)
+            widget=ttk.Combobox(dialog,textvariable=local[key],values=fields[key],state="readonly") if key in fields else ttk.Entry(dialog,textvariable=local[key])
+            widget.grid(row=row,column=1,sticky="ew",padx=10)
+        dialog.columnconfigure(1,weight=1)
+        ttk.Label(dialog,text="AASHTO only: widths in ft; slopes in decimals. Left/right follow increasing station.\nCircular AASHTO requires a runoff percentage. DOT placement requires an override.\nLonger-spiral zero-crown holds require acknowledgement and drainage review.",wraplength=590).grid(row=len(keys)+1,column=0,columnspan=2,padx=10,pady=8)
+        def apply():
+            for key,var in local.items():self.vars[key].set(var.get())
+            dialog.destroy()
+        def check_lengths():
+            from super_service import required_spiral_lengths
+            try:
+                values = {**{key:var.get() for key,var in self.vars.items()}, **{key:var.get() for key,var in local.items()}}
+                values["aashto_tables"] = json.loads(values["aashto_tables"]) if values.get("aashto_tables") else None
+                result = required_spiral_lengths(values)
+                messagebox.showinfo("Required spiral lengths", f"Rate e: {result['e']:.4f} ft/ft\nRunoff: {result['Lr']:.3f} ft\nTangent runout: {result['Lt']:.3f} ft\n\nRunout on tangent: {result['minimum_spiral_on_tangent_ft']:.3f} ft minimum spiral\nRunout in spiral: {result['minimum_spiral_in_spiral_ft']:.3f} ft minimum spiral\n\n{result['scope_note']}" + "".join(f"\n\n{warning}" for warning in result["warnings"]), parent=dialog)
+            except ValueError as exc:
+                messagebox.showerror("Check inputs", str(exc), parent=dialog)
+        ttk.Button(dialog,text="Apply",command=apply).grid(row=len(keys)+2,column=0,columnspan=2,pady=8)
+        ttk.Button(dialog,text="Required spiral lengths (manual input)",command=check_lengths,
+                   state="disabled" if self._landxml_data or not self.vars["criteria_profile"].get().startswith("aashto") else "normal").grid(row=len(keys)+3,column=0,columnspan=2,pady=8)
 
     def _station_equations(self) -> list[dict]:
         if self._landxml_data and self._landxml_data.station_equations:
@@ -1380,10 +1434,17 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             except ValueError:
                 baseline = results
         except ValueError as exc:
+            if self.vars["criteria_profile"].get().startswith("aashto"):
+                self.last_results=None
+                self._diagnostic_findings=getattr(exc,"findings",[]) or [{"code":"INVALID_OR_UNSUPPORTED_INPUT","severity":"block","message":str(exc)}]
+                self._write_text(self.output,f"BLOCKED: {exc}")
+                self._write_text(self.table,"")
+                self._update_overlay_button()
             if show_errors:
                 messagebox.showerror("Input Error", str(exc))
             return
         self.last_results = results
+        self._diagnostic_findings=[]
         self.last_meta = self._current_meta()
         self._update_computed_values(results, baseline)
         self._render_results(results)
@@ -1426,6 +1487,11 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
 
         left_rows, right_rows = build_lane_rows(results, meta.get("curve_direction", "left"), station_format)
         table_lines = self._format_lane_table("Left Lane", left_rows) + [""] + self._format_lane_table("Right Lane", right_rows)
+        if results.get("section_lanes"):
+            table_lines=[]
+            for lane in results["section_lanes"]:
+                rows=[{**e,"station":Super.format_result_station(results,e["station_ft"],station_format),"slope":super_exports.format_slope_value(e["slope_pct"])} for e in lane["events"]]
+                table_lines.extend(self._format_lane_table(lane["lane_name"],rows)+[""])
         self._write_text(self.table, "\n".join(table_lines))
         if lookup_lines is None:
             self.last_meta = meta
@@ -1452,6 +1518,20 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         if not station_text and not super_text:
             messagebox.showinfo("Lookup", "Enter a station, a super value, or both.")
             return
+        if self.last_results.get("section_lanes"):
+            import super_service
+            try:
+                answer=super_service.lookup(self.last_results,self.vars["curve_direction"].get(),station_text,super_text)
+            except ValueError as exc:
+                messagebox.showerror("Lookup",str(exc));return
+            lines=["--- Lookup ---"]
+            if answer["station"]:
+                lines.append(answer["station"]["label"])
+                lines.extend(f"{name}: {slope['label']}" for name,slope in answer["station"]["slopes"].items())
+                lines.extend(f"{name} relative edges: left {edges['left_elevation_ft']:.4f} ft; right {edges['right_elevation_ft']:.4f} ft" for name,edges in answer["station"].get("edge_elevations",{}).items())
+            for name,matches in answer["lanes"].items():
+                lines.extend(f"{name}: {m['start']} to {m['end']}" if m["is_range"] else f"{name}: {m['start']}" for m in matches)
+            self._render_results(self.last_results,lines);return
         points = lane_profile_points(self.last_results, self.vars["curve_direction"].get())
         lookup_lines = ["--- Lookup ---"]
         reference = float(self.last_results.get("reverse_crown_ft", 0.0))
@@ -1538,6 +1618,8 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
 
     def _shared_curve_inputs(self) -> dict[str, str]:
         return {
+            **{key:var.get() for key,var in self.vars.items()},
+            "aashto_tables":json.loads(self.vars["aashto_tables"].get()) if self.vars["aashto_tables"].get() else None,
             "criteria_profile": self.vars["criteria_profile"].get().strip(),
             "project_name": self.vars["project_name"].get().strip(),
             "route_name": self.vars["route_name"].get().strip(),
@@ -1585,6 +1667,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         self.vars["normal_crown"].set("0.02")
         self.vars["landxml_curve"].set("")
         self.last_results = None
+        self._diagnostic_findings=[]
         self.last_meta = {}
         for var in self.computed_vars.values():
             var.set("auto")
@@ -1613,7 +1696,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             "application_version": APP_VERSION,
             "calculation_engine_version": engine_version,
             "criteria": project_criteria,
-            "vars": self._collect_vars(),
+            "vars": {**self._collect_vars(),"diagnostic_findings":self._diagnostic_findings},
             "curves": self.curves,
             "last_results": self.last_results,
             "last_meta": self.last_meta,
@@ -1657,12 +1740,15 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
     def _apply_project(self, data: dict) -> None:
         self._suspend_auto = True
         vars_data = data.get("vars", {}) or {}
+        self._diagnostic_findings=vars_data.get("diagnostic_findings",[]) or []
         for key, var in self.vars.items():
             if key not in vars_data:
                 continue
             value = vars_data[key]
             if isinstance(var, tk.BooleanVar):
                 var.set(bool(value))
+            elif key=="aashto_tables" and isinstance(value,dict):
+                var.set(json.dumps(value))
             elif value is None:
                 var.set("")
             elif isinstance(value, (int, float)) and float(value).is_integer():
@@ -1717,9 +1803,12 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         try:
             curves = super_batch.build_curves_from_presets(self._landxml_curve_presets, self._shared_curve_inputs())
         except ValueError as exc:
+            if self.vars["criteria_profile"].get().startswith("aashto"):
+                self._diagnostic_findings=getattr(exc,"findings",[]) or [{"code":"INVALID_OR_UNSUPPORTED_INPUT","severity":"block","message":str(exc)}]
             messagebox.showerror("Add All LandXML Curves", str(exc))
             return
         self.curves = curves
+        self._diagnostic_findings=[]
         self.excluded_landxml_curve_indexes = []
         self.curve_listbox.delete(0, "end")
         for curve in self.curves:
@@ -1772,6 +1861,8 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             return
         inputs = results.get("inputs", {}) or {}
         self._suspend_auto = True
+        for key in ("max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override","aashto_tables","linear_unit"):
+            if key in inputs:self.vars[key].set(json.dumps(inputs[key]) if key=="aashto_tables" and inputs[key] else str(inputs[key]) if inputs[key] is not None else "")
         self.vars["alignment_name"].set(meta.get("alignment_name", ""))
         self.vars["curve_name"].set(meta.get("curve_name", ""))
         self.vars["curve_direction"].set(meta.get("curve_direction", "left"))
@@ -1802,6 +1893,8 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         self._compute(show_errors=False)
 
     def _export_curves(self) -> list[dict]:
+        if self._diagnostic_findings:
+            return []
         if self.curves:
             return self.curves
         if not self.last_results:
@@ -1927,6 +2020,10 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         self.vars["curve_direction"].set(preset["curve_direction"])
         self.vars["pc"].set(preset["pc_station_label"])
         self.vars["pt"].set(preset["pt_station_label"])
+        self.vars["alignment_type"].set(preset.get("alignment_type","circular"))
+        self.vars["ts"].set(preset.get("ts_station_label",""))
+        self.vars["st"].set(preset.get("st_station_label",""))
+        self.vars["linear_unit"].set(preset.get("linear_unit","") or "")
         self.vars["radius"].set(str(int(preset["radius_ft"])) if float(preset["radius_ft"]).is_integer() else str(preset["radius_ft"]))
         self._suspend_auto = False
         if self._required_fields_present():
@@ -2033,7 +2130,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
 
     def _export_pdf(self) -> None:
         curves = self._export_curves()
-        if not curves:
+        if not curves and not self._diagnostic_findings:
             messagebox.showinfo("Export PDF", "Run a calculation first.")
             return
         path = filedialog.asksaveasfilename(
@@ -2044,7 +2141,8 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         if not path:
             return
         try:
-            super_pdf.export_pdf(path, curves)
+            report={"criteria_profile":self.vars["criteria_profile"].get(),"calculation_engine_version":CALCULATION_ENGINE_VERSION,"findings":self._diagnostic_findings,"status":"block"} if self._diagnostic_findings else None
+            super_pdf.export_pdf(path, curves, report)
         except ImportError as exc:
             self._show_operation_error("Missing Dependency", "pdf_export", exc, path)
             return

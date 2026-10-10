@@ -1,3 +1,18 @@
 {
-  "buildPath": "code"
+  "buildPath": "code",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "web/app/globals.css"
+        ],
+        "createdAt": "2026-10-10T06:48:41.966Z",
+        "reason": "Agent: the finding targets .topbar, a full-width rectangular header with no border-radius; this is not a rounded card."
+      }
+    ]
+  }
 }

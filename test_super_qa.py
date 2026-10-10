@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import copy
+import io
 import unittest
 from pathlib import Path
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 import super_service
 import super_batch
@@ -14,6 +16,127 @@ import super_transition
 
 FIXTURE = Path(__file__).parent / "tests" / "fixtures" / "sr82_synthetic.xml"
 CW_FIXTURE = Path(__file__).parent / "tests" / "fixtures" / "cw_reverse_curve.xml"
+SPACING_FIXTURE = Path(__file__).parent / "tests" / "fixtures" / "reverse_spacing_synthetic.xml"
+
+
+class ReverseSpacingTests(unittest.TestCase):
+    def source(self, tangent=20):
+        root = ET.fromstring(SPACING_FIXTURE.read_text())
+        ns = {"l": "http://www.landxml.org/schema/LandXML-1.2"}
+        alignment = root.find(".//l:Alignment", ns)
+        segments = list(alignment.find("l:CoordGeom", ns))
+        segments[2].set("length", str(tangent))
+        delta = tangent - 20
+        for index, segment in enumerate(segments[2:], 2):
+            for point in segment:
+                if index == 2 and point.tag.endswith("Start"):
+                    continue
+                y, x = map(float, point.text.split())
+                point.text = f"{y+delta} {x}"
+        alignment.set("length", str(float(alignment.get("length")) + delta))
+        return ET.tostring(root, encoding="unicode")
+
+    def shared(self, **changes):
+        return {"speed": "30", "e_manual": "0.06", "Lr_manual": "100", "Lt_manual": "25", **changes}
+
+    def candidates(self, report):
+        return [f for f in report["findings"] if f.get("reverse_curve_candidate")]
+
+    def test_runoff_and_runout_only_overlap_and_touch_boundary(self):
+        # 70 ft runoff + 25 ft runout on each tangent end: 190 ft total.
+        for space, expected in ((20, 170), (160, 30), (190, None), (200, None)):
+            with self.subTest(space=space):
+                xml = self.source(space)
+                curves = super_service.build_all_landxml_curves(xml, "spacing.xml", self.shared())
+                original = copy.deepcopy(curves)
+                candidates = self.candidates(super_service.corridor_qa(xml, "spacing.xml", curves))
+                self.assertEqual(curves, original)
+                self.assertEqual(len(candidates), 0 if expected is None else 1)
+                if expected is not None:
+                    self.assertAlmostEqual(candidates[0]["overlap_ft"], expected)
+                    self.assertAlmostEqual(candidates[0]["required_spacing_ft"], 190)
+                    self.assertAlmostEqual(candidates[0]["available_spacing_ft"], space)
+                    self.assertTrue(candidates[0]["link_eligible"])
+                    self.assertIn("sufficient tangent", candidates[0]["recommendation"])
+
+    def test_import_preview_requires_inputs_preserves_missing_calculations_and_exclusions(self):
+        xml = self.source()
+        self.assertFalse(self.candidates(super_service.corridor_qa(xml, "spacing.xml", [])))
+        report = super_service.corridor_qa(xml, "spacing.xml", [], shared_inputs=self.shared())
+        candidate = self.candidates(report)[0]
+        self.assertEqual(candidate["basis"], "current_inputs_preview")
+        self.assertFalse(candidate["link_eligible"])
+        self.assertEqual(candidate["curve_indexes"], [0, 1])
+        self.assertEqual(report["status"], "block")
+        self.assertEqual(report["criteria_profile"], "mdot-rdsd-2026-04-22")
+        self.assertIsNotNone(report["calculation_engine_version"])
+        self.assertEqual(sum(f["code"] == "UNCALCULATED_CURVE" for f in report["findings"]), 2)
+        self.assertFalse(self.candidates(super_service.corridor_qa(xml, "spacing.xml", [], [1], self.shared())))
+        report = super_service.corridor_qa(xml, "spacing.xml", [], shared_inputs=self.shared(speed="invalid"))
+        self.assertIn("REVERSE_SPACING_UNCHECKED", {f["code"] for f in report["findings"]})
+        self.assertFalse(self.candidates(report))
+
+    def test_same_direction_and_normal_crown_are_not_reverse_candidates(self):
+        xml = self.source()
+        curves = super_service.build_all_landxml_curves(xml, "spacing.xml", self.shared())
+        curves[1]["meta"]["curve_direction"] = "left"
+        self.assertFalse(self.candidates(super_service.corridor_qa(xml, "spacing.xml", curves)))
+        curves[1]["meta"]["curve_direction"] = "right"
+        curves[0]["results"]["normal_crown_only"] = True
+        self.assertFalse(self.candidates(super_service.corridor_qa(xml, "spacing.xml", curves)))
+
+    def test_tdot_overlap_is_review_only_and_mdot_link_resolves_runout_overlap(self):
+        xml = self.source(100)
+        tdot = self.shared(criteria_profile="tdot-rd11-2026-04-30", facility="undivided")
+        curves = super_service.build_all_landxml_curves(xml, "spacing.xml", tdot)
+        self.assertFalse(self.candidates(super_service.corridor_qa(xml, "spacing.xml", curves))[0]["link_eligible"])
+        xml = self.source(160)
+        curves = super_service.build_all_landxml_curves(xml, "spacing.xml", self.shared())
+        linked = super_batch.coordinate_reverse_curve_transitions(curves, pairs=[[0, 1]])
+        self.assertEqual(linked[0]["results"]["reverse_curve_coordination"]["status"], "coordinated")
+        self.assertFalse(self.candidates(super_service.corridor_qa(xml, "spacing.xml", linked)))
+
+    def test_spiral_recommendation_and_constant_holds(self):
+        from test_aashto_criteria import inputs
+        curves = []
+        for placement in ("on_tangent", "in_spiral"):
+            for direction in ("left", "right"):
+                curves = []
+                for offset, turn in ((0, direction), (2020, "right" if direction == "left" else "left")):
+                    results = super_service.calculate_curve(inputs(
+                        pc=str(1000+offset), pt=str(2000+offset), ts=str(500+offset), st=str(2500+offset),
+                        speed=30, radius=1000, Lr_manual=150, Lt_manual=60,
+                        alignment_type="spiral", runout_placement=placement,
+                        acknowledge_spiral_override=True, curve_direction=turn,
+                    ))["results"]
+                    curves.append({"results": results, "meta": {"curve_direction": turn}})
+                # Distinct established spiral groups: first ST=2500, next TS=2520.
+                presets = [{"curve_name": f"Curve {i+1}", "alignment_type": "spiral",
+                            "pc_station_ft": c["results"]["pc_ft"], "pt_station_ft": c["results"]["pt_ft"]}
+                           for i, c in enumerate(curves)]
+                candidate = super_qa._reverse_overlap_finding(*curves, presets, 0)
+                if placement == "on_tangent":
+                    self.assertAlmostEqual(candidate["overlap_ft"], 100)
+                    self.assertIn("combined exit spiral", candidate["recommendation"])
+                    self.assertEqual(candidate["severity"], "block")
+                    self.assertFalse(candidate["link_eligible"])
+                else:
+                    self.assertIsNone(candidate)
+                    exit_window = super_qa._changing_transition_window(curves[0], entering=False)
+                    self.assertLess(exit_window[1], curves[0]["results"]["alignment_anchors"]["ST"])
+
+    def test_station_equation_and_pdf_retain_overlap_diagnostics(self):
+        xml = self.source().replace("<ns0:CoordGeom>", '<ns0:StaEquation staInternal="1300" staBack="1300" staAhead="2300"/><ns0:CoordGeom>')
+        report = super_service.corridor_qa(xml, "spacing.xml", [], shared_inputs=self.shared())
+        candidate = self.candidates(report)[0]
+        self.assertEqual(candidate["end"], "23+80.398")
+        self.assertAlmostEqual(candidate["overlap_ft"], 170)
+        from pypdf import PdfReader
+        pdf = super_service.export_pdf([], report)
+        text = " ".join(" ".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf["content"])).pages).split())
+        self.assertIn("Preview:", text)
+        self.assertIn("sufficient tangent length", text)
+        self.assertIn("190.00 ft", text)
 
 
 class CorridorQATests(unittest.TestCase):
@@ -686,9 +809,8 @@ class CorridorQATests(unittest.TestCase):
     def test_spiral_geometry_blocks_corridor(self):
         spiral = '<Spiral length="100"><Start>1453411.9250950934 993735.04373338632 0</Start><End>1453411.9250950934 993835.04373338632 0</End></Spiral>'
         content = self.content.replace("<Curve crvType=", f"{spiral}<Curve crvType=", 1)
-        report = super_service.corridor_qa(content, "spiral.xml", [])
-        self.assertEqual(report["status"], "block")
-        self.assertIn("UNSUPPORTED_SPIRAL", {finding["code"] for finding in report["findings"]})
+        with self.assertRaisesRegex(ValueError,"explicitly defined LandXML clothoids"):
+            super_service.corridor_qa(content, "spiral.xml", [])
 
     def test_out_of_alignment_transition_blocks_corridor(self):
         curves = copy.deepcopy(self.curves())

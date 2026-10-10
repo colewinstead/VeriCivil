@@ -14,5 +14,13 @@
     "revision": "Roadway Design Guidelines revised 2026-04-30 / RD11 drawings issue 2019-01-01",
     "source_status": "ISSUED TDOT SOURCES RECORDED; RESPONSIBLE PROJECT PE MUST VERIFY APPLICABILITY, INPUTS, RESULTS, AND CURRENT REQUIREMENTS",
     "engineering_change_notice": "TDOT states that its standard drawings are intended for TDOT projects. Confirm project applicability, roadway classification, design exceptions, and current revisions before use."
+  },
+  {
+    "profile_id": "aashto-green-book-2018-2019-10",
+    "profile_name": "AASHTO Green Book 2018 (October 2019 errata)",
+    "governing_authority": "AASHTO",
+    "revision": "2018 / October 2019 errata",
+    "source_status": "EMBEDDED CRITERIA; INDEPENDENT ENGINEERING REVIEW REQUIRED; PUBLIC REDISTRIBUTION RIGHTS UNRESOLVED",
+    "engineering_change_notice": "Automatic rates use \u00a73.3.5's next-smaller tabulated radius without interpolation; NC/RC thresholds and minimum radii are retained. Tables 3-13 and 3-17\u20133-20, continuous Method 5 equations, automatic alignment design, asymmetric crowns and unequal widths are excluded. 4% maximum is urban only. Longer spiral placement requires project review. One-way carriageways use unadjusted gradients. ORD CSV requires the pivot on every exported lane edge."
   }
 ]

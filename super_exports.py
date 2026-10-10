@@ -107,6 +107,11 @@ def _inside_rotation_offset(runoff_length: float, e_pct: float, normal_crown_pct
 
 
 def build_lane_rows(results: dict, direction: str, station_format: bool = True) -> tuple[list[dict], list[dict]]:
+    if results.get("lane_events") is not None:
+        def render(events):
+            return [{**event, **_make_row(event["label"], event["station_ft"], event["slope_pct"], event["note"], event["event_type"], station_format),
+                     "station": Super.format_result_station(results,event["station_ft"],station_format)} for event in events]
+        return render(results["lane_events"].get("left",[])), render(results["lane_events"].get("right",[]))
     if results.get("transition_method") == "mdot_70_30_runoff":
         left_events, right_events = super_transition.build_mdot_lane_events(results, direction)
 
@@ -401,8 +406,20 @@ def build_normalized_rows(curves: Iterable[dict], station_format: bool = True) -
         direction = meta.get("curve_direction", "left")
         left_rows, right_rows = build_lane_rows(results, direction, station_format)
 
-        for side, lane_rows in (("left", left_rows), ("right", right_rows)):
-            lane_name = lane_name_for_side(side, curve)
+        lane_sets = [(side,lane_name_for_side(side,curve),lane_rows) for side,lane_rows in (("left",left_rows),("right",right_rows))]
+        if results.get("section_lanes"):
+            lane_sets=[]
+            for lane in results["section_lanes"]:
+                rendered=[{**event,**_make_row(event["label"],event["station_ft"],event["slope_pct"],event["note"],event["event_type"],station_format),
+                           "station":Super.format_result_station(results,event["station_ft"],station_format)} for event in lane["events"]]
+                lane_sets.append((lane["side"],lane["lane_name"],rendered))
+        for side, lane_name, lane_rows in lane_sets:
+            section_lane=next((lane for lane in results.get("section_lanes",[]) if lane["lane_name"]==lane_name),None)
+            pivot_about=None
+            if section_lane:
+                pivot=float(results["pivot_offset_ft"])
+                if abs(pivot-section_lane["left_offset_ft"])<1e-8:pivot_about="LS"
+                elif abs(pivot-section_lane["right_offset_ft"])<1e-8:pivot_about="RS"
             for row in lane_rows:
                 station_ft = row.get("station_ft")
                 if station_ft is None:
@@ -432,6 +449,9 @@ def build_normalized_rows(curves: Iterable[dict], station_format: bool = True) -
                         "station_label": row["station"],
                         "side": side,
                         "lane_name": lane_name,
+                        "fixed_pivot": section_lane is not None,
+                        "pivot_about": pivot_about,
+                        "ord_slope_percent": float(row["slope_pct"])*(1 if side=="left" else -1)*(-1 if pivot_about=="LS" else 1) if section_lane else float(row["slope_pct"]),
                         "slope_percent": float(row["slope_pct"]),
                         "slope_decimal": float(row["slope_decimal"]),
                         "slope_label": row["slope_label"],
@@ -447,31 +467,38 @@ def build_normalized_rows(curves: Iterable[dict], station_format: bool = True) -
 
 def write_ord_csv(handle: TextIO, curves: Iterable[dict]) -> list[str]:
     curve_list = list(curves)
+    from aashto_superelevation import validate_export_curves
+    validate_export_curves(curve_list)
+    rows=build_normalized_rows(curve_list)
+    if any(row.get("fixed_pivot") and row.get("pivot_about") is None for row in rows):
+        raise ValueError("ORD CSV cannot represent this fixed pivot with the verified lane-edge LS/RS mapping. Supported AASHTO CSV sections: two lanes about their common edge, or one single-slope lane about a pavement edge. PDF and geometry DXF remain available; real ORD validation is required for other pivots.")
     warnings = [
         "ORD CSV format follows Bentley Import Superelevation documentation. Verify lane names match existing ORD superelevation lanes before import.",
         "Stations after alignment equations use ORD region suffixes R2, R3, and so on.",
         "This export is schema-confirmed but still needs real in-ORD round-trip validation.",
     ]
+    if any(row.get("fixed_pivot") for row in rows):
+        warnings.append("AASHTO controls use PointType U (undefined) with recorded stations and pivot-relative slopes; engineering section/event classifications remain in the project and PDF. Verify the imported lane pivots in ORD.")
     for curve in curve_list:
         for warning in (curve.get("results", {}) or {}).get("warnings", []) or []:
             if warning not in warnings:
                 warnings.append(str(warning))
     writer = csv.DictWriter(handle, fieldnames=ORD_HEADERS)
     writer.writeheader()
-    for row in build_normalized_rows(curve_list):
+    for row in rows:
         if not row["station_label"] or row["station_label"] == "n/a":
             continue
         station_label = str(row["station_label"])
         station_region = int(row.get("station_region", 1) or 1)
-        if station_region > 1:
+        if station_region > 1 and not station_label.endswith(f"R{station_region}"):
             station_label = f"{station_label}R{station_region}"
         writer.writerow(
             {
                 "SuperelevationLane": row["lane_name"],
                 "Station": station_label,
-                "CrossSlope": slope_decimal(row["slope_percent"]),
-                "PivotAbout": pivot_about_for_side(str(row["side"])),
-                "PointType": _ord_point_type(str(row["event_type"]), str(row["side"]), str(row["curve_direction"])),
+                "CrossSlope": slope_decimal(row["ord_slope_percent"]),
+                "PivotAbout": row.get("pivot_about") or pivot_about_for_side(str(row["side"])),
+                "PointType": "U" if row.get("fixed_pivot") else _ord_point_type(str(row["event_type"]), str(row["side"]), str(row["curve_direction"])),
                 "TransitionType": "L",
                 "NonLinearCurveLength": "0",
             }

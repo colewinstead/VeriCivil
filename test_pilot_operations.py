@@ -24,7 +24,7 @@ class PilotOperationsTests(unittest.TestCase):
             self.assertIsInstance(identity["untracked_files_present"], bool)
             self.assertEqual(
                 {profile["profile_id"] for profile in identity["criteria_profiles"]},
-                {"mdot-rdsd-2026-04-22", "tdot-rd11-2026-04-30"},
+                {"mdot-rdsd-2026-04-22", "tdot-rd11-2026-04-30", "aashto-green-book-2018-2019-10"},
             )
             self.assertTrue((output / "01-private-pe-validation-record.md").is_file())
             self.assertTrue((output / "02-pilot-acceptance-record.md").is_file())

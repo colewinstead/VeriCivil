@@ -60,16 +60,33 @@ Use the [live VeriCivil browser calculator](https://vericivil.com), the current 
 
 Open [vericivil.com](https://vericivil.com) to use the calculator in your browser. No local Python installation is required to use the live app.
 
-To run the browser app from source, install Python 3.11+ and Node.js 22.13+, then:
+To run the browser app from source, install Python 3.11+ and Node.js 22.13+. Python stages the shared engine files; the browser installs its own calculation packages through Pyodide. Installing `requirements-lock.txt` is only needed for native Python calculations and tests.
 
-```powershell
+Clone the repository once if you do not already have it:
+
+```bash
 git clone https://github.com/colewinstead/VeriCivil.git
-Set-Location .\VeriCivil
-python -m pip install -r .\requirements-lock.txt
-Set-Location .\web
+```
+
+**macOS/Linux (Terminal, zsh or bash):**
+
+```bash
+cd VeriCivil/web
 npm ci --ignore-scripts
 npm run dev
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+Set-Location .\VeriCivil\web
+npm ci --ignore-scripts
+npm run dev
+```
+
+If your terminal is already in the repository root, use `cd web` on macOS/Linux or `Set-Location .\web` in PowerShell. Run npm commands from `web`, where `package.json` and `package-lock.json` live. Keep the terminal running and open the local URL printed by the development server.
+
+Startup uses `python3` on macOS/Linux and `python` on Windows; the selected executable must be on PATH. A shell alias alone is not sufficient for npm. `Set-Location` and Windows backslash paths are PowerShell syntax and will fail in macOS Terminal.
 
 ## Browser app
 
@@ -127,6 +144,10 @@ The authoritative application and calculation-engine versions are defined in [`a
 > [!CAUTION]
 > Calculations record the selected criteria profile and source revision. The default `mdot-rdsd-2026-04-22` profile preserves the existing MDOT behavior. The `tdot-rd11-2026-04-30` profile uses TDOT RD11-LR-1's desirable 4% urban table, RD11-LR-2's desirable 8% rural table, and RD11-SE-1 transition equations for undivided-roadway lane events. It also records the RD11 typical-section catalog as supporting design criteria; width, grade, sight-distance fields, and divided-roadway lane geometry are not automatically modeled. The licensed professional responsible for the project must independently verify criteria, applicability, inputs, results, and deliverables. See [`docs/PAID_PILOT_READINESS.md`](docs/PAID_PILOT_READINESS.md), [`docs/COMMERCIAL_READINESS.md`](docs/COMMERCIAL_READINESS.md), and [`docs/PILOT_OPERATIONS.md`](docs/PILOT_OPERATIONS.md).
 
+The `aashto-green-book-2018-2019-10` profile loads reviewed Tables 3-8 through 3-12 and corrected Table 3-16a from `aashto_tables.py`; no Excel import is needed for automatic calculations. It supports NC/RC thresholds, equal-width fixed-pivot sections, and established clothoid transitions. Green Book §3.3.5 selects the first qualifying row in increasing rate order using a tabulated radius at or below the actual radius; interpolation is unnecessary. Results record the selected row, source hashes, and embedded-data provenance. Continuous Method 5 equations and new alignment construction remain excluded. Circular runoff placement is an explicit project input; spiral runout may be on tangent or in spiral. Short spirals block calculation, and longer zero-crown holds require acknowledgement and drainage review. **Public redistribution rights remain unresolved. The repository owner authorized including the embedded data in a public draft PR; this does not establish publisher permission. Merge, release, and deployment remain unauthorized.** See [AASHTO scope, sources, and acceptance limits](docs/AASHTO_2018.md) before use.
+
+LandXML reverse-curve notices appear only when opposing curves have overlapping calculated runoff/runout. Before both curves are added, the shared Python engine can provide a labelled spacing preview from the current design inputs; incomplete or unsupported inputs leave the spacing unchecked. Corridor QA and PDF record the overlap interval, available spacing, current independent transition demand, and a recommendation for sufficient tangent or combined spiral/tangent space. Constant-slope holds do not add transition demand. This demand is not a universal agency minimum. Actual eligible MDOT pairs may be linked explicitly; AASHTO/TDOT overlaps require engineering review. Detection does not modify horizontal geometry or shorten transitions.
+
 <details>
 <summary><strong>ORD import checklist</strong></summary>
 
@@ -182,6 +203,10 @@ Projects use JSON schema version 5. The application migrates schema v1 through v
 Schema v4 introduced embedded LandXML text, original filename, and SHA-256 integrity. Schema v5 adds explicit, adjacent, disjoint `reverse_curve_pairs`. Opening and resaving an older project upgrades its container to schema v5; it preserves recorded results and provenance and does not silently recalculate them with the current engine.
 
 ## Troubleshooting
+
+For local startup, `ENOENT ... package.json` or an `npm ci` missing-lockfile error usually means the terminal is outside `web`. On macOS, `Set-Location` is not a zsh command; use the macOS quick-start commands above.
+
+If a macOS native-binding error includes “different Team IDs,” check `command -v node`. A Node executable embedded in another signed application can reject the bundler's native module. Use a standard Node installation. On Apple Silicon Macs with Node already installed by Homebrew, run `PATH="/opt/homebrew/bin:$PATH" npm run dev` from `web` to select it for that command.
 
 When reporting a problem, include the browser and operating system, application and engine versions, selected criteria profile, expected behavior, and a minimal reproduction using non-sensitive data. Browser developer-console messages can help diagnose loading and export errors. Review any console output before sharing it.
 

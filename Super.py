@@ -8,6 +8,8 @@ from criteria_info import (
     normalize_profile_id,
 )
 import tdot_criteria
+import re
+import math
 
 
 def parse_station(value: str) -> float:
@@ -47,32 +49,73 @@ def normalize_station_equations(equations: list[dict] | None) -> list[dict[str, 
 
 
 def civil_to_internal_station(
-    station: float, equations: list[dict] | None, station_range: tuple[float, float] | None = None
+    station: float, equations: list[dict] | None, station_range: tuple[float, float] | None = None,
+    station_region: int | None = None,
 ) -> float:
     """Convert displayed civil stationing to continuous alignment chainage."""
     candidates: list[float] = []
     prior_internal = float("-inf")
     prior_offset = 0.0
-    for equation in normalize_station_equations(equations):
+    normalized=normalize_station_equations(equations)
+    for region,equation in enumerate(normalized,1):
         candidate = station - prior_offset
-        if prior_internal <= candidate <= equation["internal"]:
+        if prior_internal <= candidate <= equation["internal"] and station_region in (None,region):
             candidates.append(candidate)
         prior_internal = equation["internal"]
         prior_offset = equation["ahead"] - equation["internal"]
     candidate = station - prior_offset
-    if candidate >= prior_internal:
+    if candidate >= prior_internal and station_region in (None,len(normalized)+1):
         candidates.append(candidate)
     if station_range is not None:
         start, end = station_range
         candidates = [candidate for candidate in candidates if start - 1e-6 <= candidate <= end + 1e-6]
     if not candidates:
         raise ValueError(f"Station {format_station(station)} cannot be mapped through the station equation.")
-    if len(candidates) > 1 and station_range is None:
+    candidates=list(dict.fromkeys(candidates))
+    if len(candidates) > 1:
         raise ValueError(
             f"Station {format_station(station)} occurs on more than one side of a station equation. "
-            "Load the LandXML or enter the manual internal alignment range to identify the correct location."
+            "Use a station region (R1, R2, …) or a narrower internal alignment range to identify the correct location."
         )
     return candidates[0]
+
+
+def strict_station_equations(equations: list[dict] | None) -> list[dict]:
+    """Validate new-model stationing; derive manual internal stations cumulatively."""
+    result=[]
+    offset=0.0
+    for equation in equations or []:
+        try:
+            back=float(equation.get("staBack",equation.get("back")))
+            ahead=float(equation.get("staAhead",equation.get("ahead")))
+            internal=float(equation.get("staInternal",equation.get("internal",back-offset)))
+        except (ValueError,TypeError,AttributeError) as exc:
+            raise ValueError("Station equations require finite back, ahead, and internal station definitions.") from exc
+        if not all(math.isfinite(n) for n in (back,ahead,internal)) or abs(back-internal-offset)>1e-5:
+            raise ValueError("Station equation back station is inconsistent with continuous internal stationing.")
+        if result and internal<=result[-1]["internal"]:
+            raise ValueError("Station equation internal stations must be strictly increasing.")
+        result.append({"internal":internal,"back":back,"ahead":ahead})
+        offset=ahead-internal
+    return result
+
+
+def parse_station_reference(text: str, equations=None, station_range=None) -> float:
+    """An explicit ORD region resolves repeated station labels."""
+    match=re.fullmatch(r"(.*?)\s*[Rr](\d+)",str(text).strip())
+    region=int(match[2]) if match else None
+    return civil_to_internal_station(parse_station(match[1] if match else str(text)),equations,station_range,region)
+
+
+def station_input_label(station: float, equations=None, station_range=None) -> str:
+    civil=internal_to_civil_station(station,equations)
+    label=format_station(civil,True)
+    try:
+        civil_to_internal_station(civil,equations,station_range)
+    except ValueError:
+        region=1+sum(station>=e["internal"] for e in normalize_station_equations(equations))
+        return f"{label}R{region}"
+    return label
 
 
 def internal_to_civil_station(station: float, equations: list[dict] | None) -> float:
@@ -88,6 +131,8 @@ def internal_to_civil_station(station: float, equations: list[dict] | None) -> f
 def format_result_station(results: dict, station: float | None, station_format: bool = True) -> str:
     if station is None:
         return "n/a"
+    if station_format and results.get("transition_method")=="aashto_fixed_pivot":
+        return station_input_label(float(station),results.get("station_equations"),results.get("alignment_station_range"))
     return format_station(internal_to_civil_station(float(station), results.get("station_equations")), station_format)
 
 
@@ -1518,8 +1563,25 @@ def calculate_superelevation(
     station_equations: list[dict] | None = None,
     alignment_station_range: tuple[float, float] | None = None,
     criteria_profile: str = MDOT_PROFILE_ID,
+    profile_options: dict | None = None,
 ) -> dict:
     profile_id = normalize_profile_id(criteria_profile)
+    from aashto_criteria import PROFILE_ID as AASHTO_PROFILE_ID
+    if profile_options and profile_options.get("alignment_type")=="spiral" and profile_id!=AASHTO_PROFILE_ID:
+        raise ValueError("Spiral transition calculations are currently supported only by the AASHTO profile.")
+    if profile_id == AASHTO_PROFILE_ID:
+        from aashto_superelevation import calculate
+        values = {**(profile_options or {}), "pc": pc_input, "pt": pt_input, "speed": speed_input, "radius": radius_input,
+                  "area": area_type, "e_manual": e_manual_input, "normal_crown": normal_crown_input,
+                  "Lr_manual": L_manual_input, "Lt_manual": Lt_manual_input,
+                  "friction":friction_input, "rel_grad":rel_grad_input}
+        return calculate(values, station_equations, alignment_station_range)
+    if profile_options and str(profile_options.get("override_standard_placement")).lower() in {"true","1"}:
+        from aashto_superelevation import override_circular_placement
+        result = calculate_superelevation(pc_input, pt_input, speed_input, radius_input, facility, area_type,
+            lane_width_input, lanes_rotated_input, e_manual_input, friction_input, rel_grad_input,
+            normal_crown_input, L_manual_input, Lt_manual_input, station_equations, alignment_station_range, profile_id)
+        return override_circular_placement(result, profile_options.get("runoff_tangent_percent", ""))
     if profile_id == tdot_criteria.TDOT_PROFILE_ID:
         return _calculate_tdot_superelevation(
             pc_input,
@@ -1732,6 +1794,14 @@ def calculate_superelevation(
 
 
 def format_results(results: dict, station_format: bool) -> list[str]:
+    if results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
+        lines=[f"Criteria: {results.get('calculation_metadata', {}).get('criteria', {}).get('profile_name', '')}",
+               f"Rate: {results['e']:.4f} ft/ft", f"Runoff: {results['Lr']:.3f} ft", f"Runout: {results['Lt']:.3f} ft",
+               f"Rotation axis: {results.get('facility')}"]
+        for label,key in [("Start transition","pnc_ft"),("Start runoff","reverse_crown_ft"),("Full super entry","full_super_ft"),("Full super exit","full_super_out_ft"),("End runoff","reverse_crown_out_ft"),("End transition","pnc_out_ft")]:
+            lines.append(f"{label}: {format_result_station(results,results.get(key),station_format)}")
+        lines.extend(f"Warning: {warning}" for warning in results.get("warnings",[]))
+        return lines
     inputs = results.get("inputs", {})
     segments = results.get("segments", {})
     criteria = criteria_for_result(results)

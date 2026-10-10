@@ -4,8 +4,10 @@ import math
 from typing import Any
 
 import Super
+import super_batch
 import super_exports
 import super_landxml
+from app_info import CALCULATION_ENGINE_VERSION
 from super_lane import lane_profile_points, slope_at_station
 
 
@@ -125,6 +127,20 @@ def _source_map(results: dict) -> dict[str, dict]:
 
 def _criterion_for_segment(results: dict, start: dict, end: dict) -> dict:
     sources = _source_map(results)
+    if results.get("transition_method")=="aashto_fixed_pivot":
+        station=(float(start["station_ft"])+float(end["station_ft"]))/2
+        if results.get("normal_crown_only"):
+            component,phase="Superelevation rate","Normal crown"
+        elif results["full_super_ft"]<=station<=results["full_super_out_ft"]:
+            component,phase="Superelevation rate","Full super"
+        elif results["reverse_crown_ft"]<=station<=results["full_super_ft"] or results["full_super_out_ft"]<=station<=results["reverse_crown_out_ft"]:
+            component,phase="Runoff length","Runoff"
+        elif any(hold["start_ft"]<station<hold["end_ft"] for hold in results.get("hold_intervals",[])):
+            hold=next(hold for hold in results["hold_intervals"] if hold["start_ft"]<station<hold["end_ft"])
+            component,phase="Transition placement","Zero-crown hold" if hold["section"]=="zero_crown" else "Initial-section hold"
+        else:
+            component,phase="Tangent runout","Tangent runout"
+        return {**sources.get(component,{"component":component,"reference":"Recorded fixed-pivot section","mode":"calculated"}),"phase":phase}
     y0 = float(start.get("slope_pct", 0.0))
     y1 = float(end.get("slope_pct", 0.0))
     nc = abs(float(results.get("inputs", {}).get("normal_crown", 0.02) or 0.02) * 100.0)
@@ -219,6 +235,7 @@ def curve_diagram(results: dict, direction: str) -> dict[str, Any]:
     ]
     return {
         "profiles": profiles,
+        "section_profiles":[{"key":f"Lane{i}","name":lane["lane_name"],"side":lane["side"],"points":lane["events"]} for i,lane in enumerate(results.get("section_lanes",[]))],
         "intervals": intervals,
         "markers": sorted(markers, key=lambda marker: (marker["station_ft"], marker["label"])),
         "snap_points": snap_points,
@@ -491,6 +508,15 @@ def plan_view(data: super_landxml.LandXMLData, curves: list[dict]) -> dict[str, 
 
 def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, Any]:
     diagram = curve_diagram(results, direction)
+    if results.get("section_lanes"):
+        lanes={}
+        for lane in results["section_lanes"]:
+            events=lane["events"]
+            slope=slope_at_station([(e["station_ft"],e["slope_pct"]) for e in events],station)
+            pair=next(((a,b) for a,b in zip(events,events[1:]) if a["station_ft"]<=station<=b["station_ft"]),None)
+            criterion=_criterion_for_segment(results,*pair) if pair else {"component":"Initial section","reference":"Recorded fixed-pivot section","mode":"calculated","phase":"Transition endpoint"}
+            lanes[lane["lane_name"]]={"slope_pct":slope,"slope_label":super_exports.format_slope_label(slope),"slope_decimal":super_exports.slope_decimal(slope),"phase":criterion["phase"],"criterion":criterion}
+        return {"station_ft":float(station),"station":Super.format_result_station(results,station,True),"lanes":lanes}
     points = lane_profile_points(results, direction)
     lanes: dict[str, dict] = {}
     for lane in ("left", "right"):
@@ -600,6 +626,70 @@ def _normal_crown_only(curve: dict) -> bool:
     return bool((curve.get("results", {}) or {}).get("normal_crown_only"))
 
 
+def _changing_transition_window(curve: dict, entering: bool) -> tuple[float, float] | None:
+    results = curve.get("results", {}) or {}
+    if _normal_crown_only(curve):
+        return None
+    boundary = results.get("full_super_ft" if entering else "full_super_out_ft")
+    if boundary is None:
+        return None
+    boundary = float(boundary)
+    lanes = results.get("section_lanes")
+    profiles = (
+        [[(float(e["station_ft"]), float(e["slope_pct"])) for e in lane["events"]] for lane in lanes]
+        if lanes else lane_profile_points(results, curve.get("meta", {}).get("curve_direction", "left")).values()
+    )
+    intervals = []
+    for profile in profiles:
+        points = sorted(profile)
+        for (a, slope_a), (b, slope_b) in zip(points, points[1:]):
+            if b <= a or math.isclose(slope_a, slope_b, rel_tol=0, abs_tol=1e-9):
+                continue
+            start, end = (a, min(b, boundary)) if entering else (max(a, boundary), b)
+            if end > start:
+                intervals.append((start, end))
+    # Constant initial/zero-crown holds do not increase runoff/runout demand.
+    return (min(a for a, _ in intervals), max(b for _, b in intervals)) if intervals else None
+
+
+def _reverse_overlap_finding(prior: dict, following: dict, presets: list[dict], index: int) -> dict | None:
+    if prior.get("meta", {}).get("curve_direction") == following.get("meta", {}).get("curve_direction"):
+        return None
+    exit_window = _changing_transition_window(prior, entering=False)
+    entry_window = _changing_transition_window(following, entering=True)
+    if not exit_window or not entry_window or exit_window[1] <= entry_window[0] + 1e-6:
+        return None
+    a, b = presets[index], presets[index + 1]
+    available = b["pc_station_ft"] - a["pt_station_ft"]
+    required = max(0.0, exit_window[1] - a["pt_station_ft"]) + max(0.0, b["pc_station_ft"] - entry_window[0])
+    spirals = a.get("alignment_type") == "spiral" or b.get("alignment_type") == "spiral"
+    recommendation = (
+        "Provide sufficient combined exit spiral, intervening tangent, and entry spiral length between the circular curves."
+        if spirals else "Provide sufficient tangent length between the two circular curves."
+    )
+    recommendation += " Review the horizontal geometry and transition placement under the governing standard; do not shorten runoff/runout automatically."
+    finding = _finding(
+        "TRANSITION_OVERLAP",
+        "block" if any(c.get("results", {}).get("transition_method") == "aashto_fixed_pivot" for c in (prior, following)) else "review",
+        f"{a['curve_name']} and {b['curve_name']}: opposing-curve runoff/runout overlap.",
+        [index, index + 1], entry_window[0], exit_window[1],
+        f"Overlap {exit_window[1]-entry_window[0]:.2f} ft. Available spacing {available:.2f} ft; "
+        f"current independent transitions require {required:.2f} ft outside the circular arcs. "
+        f"Recommendation: {recommendation} This is calculated placement demand, not a universal agency minimum.",
+    )
+    finding.update({
+        "reverse_curve_candidate": True,
+        "link_eligible": super_batch._pair_ineligibility(prior, following) is None,
+        "basis": "calculated_lane_events",
+        "available_spacing_ft": available,
+        "required_spacing_ft": required,
+        "overlap_ft": exit_window[1] - entry_window[0],
+        "alignment_type": "spiral" if spirals else "circular",
+        "recommendation": recommendation,
+    })
+    return finding
+
+
 def _zero_event(curve: dict, entering: bool) -> float | None:
     results = curve.get("results", {}) or {}
     direction = curve.get("meta", {}).get("curve_direction", "left")
@@ -612,20 +702,13 @@ def _zero_event(curve: dict, entering: bool) -> float | None:
     return max(candidates) if entering and candidates else (min(candidates) if candidates else None)
 
 
-def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], excluded_curve_indexes: list[int] | None = None) -> dict[str, Any]:
+def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], excluded_curve_indexes: list[int] | None = None,
+                     shared_inputs: dict | None = None) -> dict[str, Any]:
     presets = data.curve_records()
     excluded = {int(index) for index in (excluded_curve_indexes or []) if 0 <= int(index) < len(presets)}
     findings: list[dict] = []
     matched: list[dict | None] = []
     used: set[int] = set()
-
-    if data.spirals:
-        findings.append(_finding(
-            "UNSUPPORTED_SPIRAL", "block",
-            f"{len(data.spirals)} spiral segment(s) are present but spiral-based transitions are not modeled.",
-            list(range(len(presets))),
-            details="Verify SC/CS stationing and calculate the spiral transition in the roadway design platform.",
-        ))
 
     for index, segment in enumerate(data._segments):
         if segment.length <= 0 or (isinstance(segment, super_landxml.ArcSegment) and segment.radius <= 0):
@@ -668,6 +751,32 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         if curve is None:
             continue
         results = curve.get("results", {}) or {}
+        if presets[index].get("alignment_type")=="spiral" and results.get("inputs",{}).get("alignment_type")!="spiral":
+            findings.append(_finding("UNSUPPORTED_SPIRAL","block",f"Curve {index+1} has established spirals but circular transition placement.",[index],presets[index]["pc_station_ft"],presets[index]["pt_station_ft"],"Recalculate using the supported AASHTO spiral method."))
+        if results.get("transition_method")=="aashto_fixed_pivot":
+            preset=presets[index]
+            expected={"PC":preset["pc_station_ft"],"PT":preset["pt_station_ft"]}
+            if preset.get("alignment_type")=="spiral":
+                expected={"TS":preset["ts_station_ft"],"SC":preset["sc_station_ft"],"CS":preset["cs_station_ft"],"ST":preset["st_station_ft"]}
+            actual=results.get("alignment_anchors",{})
+            valid=actual.keys()==expected.keys() and all(abs(float(actual.get(key,0))-value)<0.01 for key,value in expected.items())
+            valid=valid and abs(float(results.get("inputs",{}).get("radius_ft",0))-preset["radius_ft"])<0.01 and curve.get("meta",{}).get("curve_direction")==preset["curve_direction"]
+            if not valid:
+                findings.append(_finding("ESTABLISHED_GEOMETRY_MISMATCH","block",f"Curve {index+1} calculation does not match its established LandXML stations, radius, or direction.",[index],preset["pc_station_ft"],preset["pt_station_ft"],"Reapply the imported curve; horizontal geometry is not modified."))
+            else:
+                # Recheck actual source space, even for manually entered or restored calculations.
+                import aashto_superelevation
+                values={**results["inputs"],"linear_unit":data.linear_unit,
+                        "geometry_provenance":{"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}}}
+                try:
+                    aashto_superelevation.calculate(values,data.station_equations,data.station_range())
+                except ValueError as exc:
+                    for item in getattr(exc,"findings",[]) or [{"code":"INVALID_IMPORTED_TRANSITION","severity":"block","message":str(exc)}]:
+                        if item["severity"]=="block":
+                            findings.append(_finding(item["code"],"block",item["message"],[index],item.get("station_start_ft"),item.get("station_end_ft"),str(item.get("details",""))))
+        for item in results.get("qa_findings",[]) or []:
+            findings.append(_finding(item["code"],item["severity"],item["message"],[index],
+                                     item.get("station_start_ft"),item.get("station_end_ft"),str(item.get("details",""))))
         bounds = _transition_bounds(curve)
         if _normal_crown_only(curve):
             for warning in results.get("warnings", []) or []:
@@ -687,11 +796,38 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         for warning in results.get("warnings", []) or []:
             findings.append(_finding("CALCULATION_WARNING", "review", f"Curve {index + 1}: {warning}", [index], bounds[0], bounds[1]))
 
+    previews: dict[int, dict | None] = {}
     for prior_index in range(len(matched) - 1):
         next_index = prior_index + 1
         prior = matched[prior_index]
         following = matched[next_index]
         if prior is None or following is None:
+            if (shared_inputs and str(shared_inputs.get("speed", "")).strip()
+                    and prior_index not in excluded and next_index not in excluded
+                    and presets[prior_index]["curve_direction"] != presets[next_index]["curve_direction"]):
+                pair = []
+                for index in (prior_index, next_index):
+                    if matched[index] is not None:
+                        pair.append(matched[index])
+                        continue
+                    if index not in previews:
+                        try:
+                            previews[index] = super_batch.build_curve_from_preset(presets[index], shared_inputs)
+                        except ValueError as exc:
+                            previews[index] = None
+                            findings.append(_finding(
+                                "REVERSE_SPACING_UNCHECKED", "review",
+                                f"{presets[index]['curve_name']}: reverse-transition spacing preview could not be calculated.",
+                                [index], details=f"Current inputs: {exc}. Calculate this curve before confirming spacing.",
+                            ))
+                    pair.append(previews[index])
+                if all(pair):
+                    candidate = _reverse_overlap_finding(pair[0], pair[1], presets, prior_index)
+                    if candidate:
+                        candidate.update({"severity": "review", "basis": "current_inputs_preview", "link_eligible": False})
+                        candidate["message"] = "Preview: " + candidate["message"]
+                        candidate["details"] += " Unsaved curves use the current shared inputs; add both calculations before linking or confirming the design."
+                        findings.append(candidate)
             continue
         if _normal_crown_only(prior) or _normal_crown_only(following):
             continue
@@ -708,6 +844,10 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         next_bounds = _transition_bounds(following)
         prior_direction = str(prior.get("meta", {}).get("curve_direction", "left"))
         next_direction = str(following.get("meta", {}).get("curve_direction", "left"))
+        if not coordinated_pair:
+            candidate = _reverse_overlap_finding(prior, following, presets, prior_index)
+            if candidate:
+                findings.append(candidate)
         if pair_check and pair_check.get("status") == "short_tangent":
             findings.append(_finding(
                 "SHORT_REVERSE_TANGENT",
@@ -784,9 +924,9 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                     f"{invalid_reason}. Recalculate the pair with the current calculation engine.",
                 ))
             continue
-        if prior_bounds and next_bounds and prior_bounds[1] > next_bounds[0] + 1e-6 and not coordinated_pair:
+        if prior_direction == next_direction and prior_bounds and next_bounds and prior_bounds[1] > next_bounds[0] + 1e-6 and not coordinated_pair:
             findings.append(_finding(
-                "TRANSITION_OVERLAP", "review",
+                "TRANSITION_OVERLAP", "block" if any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in (prior,following)) else "review",
                 f"Curves {prior_index + 1} and {next_index + 1} have overlapping transition envelopes.",
                 [prior_index, next_index], next_bounds[0], prior_bounds[1], "Coordinate the adjacent lane-slope transitions.",
             ))
@@ -844,7 +984,13 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         curve_statuses.append({"curve_index": index, "curve_name": preset["curve_name"], "status": status, "finding_count": len(relevant)})
     status = max((finding["severity"] for finding in findings), key=lambda value: SEVERITY_RANK[value], default="pass")
     counts = {severity: sum(1 for item in curve_statuses if item["status"] == severity) for severity in ("pass", "review", "block")}
+    report_profiles = profiles or {
+        curve["results"]["calculation_metadata"]["criteria"]["profile_id"]
+        for curve in previews.values() if curve is not None
+    }
     return {
+        "calculation_engine_version": CALCULATION_ENGINE_VERSION,
+        "criteria_profile": next(iter(report_profiles)) if len(report_profiles) == 1 else None,
         "status": status,
         "counts": counts,
         "curve_count": len(presets) - len(excluded),
