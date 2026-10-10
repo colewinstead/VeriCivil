@@ -3,6 +3,7 @@ import CalculatorCards from "../CalculatorCards";
 import SiteHeader from "../SiteHeader";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "https://vericivil.com/calculators" },
   title: "Roadway Calculators",
   description: "Browse VeriCivil roadway design and construction quantity calculators powered by tested Python engines.",
 };
