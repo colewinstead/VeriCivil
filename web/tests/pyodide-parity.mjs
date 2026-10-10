@@ -42,6 +42,41 @@ const browser = (operation, input) => {
   pyodide.globals.set("aashto_operation", operation);
   return JSON.parse(pyodide.runPython("__import__('json').dumps(super_service.dispatch(aashto_operation,aashto_payload))"));
 };
+// Run the public synthetic boundary/selection cases in the browser engine too.
+pyodide.FS.writeFile("/app/test_aashto_criteria.py", await readFile(new URL("../../test_aashto_criteria.py", import.meta.url), "utf8"), { encoding: "utf8" });
+pyodide.runPython(`
+import unittest
+from test_aashto_criteria import TableSelectionTests
+selection_checks = unittest.TestResult()
+unittest.defaultTestLoader.loadTestsFromTestCase(TableSelectionTests).run(selection_checks)
+assert selection_checks.wasSuccessful(), repr(selection_checks.errors + selection_checks.failures)
+assert selection_checks.testsRun > 0
+`);
+console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
+
+// Licensed grids stay local; compare real automatic results when the workbook is available.
+let localWorkbook;
+try {
+  localWorkbook = await readFile(new URL("../../docs/AASHTO Super Tables.xlsx", import.meta.url));
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  console.log("Licensed AASHTO workbook absent: private table parity skipped; synthetic selection cases passed.");
+}
+if (localWorkbook) {
+  const payload = { content_base64: localWorkbook.toString("base64") };
+  const pack = browser("import_aashto_workbook", payload);
+  assert.deepEqual(pack, native("import_aashto_workbook", payload));
+  for (const maximum of [4, 6, 8, 10, 12]) {
+    const request = { entitlement: proEntitlement, inputs: {
+      ...aashtoInputs, aashto_tables: pack, e_manual: "", speed: 40, radius: 1824.076,
+      max_superelevation: maximum, area: maximum === 4 ? "urban_freeway" : "rural",
+    } };
+    const result = browser("calculate", request);
+    assert.deepEqual(result, native("calculate", request), `Automatic AASHTO ${maximum}% parity`);
+    if (maximum === 8) assert.equal(result.results.e, 0.04);
+  }
+  console.log("Local AASHTO workbook import and automatic rates passed native/Pyodide parity for all five maxima.");
+}
 const aashtoCases = [
   ...[4, 6, 8, 10, 12].map(maximum => ({ max_superelevation: maximum, e_manual: String(maximum/100), area: maximum===4 ? "urban_freeway" : "rural" })),
   ...[0, 25, 50, 100].map(percent => ({ runoff_tangent_percent: percent })),

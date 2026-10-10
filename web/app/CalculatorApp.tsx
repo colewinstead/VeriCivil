@@ -992,6 +992,7 @@ export default function CalculatorApp() {
               <p>Applicable drawing</p><strong>{applicableLabel}</strong>
               <p>Calculation sources</p>
               <ul>{criteriaSources.map((source: Dict, index: number) => <li key={`${source.component}-${source.reference}-${index}`}><span>{source.component}</span><b>{source.reference}</b><em>{String(source.mode || "automatic").replaceAll("_"," ")}</em></li>)}</ul>
+              {isAashto && result.e_note && <p className="helper">{result.e_note}</p>}
             </div>
             {(result.warnings || []).length > 0 && <div className="result-warning"><strong>Engineering review</strong><ul>{result.warnings.map((warning: string, index: number) => <li key={index}>{warning}</li>)}</ul></div>}
             <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />

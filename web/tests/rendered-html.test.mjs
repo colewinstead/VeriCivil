@@ -130,6 +130,7 @@ test("renders superelevation at its permanent route and preserves compatibility 
   assert.match(html, /<title>Superelevation Calculator \| VeriCivil<\/title>/i);
   assert.match(html, /CalculatorApp-[^"']+\.js/i);
   assert.match(source, /Private browser engine/i);
+  assert.match(source, /isAashto && result\.e_note/);
   assert.match(source, /Select LandXML/i);
   assert.match(source, /Curve inputs/i);
   assert.match(source, /Review & export/i);

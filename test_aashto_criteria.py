@@ -3,12 +3,14 @@
 import base64
 import copy
 import csv
+import hashlib
 import io
 import json
 import math
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 import aashto_criteria as criteria
@@ -652,6 +654,76 @@ class AASHTOTests(unittest.TestCase):
             self.assertAlmostEqual(b["reverse_crown_ft"], 1000 - 0.4 * b["Lr"])
 
 
+class TableSelectionTests(unittest.TestCase):
+    """Synthetic thresholds test selection policy without distributing AASHTO grids."""
+
+    def setUp(self):
+        tables = {
+            str(maximum): {
+                "speeds": ["Vd = 40 mph"],
+                "rows": [
+                    ["NC", 6000], ["RC", 5000], [2.2, 4000], [2.4, 3000],
+                    [2.6, 3000], [2.8, 2000], [maximum, 1000],
+                ],
+            }
+            for maximum in criteria.MAX_RATES
+        }
+        runoff = []  # Synthetic sections use the runoff equation, not published lengths.
+        digest = hashlib.sha256(
+            json.dumps(tables, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        runoff_digest = hashlib.sha256(
+            json.dumps(runoff, separators=(",", ":")).encode()
+        ).hexdigest()
+        self.pack = {"tables": tables, "runoff": runoff, "table_digest": digest}
+        for name, value in (("WORKBOOK_TABLE_DIGEST", digest), ("RUNOFF_DIGEST", runoff_digest)):
+            patcher = patch.object(criteria, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_exact_between_and_rounded_tie_boundaries_all_maxima(self):
+        for maximum in criteria.MAX_RATES:
+            for radius, expected in (
+                (4500, 2.2), (4000, 2.2), (4000 - 1e-6, 2.4),
+                (3500, 2.4), (3000, 2.4), (3000 + 1e-6, 2.4),
+                (3000 - 1e-6, 2.8), (2500, 2.8), (2000, 2.8),
+                (2000 - 1e-6, maximum), (1000, maximum),
+            ):
+                with self.subTest(maximum=maximum, radius=radius):
+                    e, crown, source = criteria.rate(self.pack, maximum, 40, radius, 0.02)
+                    self.assertEqual((e, crown), (expected / 100, "full"))
+                    self.assertEqual(source["mode"], "published_table_lookup")
+                    self.assertEqual(source["selection_method"], "next_smaller_tabulated_radius")
+                    self.assertLessEqual(source["selected_row_radius_ft"], radius)
+                    self.assertEqual(source["input_radius_ft"], radius)
+                    self.assertIn("§3.3.5", source["reference"])
+
+    def test_crown_thresholds_and_rejected_speed_and_radius(self):
+        for maximum in criteria.MAX_RATES:
+            for radius, expected in ((6000, (0, "normal")), (5999, (0.02, "reverse")), (5000, (0.02, "reverse"))):
+                self.assertEqual(criteria.rate(self.pack, maximum, 40, radius, 0.02)[:2], expected)
+            with self.assertRaisesRegex(ValueError, "below"):
+                criteria.rate(self.pack, maximum, 40, 999.999, 0.02)
+            with self.assertRaisesRegex(ValueError, "does not publish speed"):
+                criteria.rate(self.pack, maximum, 37, 3500, 0.02)
+
+    def test_automatic_rate_shared_service_project_and_lane_events(self):
+        r = super_service.calculate_curve(inputs(
+            aashto_tables=self.pack, e_manual="", speed=40, radius=3500,
+            runoff_tangent_percent=50,
+        ))["results"]
+        self.assertEqual(r["e"], 0.024)
+        self.assertFalse(r["calculation_metadata"]["manual_overrides"]["superelevation_rate"])
+        source = r["calculation_metadata"]["calculation_sources"][0]
+        self.assertEqual(source["selected_row_radius_ft"], 3000)
+        self.assertIn("tabulated R=3000 ft", r["e_note"])
+        curve = {"results": r, "meta": {"curve_direction": "left"}}
+        project = super_project.normalize_project({"version": 5, "curves": [curve]})
+        self.assertEqual(project["curves"][0]["results"]["calculation_metadata"], r["calculation_metadata"])
+        rows = super_exports.build_normalized_rows([curve])
+        self.assertAlmostEqual(max(abs(row["slope_percent"]) for row in rows), 2.4)
+
+
 class LocalTableValidation(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -682,17 +754,23 @@ class LocalTableValidation(unittest.TestCase):
                     "reverse",
                 )
                 for row in table["rows"][2:]:
-                    if sum(other[col] == row[col] for other in table["rows"][2:]) > 1:
-                        with self.assertRaisesRegex(
-                            criteria.UnverifiedRateSelection, "multiple"
-                        ):
-                            criteria.rate(self.pack, maximum, speed, row[col], 0.02)
-                        continue
                     rate, _, source = criteria.rate(
                         self.pack, maximum, speed, row[col], 0.02
                     )
-                    self.assertLessEqual(rate, row[0] / 100 + 1e-10)
+                    expected = min(other[0] for other in table["rows"][2:] if other[col] <= row[col]) / 100
+                    self.assertEqual(rate, expected)
                     self.assertEqual(source["mode"], "published_table_lookup")
+                    self.assertEqual(source["selected_row_radius_ft"], row[col])
+                distinct = sorted(set(row[col] for row in table["rows"]), reverse=True)
+                for larger, smaller in zip(distinct, distinct[1:]):
+                    radius = (larger + smaller) / 2
+                    rate, crown, source = criteria.rate(self.pack, maximum, speed, radius, 0.02)
+                    if radius >= table["rows"][1][col]:
+                        self.assertEqual((rate, crown), (0.02, "reverse"))
+                    else:
+                        expected = min(row[0] for row in table["rows"][2:] if row[col] <= radius) / 100
+                        self.assertEqual(rate, expected)
+                        self.assertEqual(source["selected_row_radius_ft"], smaller)
                 with self.assertRaisesRegex(ValueError, "below"):
                     criteria.rate(
                         self.pack, maximum, speed, table["rows"][-1][col] - 0.001, 0.02
@@ -750,9 +828,25 @@ class LocalTableValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "changed"):
             criteria.rate(bad, 8, 60, 2000, 0.02)
 
-    def test_between_rows_rejected_and_normal_crown_needs_no_spiral_override(self):
-        with self.assertRaisesRegex(ValueError, "between"):
-            criteria.rate(self.pack, 8, 60, 2000, 0.02)
+    def test_green_book_published_selection_example_and_imported_curve(self):
+        # Green Book §3.3.5, p. 3-41: 1870 ft uses the 1830-ft row at 5.4%.
+        e, _, source = criteria.rate(self.pack, 8, 50, 1870, 0.02)
+        self.assertAlmostEqual(e, 0.054, delta=1e-12)
+        self.assertEqual(source["selected_row_radius_ft"], 1830)
+        self.assertEqual(criteria.rate(self.pack, 8, 60, 2000, 0.02)[0], 0.068)
+        r = super_service.calculate_curve(inputs(
+            e_manual="", aashto_tables=self.pack, speed=40, radius=1824.076,
+        ))["results"]
+        self.assertEqual(r["e"], 0.04)
+        self.assertEqual(r["calculation_metadata"]["calculation_sources"][0]["selected_row_radius_ft"], 1770)
+        from pypdf import PdfReader
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "automatic-rate.pdf"
+            super_pdf.export_pdf(str(target), [{"results": r, "meta": {"curve_direction": "left"}}])
+            text = " ".join(page.extract_text() for page in PdfReader(target).pages)
+            self.assertIn("tabulated R=1770 ft", text)
+
+    def test_normal_crown_needs_no_spiral_override(self):
         r = super_service.calculate_curve(
             inputs(
                 e_manual="",

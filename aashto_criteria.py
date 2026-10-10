@@ -24,10 +24,6 @@ RUNOFF_DIGEST = "a79a4a42e40cd9fac6c343e0910811509496261cde60a3686cb64003c2a2757
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
-class UnverifiedRateSelection(ValueError):
-    pass
-
-
 def import_workbook(content_base64: str) -> dict:
     """Read only the verified radius/runoff cells; ignore macros and formulas.
 
@@ -178,6 +174,7 @@ def lane_factor(rotated_lanes: float) -> float:
 def rate(
     pack: dict, maximum: int, speed: float, radius: float, normal: float
 ) -> tuple[float, str, dict]:
+    """Use §3.3.5's next-smaller tabulated radius without interpolating e."""
     if maximum not in MAX_RATES:
         raise ValueError("Maximum superelevation must be 4, 6, 8, 10, or 12 percent.")
     if not pack or pack.get("table_digest") != WORKBOOK_TABLE_DIGEST:
@@ -225,35 +222,29 @@ def rate(
         raise ValueError(
             f"Radius {radius:g} ft is below Table 3-{8 + MAX_RATES.index(maximum)} minimum {rows[-1][col]} ft."
         )
-    matches = [
-        row
-        for row in rows[2:]
-        if math.isclose(radius, row[col], rel_tol=0, abs_tol=1e-7)
-    ]
-    if len(matches) > 1:
-        raise UnverifiedRateSelection(
-            "Rounded radius matches multiple published rate rows; an independently checked manual rate is required."
-        )
-    if matches:
-        row = matches[0]
-        return (
-            row[0] / 100,
-            "full",
-            {
-                "reference": reference,
-                "mode": "published_table_lookup",
-                "row": row[0],
-                "selection": "Exact published radius row; no interpolation",
-            },
-        )
-    raise UnverifiedRateSelection(
-        "Radius lies between published AASHTO rate rows. Continuous Method 5 / interpolation is not verified in this profile; enter an independently checked manual rate."
-    )
+    # Rows increase in e: the first qualifying radius applies, including rounded ties.
+    # §3.3.5's published example: 50 mph, emax=8%, R=1870 ft uses R=1830 ft, e=5.4%.
+    for row in rows[2:]:
+        if radius >= row[col]:
+            return (
+                row[0] / 100,
+                "full",
+                {
+                    "reference": f"AASHTO Table 3-{8 + MAX_RATES.index(maximum)}; §3.3.5",
+                    "mode": "published_table_lookup",
+                    "row": row[0],
+                    "selection_method": "next_smaller_tabulated_radius",
+                    "input_radius_ft": radius,
+                    "selected_row_radius_ft": row[col],
+                    "selection": (
+                        f"R={radius:g} ft uses tabulated R={row[col]:g} ft at e={row[0]:g}%; "
+                        "first qualifying row in increasing rate order (§3.3.5); no interpolation."
+                    ),
+                },
+            )
+    raise ValueError("No applicable AASHTO radius row was found.")
 
 
 def check_radius(pack: dict, maximum: int, speed: float, radius: float) -> None:
-    """Validate a manual-rate radius without inventing a between-row rule."""
-    try:
-        rate(pack, maximum, speed, radius, 0.02)
-    except UnverifiedRateSelection:
-        pass
+    """Validate a manual-rate radius against the reviewed table's speed and minimum."""
+    rate(pack, maximum, speed, radius, 0.02)
