@@ -4,8 +4,8 @@ Tables 3-8 through 3-12 and corrected Table 3-16a, extracted without changing
 values from the user-supplied reviewed workbook. Table hashes are validated
 by aashto_criteria; source workbook SHA-256 is retained below.
 
-Local development only: redistribution permission has not been established.
-Do not push, release, deploy, or publish this data until rights are resolved.
+Redistribution permission has not been established. The repository owner
+authorized inclusion in a public draft PR on 10-Oct-2026 despite that uncertainty.
 The application license does not grant rights to AASHTO source material.
 """
 
