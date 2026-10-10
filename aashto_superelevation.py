@@ -34,7 +34,25 @@ def _true(value):
     return value is True or str(value).lower() in {"true", "1", "yes"}
 
 
-def calculate(values: dict, station_equations=None, alignment_range=None) -> dict:
+def _station(values, key, label, equations, alignment_range):
+    import Super
+
+    raw = str(values.get(key) or "").strip()
+    if not raw:
+        alternative = " Use Required spiral lengths to check lengths without TS/ST." if key in {"ts", "st"} else ""
+        raise ValueError(f"{label} station is required for transition locations.{alternative}")
+    try:
+        station = Super.parse_station_reference(raw, equations, alignment_range)
+    except ValueError as exc:
+        if "could not convert" in str(exc):
+            raise ValueError(f"Enter a valid {label} station, such as 10+00 or 1000.") from exc
+        raise ValueError(f"{label} station: {exc}") from exc
+    if not math.isfinite(station):
+        raise ValueError(f"{label} station must be finite.")
+    return station
+
+
+def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False) -> dict:
     import Super
     from app_info import CALCULATION_ENGINE_VERSION
     from criteria_info import criteria_metadata
@@ -346,12 +364,30 @@ def calculate(values: dict, station_equations=None, alignment_range=None) -> dic
                 }
             ],
         )
-    pc = Super.parse_station_reference(
-        str(values.get("pc", "")), station_equations, alignment_range
-    )
-    pt = Super.parse_station_reference(
-        str(values.get("pt", "")), station_equations, alignment_range
-    )
+    if lengths_only:
+        if values.get("geometry_provenance", {}).get("source") == "LandXML":
+            raise ValueError("Required spiral lengths is a manual-input check; use the imported alignment's established stations.")
+        return {
+            "result_type": "spiral_length_check",
+            "e": e, "e_source": rate_source["reference"], "e_note": rate_source.get("selection", ""),
+            "Lr": Lr, "Lt": Lt, "crown_state": crown_state,
+            "minimum_spiral_on_tangent_ft": Lr,
+            "minimum_spiral_in_spiral_ft": Lr + Lt,
+            "section_definition": {"roadway": roadway, "initial_section": section, "rotation_axis": pivot, "lane_widths_ft": widths},
+            "calculation_metadata": {
+                "engine_version": CALCULATION_ENGINE_VERSION,
+                "criteria": criteria_metadata(criteria.PROFILE_ID),
+                "calculation_sources": sources,
+                "criteria_workbook": {"storage": pack.get("storage", "user_workbook"), "table_digest": pack.get("table_digest"), "runoff_digest": criteria.RUNOFF_DIGEST, "file_sha256": pack.get("file_sha256"), "source_version": "2018 / October 2019 errata"} if pack else {},
+                "manual_overrides": {"superelevation_rate": manual, "runoff_length": bool(values.get("Lr_manual")), "tangent_runout": bool(values.get("Lt_manual"))},
+            },
+            "warnings": (["Manual rate: published radius/rate applicability must be independently verified."] if manual else [])
+                + (["One-way carriageway uses unadjusted relative gradient; no multilane runoff reduction is assumed for ramps."] if roadway == "one_way" else []),
+            "scope_note": "Minimum lengths for the superelevation transition only. Existing PC/PT remain reference stations; TS/SC/CS/ST locations and new horizontal geometry are not constructed.",
+        }
+    spiral = values.get("alignment_type", "circular") == "spiral"
+    pc = _station(values, "pc", "SC" if spiral else "PC", station_equations, alignment_range)
+    pt = _station(values, "pt", "CS" if spiral else "PT", station_equations, alignment_range)
     if not math.isfinite(pc) or not math.isfinite(pt) or pt <= pc:
         raise ValueError("PT/CS must follow PC/SC.")
     findings = []
@@ -369,15 +405,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None) -> dic
             }
         )
 
-    spiral = values.get("alignment_type", "circular") == "spiral"
     holds = []
     if spiral:
-        ts = Super.parse_station_reference(
-            str(values.get("ts", "")), station_equations, alignment_range
-        )
-        st = Super.parse_station_reference(
-            str(values.get("st", "")), station_equations, alignment_range
-        )
+        ts = _station(values, "ts", "TS", station_equations, alignment_range)
+        st = _station(values, "st", "ST", station_equations, alignment_range)
         if not math.isfinite(ts) or not math.isfinite(st) or not ts < pc < pt < st:
             raise ValueError("Spiral stations must satisfy TS < SC < CS < ST.")
         placement = values.get("runout_placement", "on_tangent")
@@ -852,6 +883,8 @@ def validate_export_curves(curves: list[dict]) -> None:
     intervals = []
     for curve in curves:
         result = curve.get("results", {})
+        if result.get("result_type") == "spiral_length_check":
+            raise ValueError("A spiral length check has no established transition stations and cannot be exported as a calculated curve.")
         is_aashto = result.get("transition_method") == "aashto_fixed_pivot"
         if is_aashto:
             expected = calculate(

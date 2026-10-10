@@ -1384,7 +1384,18 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         def apply():
             for key,var in local.items():self.vars[key].set(var.get())
             dialog.destroy()
+        def check_lengths():
+            from super_service import required_spiral_lengths
+            try:
+                values = {**{key:var.get() for key,var in self.vars.items()}, **{key:var.get() for key,var in local.items()}}
+                values["aashto_tables"] = json.loads(values["aashto_tables"]) if values.get("aashto_tables") else None
+                result = required_spiral_lengths(values)
+                messagebox.showinfo("Required spiral lengths", f"Rate e: {result['e']:.4f} ft/ft\nRunoff: {result['Lr']:.3f} ft\nTangent runout: {result['Lt']:.3f} ft\n\nRunout on tangent: {result['minimum_spiral_on_tangent_ft']:.3f} ft minimum spiral\nRunout in spiral: {result['minimum_spiral_in_spiral_ft']:.3f} ft minimum spiral\n\n{result['scope_note']}" + "".join(f"\n\n{warning}" for warning in result["warnings"]), parent=dialog)
+            except ValueError as exc:
+                messagebox.showerror("Check inputs", str(exc), parent=dialog)
         ttk.Button(dialog,text="Apply",command=apply).grid(row=len(keys)+2,column=0,columnspan=2,pady=8)
+        ttk.Button(dialog,text="Required spiral lengths (manual input)",command=check_lengths,
+                   state="disabled" if self._landxml_data or not self.vars["criteria_profile"].get().startswith("aashto") else "normal").grid(row=len(keys)+3,column=0,columnspan=2,pady=8)
 
     def _station_equations(self) -> list[dict]:
         if self._landxml_data and self._landxml_data.station_equations:

@@ -113,6 +113,61 @@ class AASHTOTests(unittest.TestCase):
     def result(self, **changes):
         return super_service.calculate_curve(inputs(**changes))["results"]
 
+    def test_manual_length_check_all_maxima_without_spiral_stations(self):
+        for maximum in criteria.MAX_RATES:
+            values = inputs(e_manual="", speed=40, radius=1824.076, max_superelevation=maximum,
+                            area="urban_freeway" if maximum == 4 else "rural", pc="", pt="", ts="", st="", runoff_tangent_percent="")
+            original = copy.deepcopy(values)
+            check = super_service.required_spiral_lengths(values)
+            established = self.result(**{**values, "pc":"1000", "pt":"2000", "alignment_type":"spiral", "ts":"500", "st":"2500", "acknowledge_spiral_override":True})
+            self.assertEqual((check["e"], check["Lr"], check["Lt"]), (established["e"], established["Lr"], established["Lt"]))
+            self.assertEqual(check["minimum_spiral_on_tangent_ft"], established["Lr"])
+            self.assertEqual(check["minimum_spiral_in_spiral_ft"], established["Lr"] + established["Lt"])
+            self.assertNotIn("alignment_anchors", check)
+            self.assertNotIn("section_lanes", check)
+            self.assertEqual(values, original)
+            self.assertEqual(check["calculation_metadata"]["criteria_workbook"]["storage"], "embedded_python")
+
+    def test_manual_length_check_screenshot_case_and_sections(self):
+        check = super_service.required_spiral_lengths(inputs(e_manual="", pc="10+00", pt="15+00", ts="", st="", speed="65", radius="3000", max_superelevation="10", alignment_type="spiral"))
+        established = self.result(e_manual="", pc="10+00", pt="15+00", ts="500", st="2000", speed="65", radius="3000", max_superelevation="10", alignment_type="spiral", acknowledge_spiral_override=True)
+        self.assertEqual((check["e"], check["Lr"], check["Lt"]), (established["e"], established["Lr"], established["Lt"]))
+        for changes in ({"rotation_axis":"left_edge"}, {"rotation_axis":"right_edge"},
+                        {"roadway":"one_way", "lane_widths":"12", "initial_section":"single_slope", "initial_slope":"-0.02"}):
+            check = super_service.required_spiral_lengths(inputs(**changes))
+            actual = self.result(**changes)
+            self.assertEqual((check["e"], check["Lr"], check["Lt"]), (actual["e"], actual["Lr"], actual["Lt"]))
+        self.assertEqual(check["Lt"], 0)
+        normal = super_service.required_spiral_lengths(inputs(e_manual="", speed=40, radius=20000))
+        self.assertEqual((normal["crown_state"], normal["Lr"], normal["Lt"]), ("normal", 0, 0))
+        with self.assertRaisesRegex(aashto.TransitionError, "gradient"):
+            super_service.required_spiral_lengths(inputs(Lr_manual="1"))
+
+    def test_manual_length_check_scope_entitlement_and_export_block(self):
+        for changes in ({"criteria_profile":"mdot"}, {"landxml_source":{"content":"<LandXML/>"}},
+                        {"geometry_provenance":{"source":"LandXML"}}):
+            with self.assertRaises(ValueError):
+                super_service.required_spiral_lengths(inputs(**changes))
+        denied = super_service.dispatch_safe("required_spiral_lengths", json.dumps({"inputs":inputs(), "entitlement":{"plan":"free", "status":"active"}}))
+        self.assertFalse(denied["ok"])
+        result = super_service.dispatch("required_spiral_lengths", json.dumps({"inputs":inputs(), "entitlement":{"plan":"pro", "status":"active"}}))
+        for operation in ("export_pdf", "export_ord_csv", "export_detail_dxf"):
+            with self.subTest(operation=operation), self.assertRaisesRegex(ValueError, "length check"):
+                getattr(super_service, operation)([{"results":result}])
+        project = super_service.project_load(super_service.project_save({"vars":inputs(manual_spiral_length_check=True), "curves":[]}))["project"]
+        self.assertTrue(project["vars"]["manual_spiral_length_check"])
+        self.assertFalse(project["curves"])
+
+    def test_station_input_errors_name_the_field_without_raw_float_error(self):
+        for key, label in (("pc", "SC"), ("pt", "CS"), ("ts", "TS"), ("st", "ST")):
+            for invalid in ("", "not-a-station", "nan"):
+                with self.subTest(key=key, invalid=invalid):
+                    payload = {"inputs":{**inputs(alignment_type="spiral", ts="500", st="2500"), key:invalid}, "entitlement":{"plan":"pro", "status":"active"}}
+                    response = super_service.dispatch_safe("calculate", json.dumps(payload))
+                    self.assertFalse(response["ok"])
+                    self.assertIn(label + " station", response["error"]["message"])
+                    self.assertNotIn("could not convert", response["error"]["message"])
+
     def test_all_maximum_rates_and_equation_3_23(self):
         for maximum in criteria.MAX_RATES:
             r = self.result(

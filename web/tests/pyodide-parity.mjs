@@ -77,6 +77,21 @@ for (const maximum of [4, 6, 8, 10, 12]) {
 }
 console.log("Embedded AASHTO criteria passed native/Pyodide parity for all five maxima without a workbook.");
 
+for (const maximum of [4, 6, 8, 10, 12]) {
+  const request = { entitlement: proEntitlement, inputs: {
+    ...aashtoInputs, e_manual: "", speed: 40, radius: 1824.076,
+    max_superelevation: maximum, area: maximum === 4 ? "urban_freeway" : "rural",
+    pc: "", pt: "", ts: "", st: "", alignment_type: "spiral", runoff_tangent_percent: "",
+  } };
+  const check = browser("required_spiral_lengths", request);
+  assert.deepEqual(check, native("required_spiral_lengths", request));
+  assert.equal(check.result_type, "spiral_length_check");
+  assert.equal(check.minimum_spiral_on_tangent_ft, check.Lr);
+  assert.equal(check.minimum_spiral_in_spiral_ft, check.Lr + check.Lt);
+  assert.equal(check.alignment_anchors, undefined);
+}
+console.log("Manual spiral length checks passed native/Pyodide parity for all five maxima without stations.");
+
 // Independently compare the embedded data with the private reviewed source when available.
 let localWorkbook;
 try {

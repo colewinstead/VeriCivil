@@ -63,7 +63,7 @@ def application_manifest() -> dict[str, Any]:
                     "speed":[str(v) for v in range(15,86,5)], "max_superelevation":[4,6,8,10,12],
                     "roadway":["two_way","one_way"], "rotation_axis":["centerline","left_edge","right_edge"],
                     "initial_section":["crowned","single_slope"],"runout_placement":["on_tangent","in_spiral"],
-                    "criteria_workbook_required":False, "criteria_data_source":"embedded_python"},
+                    "criteria_workbook_required":False, "criteria_data_source":"embedded_python", "manual_spiral_length_check": True},
                 MDOT_PROFILE_ID: {
                     "facility": ["centerline", "outside edge"],
                     "area": ["rural", "urban", "local"],
@@ -170,6 +170,18 @@ def calculate_curve(inputs: dict[str, Any]) -> dict[str, Any]:
     direction = str(values.get("curve_direction", "left") or "left")
     station_format = bool(values.get("station_format", True))
     return {**present_results(results,direction,station_format), "baseline":baseline}
+
+
+def required_spiral_lengths(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Return manual length advice without constructing or locating an alignment."""
+    values = {**DEFAULT_INPUTS, **(inputs or {})}
+    if normalize_profile_id(values.get("criteria_profile")) != AASHTO_PROFILE_ID:
+        raise ValueError("Required spiral lengths is currently supported only by the AASHTO profile.")
+    if values.get("landxml_source") or values.get("geometry_provenance", {}).get("source") == "LandXML":
+        raise ValueError("Required spiral lengths is a manual-input check; use the imported alignment's established stations.")
+    from aashto_superelevation import calculate
+
+    return calculate(values, lengths_only=True)
 
 
 def present_results(results: dict, direction: str = "left", station_format: bool = True) -> dict[str, Any]:
@@ -420,6 +432,8 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
     required_capability = _OPERATION_CAPABILITIES.get(operation)
     if required_capability is not None:
         require_capability(entitlement, required_capability)
+    if operation == "required_spiral_lengths":
+        require_profile_access(entitlement, normalize_profile_id(payload.get("inputs", {}).get("criteria_profile")))
     if operation.startswith("export_") and operation!="export_pdf" and any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in payload.get("curves",[])):
         if any(f.get("severity")=="block" for f in (payload.get("corridor_qa") or {}).get("findings",[])):
             raise ValueError("AASHTO export blocked by Corridor QA; resolve the blocking findings.")
@@ -431,6 +445,7 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
         "calculate": lambda: calculate_with_entitlement(
             payload.get("inputs", payload), payload.get("entitlement")
         ),
+        "required_spiral_lengths": lambda: required_spiral_lengths(payload.get("inputs", {})),
         "import_aashto_workbook": lambda: __import__("aashto_criteria").import_workbook(payload["content_base64"]),
         "present_results": lambda: present_results(
             payload["results"], payload.get("direction", "left"), bool(payload.get("station_format", True))
