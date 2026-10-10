@@ -1,6 +1,6 @@
 # AASHTO 2018 implementation and acceptance record
 
-Profile: `aashto-green-book-2018-2019-10`. Application 1.6.5; calculation engine 1.3.3. Work is on `codex/aashto-table-corrections`. On 10-Oct-2026, the repository owner explicitly authorized a public draft PR containing the embedded AASHTO numeric data despite unresolved redistribution clearance. No merge, release, or deployment is authorized.
+Profile: `aashto-green-book-2018-2019-10`. Application 1.6.6; calculation engine 1.3.3. Work is on `codex/aashto-table-corrections`. On 10-Oct-2026, the repository owner explicitly authorized a public draft PR containing the embedded AASHTO numeric data despite unresolved redistribution clearance. No merge, release, or deployment is authorized.
 
 This is a **limited profile requiring independent engineering review**, not a claim of complete Green Book implementation or PE approval. Continuous Method 5 rate calculation, Table 3-13, and Tables 3-17 through 3-20 are excluded. The limits below are enforced rather than filled with MDOT/TDOT assumptions.
 
@@ -53,6 +53,8 @@ For established spirals, PC/PT inputs become SC/CS. Full super is fixed at SC an
 | In spiral | Initial section holds until SC − (Lt + Lr), then transitions finish at SC | Runoff starts at CS, then runout; initial section holds to ST | Lt + Lr |
 
 Short spirals block calculation. No geometry is lengthened, no runoff is stretched, and no transition is moved onto the circular arc to fit. Equal runoff/spiral lengths with on-tangent runout are distinguished from project placement departures. Longer on-tangent spirals can hold the applicable outside-lane-level/zero-crown section, requiring explicit acknowledgement and drainage review. In-spiral runout is recorded as a project placement choice, not automatically asserted to be standard AASHTO practice.
+
+The result review note states the minimum required spiral length for the selected placement: runoff only when runout is on the tangent, or runoff plus tangent runout when both occur within the spiral. Circular and normal-crown-only results do not display this spiral note. Detailed excluded criteria remain recorded in profile metadata and this document rather than repeated in the result warning list. This is a wording change; lengths, stations, source applicability, and engineering-review status are unchanged.
 
 Zero-crown findings record the actual hold interval and length. They recommend in-spiral runout only when the section needs conventional runout and the affected spiral accommodates Lt + Lr; otherwise they state its deficiency. A favorable uniform initial slope is an initial-section hold, not a zero-crown hold. The method never changes automatically.
 

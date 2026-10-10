@@ -699,9 +699,14 @@ def calculate(values: dict, station_equations=None, alignment_range=None) -> dic
         side: next((lane["events"] for lane in lane_events if lane["side"] == side), [])
         for side in ("left", "right")
     }
-    warnings = [
-        "Tables 3-17–3-20 and automatic horizontal alignment design are excluded; responsible PE must verify project applicability."
-    ] + [f["message"] for f in findings]
+    warnings = [f["message"] for f in findings]
+    if spiral and crown_state != "normal":
+        basis = (
+            "runoff only; tangent runout is on the tangent"
+            if placement == "on_tangent"
+            else "runoff + tangent runout, both within the spiral"
+        )
+        warnings.insert(0, f"Minimum required spiral length: {required:.3f} ft ({basis}).")
     if manual:
         warnings.append(
             "Manual rate: published radius/rate applicability must be independently verified."
