@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2">
+  <Units><Imperial linearUnit="USSurveyFoot" directionUnit="radians" /></Units>
+  <Application name="Synthetic spacing test" />
+  <Alignments><Alignment name="Synthetic reverse spacing" staStart="0" length="2590.796326794897">
+    <CoordGeom>
+      <Line length="500"><Start>0 0</Start><End>0 500</End></Line>
+      <Curve rot="ccw" radius="500" length="785.3981633974483">
+        <Start>0 500</Start><Center>500 500</Center><End>500 1000</End>
+      </Curve>
+      <Line length="20"><Start>500 1000</Start><End>520 1000</End></Line>
+      <Curve rot="cw" radius="500" length="785.3981633974483">
+        <Start>520 1000</Start><Center>520 1500</Center><End>1020 1500</End>
+      </Curve>
+      <Line length="500"><Start>1020 1500</Start><End>1020 2000</End></Line>
+    </CoordGeom>
+  </Alignment></Alignments>
+</LandXML>

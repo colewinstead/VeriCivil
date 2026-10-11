@@ -2,3 +2,4 @@ reportlab==4.4.7
 pyproj==3.7.2
 ezdxf==1.4.4
 certifi==2026.6.17
+pypdf==5.9.0

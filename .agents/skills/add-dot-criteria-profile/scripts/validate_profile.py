@@ -126,7 +126,7 @@ def main() -> int:
     check.require(bool(module_names), "at least one state criteria module is identified")
 
     runtime = runpy.run_path(str(root / "scripts" / "prepare_web_runtime.py"))
-    runtime_modules = runtime.get("MODULES", [])
+    runtime_modules = {name for bundle in runtime["browser_runtime_manifest"]()["calculators"].values() for name in bundle["modules"]}
     for module_name in module_names:
         filename = module_name if module_name.endswith(".py") else f"{module_name}.py"
         module_path = root / filename
