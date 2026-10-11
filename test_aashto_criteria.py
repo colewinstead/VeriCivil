@@ -369,6 +369,28 @@ class AASHTOTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, message):
                 self.result(**change)
 
+    def test_pdf_reports_actual_rotated_width_without_storage_details(self):
+        values = inputs(e_manual="", pc="10+00", pt="15+00", speed=45, radius=700,
+                        roadway="one_way", initial_section="single_slope", initial_slope=.02,
+                        lane_widths="16", rotation_axis="left_edge", curve_direction="right",
+                        runoff_tangent_percent=50)
+        r = aashto.calculate(values)
+        reference = aashto.calculate({**values, "lane_widths":"12"})
+        self.assertEqual((r["e"], r["Lr"], r["Lt"]), (.08, 180, 0))
+        self.assertAlmostEqual(r["Lr"] / reference["Lr"], 16 / 12)
+        original = copy.deepcopy(r)
+        from pypdf import PdfReader
+        report = super_service.export_pdf([{"results":r, "meta":{"curve_direction":"right"}}])
+        text = " ".join(" ".join(page.extract_text() for page in PdfReader(io.BytesIO(report["content"])).pages).split())
+        for phrase in ("Criteria AASHTO Green Book 2018 (October 2019 errata)",
+                       "Rotated width (max) 16.00 ft", "Lane-width ratio (to 12 ft) 1.3333",
+                       "Lane adjustment factor 1.0000"):
+            self.assertIn(phrase, text)
+        self.assertNotIn("embedded_python", text)
+        self.assertNotIn("SHA-256", text)
+        self.assertNotIn("Rotated width / lane factor", text)
+        self.assertEqual(r, original)
+
     def test_imported_retained_ramp_has_no_fabricated_transitions(self):
         # Synthetic clothoid geometry, not evidence of a native ORD round trip.
         xml, *_ = synthetic_alignment()
@@ -964,8 +986,10 @@ class ReviewedTableValidation(unittest.TestCase):
         from pypdf import PdfReader
         report = super_service.export_pdf([curve])
         text = " ".join(page.extract_text() for page in PdfReader(io.BytesIO(report["content"])).pages)
-        self.assertIn("embedded_python", text)
-        self.assertIn(self.pack["file_sha256"], text.replace("\n", ""))
+        self.assertIn("AASHTO Green Book 2018 (October 2019 errata)", text)
+        self.assertNotIn("embedded_python", text)
+        self.assertNotIn("SHA-256", text)
+        self.assertNotIn(self.pack["file_sha256"], text.replace("\n", ""))
 
     def test_existing_manual_inputs_and_legacy_data_are_preserved(self):
         result = super_service.calculate_curve(inputs())["results"]

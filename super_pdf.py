@@ -733,15 +733,20 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             input_rows.extend([("Roadway / section",_text(f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
                                ("Rotation axis",_text(f"{inputs.get('rotation_axis',results.get('facility'))} / {results.get('pivot_relationship','')}")),
                                ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% runoff on tangent")),
-                               ("Criteria data",_text(results.get("calculation_metadata",{}).get("criteria_workbook",{}).get("storage","Manual rate"))),
-                               ("Source workbook SHA-256",_text(results.get("calculation_metadata",{}).get("criteria_workbook",{}).get("file_sha256","Manual rate")))])
+                               ("Criteria",_text(profile_name))])
             if results.get("section_lanes"):
                 if section_transition:
                     input_rows.extend([("Curve cross slope",_text(section_transition["target_slope_label"])),
                                        ("Initial drainage",_text(section_transition["initial_drainage_direction"])),
                                        ("Left / right convention", "Looking ahead along increasing alignment station; signed slope is positive when rising toward the left"),
                                        ("Section basis",_text(section_transition["basis"]))])
-                input_rows.extend([("Actual lanes",_text(len(results["section_lanes"]))),("Rotated width / lane factor",_text(f"n1={results['n1']:g}, bw={results['bw']:.8f}")),("Units",_text("; ".join(str(v) for v in results.get("units",{}).values()))), ("Geometry source",_text(inputs.get("geometry_provenance","Manual station-only")))])
+                lane_width = float(inputs["lane_width_ft"])
+                input_rows.extend([("Actual lanes",_text(len(results["section_lanes"]))),
+                                   ("Rotated width (max)",_number(results["n1"] * lane_width, 2, " ft")),
+                                   ("Lane-width ratio (to 12 ft)",_number(lane_width / 12, 4)),
+                                   ("Lane adjustment factor",_number(results["bw"], 4)),
+                                   ("Units",_text("; ".join(str(v) for v in results.get("units",{}).values()))),
+                                   ("Geometry source",_text(inputs.get("geometry_provenance","Manual station-only")))])
                 station_rows.extend((name,_station(results,station)) for name,station in results.get("alignment_anchors",{}).items())
                 if results.get("spiral_lengths"):
                     lengths=results["spiral_lengths"]
