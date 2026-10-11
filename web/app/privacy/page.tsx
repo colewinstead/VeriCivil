@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import LegalShell from "../LegalShell";
 import { PRIVACY_EFFECTIVE_DATE } from "@/lib/billing/legal";
 
-export const metadata: Metadata = { title: "Privacy Policy" };
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  alternates: { canonical: "https://vericivil.com/privacy" },
+};
 
 export default function PrivacyPage() {
   return (

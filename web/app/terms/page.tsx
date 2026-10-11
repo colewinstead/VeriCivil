@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import LegalShell from "../LegalShell";
 import { TERMS_EFFECTIVE_DATE } from "@/lib/billing/legal";
 
-export const metadata: Metadata = { title: "Terms of Service" };
+export const metadata: Metadata = {
+  title: "Terms of Service",
+  alternates: { canonical: "https://vericivil.com/terms" },
+};
 
 export default function TermsPage() {
   return (

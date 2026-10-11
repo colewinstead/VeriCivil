@@ -1,9 +1,14 @@
 /* eslint-disable @next/next/no-img-element -- authentic local product captures are intentionally served without an optimizer */
+import type { Metadata } from "next";
 import Link from "next/link";
 import CalculatorCards from "./CalculatorCards";
 import OutputShowcase from "./OutputShowcase";
 import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "https://vericivil.com/" },
+};
 
 export default function Home() {
   return (

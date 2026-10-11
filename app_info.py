@@ -5,5 +5,6 @@ APP_VERSION = "1.6.9"
 CALCULATION_ENGINE_VERSION = "1.3.5"
 
 
+
 def version_label() -> str:
     return f"{APP_NAME} {APP_VERSION}"
