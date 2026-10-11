@@ -1798,6 +1798,13 @@ def format_results(results: dict, station_format: bool) -> list[str]:
         lines=[f"Criteria: {results.get('calculation_metadata', {}).get('criteria', {}).get('profile_name', '')}",
                f"Rate: {results['e']:.4f} ft/ft", f"Runoff: {results['Lr']:.3f} ft", f"Runout: {results['Lt']:.3f} ft",
                f"Rotation axis: {results.get('facility')}"]
+        if results.get("section_transition"):
+            lines[1]=f"Curve cross slope: {results['section_transition']['target_slope_label']}"
+            lines.append(results["section_transition"]["note"])
+            if results.get("no_transition_required"):
+                lines.extend(f"{label}: {format_result_station(results,station,station_format)}" for label,station in results["alignment_anchors"].items())
+                lines.extend(f"Warning: {warning}" for warning in results.get("warnings",[]))
+                return lines
         for label,key in [("Start transition","pnc_ft"),("Start runoff","reverse_crown_ft"),("Full super entry","full_super_ft"),("Full super exit","full_super_out_ft"),("End runoff","reverse_crown_out_ft"),("End transition","pnc_out_ft")]:
             lines.append(f"{label}: {format_result_station(results,results.get(key),station_format)}")
         lines.extend(f"Warning: {warning}" for warning in results.get("warnings",[]))

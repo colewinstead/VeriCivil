@@ -123,6 +123,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     roadway = values.get("roadway", "two_way")
     section = values.get("initial_section", "crowned")
     pivot = values.get("rotation_axis", "centerline")
+    if pivot == "":
+        raise ValueError("Select the rotation axis: left or right pavement edge for a ramp.")
     if (
         roadway not in {"two_way", "one_way"}
         or section not in {"crowned", "single_slope"}
@@ -130,6 +132,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     ):
         raise ValueError("Unsupported roadway, cross section, or rotation axis.")
     widths = values.get("lane_widths", "12,12")
+    if widths in (None, ""):
+        raise ValueError("Enter a lane width greater than zero, in feet.")
+    if isinstance(widths, str) and any(not w.strip() for w in widths.split(",")):
+        raise ValueError("Enter a width greater than zero for every lane, in feet.")
     widths = [
         float(w) for w in (widths.split(",") if isinstance(widths, str) else widths)
     ]
@@ -165,6 +171,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         boundaries.append(boundaries[-1] + lane_width)
     if section == "crowned" and not any(abs(x) < 1e-9 for x in boundaries):
         raise ValueError("A crowned section must place the crown on a lane boundary.")
+    if section == "single_slope" and values.get("initial_slope") in ("", "-"):
+        raise ValueError("Enter an initial slope magnitude from 1.5% to 2.0% and select its drainage direction.")
     initial = _number(values, "initial_slope", -0.02)
     if section == "single_slope" and (
         roadway != "one_way" or not 0.015 <= abs(initial) <= 0.02
@@ -172,6 +180,9 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         raise ValueError(
             "Single-slope scope is a one-way carriageway with signed 1.5–2.0 percent initial cross slope (positive rises to the left)."
         )
+    if section == "single_slope":
+        # §§3.3.5.1 and 10.9.6.2.14: RC uses the actual tangent cross slope.
+        normal = abs(initial)
     pack = values.get("aashto_tables")
     manual = values.get("e_manual") not in (None, "")
     # Preserve explicit manual requests; only automatic rates default to embedded data.
@@ -192,11 +203,29 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         e, crown_state, rate_source = criteria.rate(
             pack, int(maximum), speed, radius, normal
         )
-        if section == "single_slope" and crown_state != "full":
-            raise ValueError(
-                "NC/RC table thresholds for uniform single-slope sections require separate review; supply an independently checked manual rate."
-            )
     bank_sign = -1 if direction == "left" else 1
+    initial_bank = initial if section == "single_slope" else -bank_sign * normal
+    target_bank = initial_bank if crown_state == "normal" else bank_sign * e
+    section_unchanged = section == "single_slope" and math.isclose(initial_bank, target_bank, abs_tol=1e-12)
+    no_transition = crown_state == "normal" or section_unchanged
+    section_transition = None
+    if section == "single_slope":
+        target_drainage = "left" if target_bank < 0 else "right"
+        section_transition = {
+            "initial_signed_slope": initial_bank,
+            "target_signed_slope": target_bank,
+            "curve_relative_slope": target_bank * bank_sign,
+            "initial_drainage_direction": "left" if initial_bank < 0 else "right",
+            "target_drainage_direction": target_drainage,
+            "target_slope_label": f"{target_bank * 100:+g}%",
+            "no_transition_required": no_transition,
+            "basis": "AASHTO §§3.3.5.1 and 10.9.6.2.14",
+            "note": (
+                "Initial single slope is retained; no superelevation runoff or runout is required. This does not establish a zero minimum for horizontal spiral design."
+                if no_transition else
+                "Uniform section rotates from the entered initial slope to the curve bank."
+            ) + " Cross-slope sign: + rises toward left; - rises toward right, looking ahead along increasing alignment station.",
+        }
     pivot_x = {"centerline": 0.0, "left_edge": width / 2, "right_edge": -width / 2}[
         pivot
     ]
@@ -222,12 +251,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             else bank * x
         )
 
-    initial_bank = initial if section == "single_slope" else -bank_sign * normal
-    if section == "single_slope" and initial * bank_sign > 0:
-        if crown_state == "normal" or e <= abs(initial):
-            raise ValueError(
-                "Favorable single-slope sections with no additional bank require separate criteria review."
-            )
+    if section == "single_slope" and (no_transition or initial * bank_sign > 0):
         runout_change = 0.0
         zero_bank = initial
     else:
@@ -238,7 +262,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         ref = profile_height(pivot_x, bank)
         return [profile_height(x, bank) - ref for x in boundaries]
 
-    zero_heights, full_heights = heights(zero_bank), heights(bank_sign * e)
+    zero_heights, full_heights = heights(zero_bank), heights(target_bank)
     nc_heights = heights(initial_bank)
     runoff_rise = max(abs(b - a) for a, b in zip(zero_heights, full_heights))
     if section == "crowned" and e > normal:
@@ -253,6 +277,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     runout_rise = max(abs(b - a) for a, b in zip(nc_heights, zero_heights))
     Lr = runoff_rise / allowed_gradient if e else 0.0
     Lt = runout_rise / allowed_gradient if e else 0.0
+    if no_transition:
+        Lr = Lt = 0.0
     sources = [
         {"component": "Superelevation rate", **rate_source},
         {
@@ -283,12 +309,15 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "value": gradient,
         }
     )
-    if crown_state == "normal":
+    if section_transition:
+        sources.append({"component": "Single-slope section", "reference": section_transition["basis"], "mode": "calculated", **section_transition})
+    if no_transition:
+        retained = "initial single slope" if section == "single_slope" else "normal crown"
         sources[1].update(
-            mode="not_applicable", reference="§3.3.5.1 normal crown retained; no runoff"
+            mode="not_applicable", reference=f"§3.3.5.1 {retained} retained; no runoff"
         )
         sources[2].update(
-            mode="not_applicable", reference="§3.3.5.1 normal crown retained; no runout"
+            mode="not_applicable", reference=f"§3.3.5.1 {retained} retained; no runout"
         )
     elif runout_rise == 0:
         sources[2].update(
@@ -324,7 +353,9 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     for key, name in [("Lr_manual", "runoff_length"), ("Lt_manual", "tangent_runout")]:
         if values.get(key) not in (None, ""):
             value = _number(values, key)
-            if value < 0 or (key == "Lr_manual" and value <= 0):
+            if section_unchanged and value != 0:
+                raise ValueError("The initial single slope is retained. Clear transition-length overrides or enter zero; no runoff or runout is required.")
+            if value < 0 or (key == "Lr_manual" and value <= 0 and not section_unchanged):
                 raise ValueError(
                     "Manual transition lengths must be positive (runout may be zero)."
                 )
@@ -341,7 +372,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             )
     # Published whole-foot rounding can reduce a length by < 1 ft; retain and
     # disclose it. Manual lengths cannot use that rounding allowance.
-    if e and (
+    if not no_transition and e and (
         Lr + (1 if published is not None and not values.get("Lr_manual") else 0)
         < runoff_rise / allowed_gradient - 1e-8
         or Lt + (1 if published is not None and not values.get("Lt_manual") else 0)
@@ -371,6 +402,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "result_type": "spiral_length_check",
             "e": e, "e_source": rate_source["reference"], "e_note": rate_source.get("selection", ""),
             "Lr": Lr, "Lt": Lt, "crown_state": crown_state,
+            "no_transition_required": no_transition, "section_transition": section_transition,
             "minimum_spiral_on_tangent_ft": Lr,
             "minimum_spiral_in_spiral_ft": Lr + Lt,
             "section_definition": {"roadway": roadway, "initial_section": section, "rotation_axis": pivot, "lane_widths_ft": widths},
@@ -379,7 +411,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 "criteria": criteria_metadata(criteria.PROFILE_ID),
                 "calculation_sources": sources,
                 "criteria_workbook": {"storage": pack.get("storage", "user_workbook"), "table_digest": pack.get("table_digest"), "runoff_digest": criteria.RUNOFF_DIGEST, "file_sha256": pack.get("file_sha256"), "source_version": "2018 / October 2019 errata"} if pack else {},
-                "manual_overrides": {"superelevation_rate": manual, "runoff_length": bool(values.get("Lr_manual")), "tangent_runout": bool(values.get("Lt_manual"))},
+                "manual_overrides": {"superelevation_rate": manual, "runoff_length": values.get("Lr_manual") not in (None, ""), "tangent_runout": values.get("Lt_manual") not in (None, "")},
             },
             "warnings": (["Manual rate: published radius/rate applicability must be independently verified."] if manual else [])
                 + (["One-way carriageway uses unadjusted relative gradient; no multilane runoff reduction is assumed for ramps."] if roadway == "one_way" else []),
@@ -430,7 +462,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                     required_ft=required,
                     side=end_name,
                 )
-            elif crown_state != "normal" and length > required + 1e-7:
+            elif not no_transition and length > required + 1e-7:
                 finding(
                     "EXCESS_SPIRAL",
                     "review",
@@ -444,7 +476,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         if placement == "on_tangent":
             start, zero_start, zero_end, end = ts - Lt, ts, st, st + Lt
             for side, a, b in [("entry", ts, run_start), ("exit", run_end, st)]:
-                if crown_state != "normal" and b > a + 1e-7:
+                if not no_transition and b > a + 1e-7:
                     if zero_bank:
                         holds.append(
                             {
@@ -528,10 +560,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             }
         )
     else:
-        p = _number(values, "runoff_tangent_percent") / 100
+        p = 0.0 if section_unchanged else _number(values, "runoff_tangent_percent") / 100
         if not 0 <= p <= 1:
             raise ValueError("Runoff on tangent must be 0–100 percent.")
-        if p in {0, 1} and e:
+        if p in {0, 1} and e and not no_transition:
             finding(
                 "EXTREME_RUNOFF_PLACEMENT",
                 "review",
@@ -555,7 +587,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 "mode": "project_input",
             }
         )
-        if e:
+        if e and not no_transition:
             pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
             attained = pc_bank / e
             limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius)
@@ -597,7 +629,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     tangent_demand = (
         Lt if spiral and placement == "on_tangent" else 0 if spiral else p * Lr + Lt
     )
-    if e:
+    if e and not no_transition:
         for side, a, b in (
             ("entry", start, anchors.get("TS", pc)),
             ("exit", anchors.get("ST", pt), end),
@@ -629,13 +661,13 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         (start, initial_bank),
         (zero_start, zero_bank),
         (run_start, zero_bank),
-        (full_start, bank_sign * e),
+        (full_start, target_bank),
     ]
     # Reverse crown is a real section breakpoint, not an extra length.
     if section == "crowned" and e > normal:
         entry_knots.append((run_start + Lr * normal / e, bank_sign * normal))
     exit_knots = [
-        (full_end, bank_sign * e),
+        (full_end, target_bank),
         (run_end, zero_bank),
         (zero_end, zero_bank),
         (end, initial_bank),
@@ -643,12 +675,13 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     if section == "crowned" and e > normal:
         exit_knots.append((run_end - Lr * normal / e, bank_sign * normal))
     knots = sorted(set(entry_knots + exit_knots))
-    if crown_state == "normal":
-        knots = [(pc, initial_bank), (pt, initial_bank)]
+    if no_transition:
+        knots = [(anchors.get("TS", pc), initial_bank), (anchors.get("ST", pt), initial_bank)]
         Lr = Lt = 0.0
         start, zero_start, run_start, full_start = pc, pc, pc, pc
         full_end, run_end, zero_end, end = pt, pt, pt, pt
         holds = []
+        sources[-1] = {"component": "Transition placement", "reference": "Initial section retained; no transition placement required", "mode": "not_applicable"}
 
     def bank_at(station):
         if station <= knots[0][0]:
@@ -701,7 +734,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                     )
                 )
             )
-            if crown_state == "normal":
+            if no_transition:
                 event_type = "Initial section"
             events.append(
                 {
@@ -731,7 +764,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         for side in ("left", "right")
     }
     warnings = [f["message"] for f in findings]
-    if spiral and crown_state != "normal":
+    if spiral and not no_transition:
         basis = (
             "runoff only; tangent runout is on the tangent"
             if placement == "on_tangent"
@@ -779,9 +812,9 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "criteria": criteria_metadata(criteria.PROFILE_ID),
             "manual_overrides": {
                 "superelevation_rate": manual,
-                "runoff_length": bool(values.get("Lr_manual")),
-                "tangent_runout": bool(values.get("Lt_manual")),
-                "placement": bool(e) and (not standard if spiral else True),
+                "runoff_length": values.get("Lr_manual") not in (None, ""),
+                "tangent_runout": values.get("Lt_manual") not in (None, ""),
+                "placement": bool(e) and not no_transition and (not standard if spiral else True),
             },
             "calculation_sources": sources,
             "criteria_workbook": (
@@ -814,6 +847,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         "area_type": area,
         "crown_state": crown_state,
         "normal_crown_only": crown_state == "normal",
+        "no_transition_required": no_transition,
+        "section_transition": section_transition,
         "transition_method": "aashto_fixed_pivot",
         "pc_ft": pc,
         "pt_ft": pt,
@@ -867,6 +902,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         "alignment_station_range": list(alignment_range) if alignment_range else None,
         "segments": {"runoff": Lr, "runout": Lt, "total_transition": Lr + Lt},
         "runoff_note": (
+            "Initial section retained; no runoff is required"
+            if no_transition else
             "Published Table 3-16a"
             if published is not None
             else "Calculated fixed-pivot edge rise / adjusted relative gradient; no display rounding applied."
@@ -899,13 +936,15 @@ def validate_export_curves(curves: list[dict]) -> None:
                 "pivot_offset_ft",
                 "section_lanes",
                 "alignment_anchors",
+                "no_transition_required",
             ):
-                if result.get(key) != expected.get(key):
+                actual = result.get(key, bool(result.get("normal_crown_only"))) if key == "no_transition_required" else result.get(key)
+                if actual != expected.get(key):
                     raise ValueError(
                         "Saved AASHTO results differ from the current inputs/engine; recalculate before exporting."
                     )
         if (
-            not result.get("normal_crown_only")
+            not result.get("no_transition_required", result.get("normal_crown_only"))
             and result.get("pnc_ft") is not None
             and result.get("pnc_out_ft") is not None
         ):

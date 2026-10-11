@@ -92,6 +92,42 @@ for (const maximum of [4, 6, 8, 10, 12]) {
 }
 console.log("Manual spiral length checks passed native/Pyodide parity for all five maxima without stations.");
 
+for (const maximum of [4, 6, 8, 10, 12]) {
+  for (const direction of ["left", "right"]) {
+    for (const radius of [5000, 30000]) {
+      const request = { entitlement: proEntitlement, inputs: {
+        ...aashtoInputs, e_manual: "", speed: 45, radius, max_superelevation: maximum,
+        area: maximum === 4 ? "urban_freeway" : "rural", curve_direction: direction,
+        roadway: "one_way", initial_section: "single_slope", initial_slope: "0.02",
+        lane_widths: "12,12", rotation_axis: "right_edge", pc: "", pt: "", ts: "", st: "",
+      } };
+      const check = browser("required_spiral_lengths", request);
+      assert.deepEqual(check, native("required_spiral_lengths", request));
+      if (radius === 30000 || (direction === "right" && maximum <= 8)) {
+        assert.equal(check.no_transition_required, true);
+        assert.equal(check.Lr, 0);
+        assert.equal(check.Lt, 0);
+        assert.equal(check.section_transition.target_signed_slope, 0.02);
+      } else if (direction === "left" && maximum <= 8) {
+        assert.equal(check.Lr, 90);
+        assert.equal(check.Lt, 90);
+      }
+    }
+  }
+}
+const retainedRampRequest = { entitlement: proEntitlement, inputs: {
+  ...aashtoInputs, e_manual: "", speed: 45, radius: 5000, max_superelevation: 8,
+  roadway: "one_way", initial_section: "single_slope", lane_widths: "12",
+  rotation_axis: "left_edge", initial_slope: "0.02", curve_direction: "right", runoff_tangent_percent: "",
+} };
+const retainedRamp = browser("calculate", retainedRampRequest);
+assert.deepEqual(retainedRamp, native("calculate", retainedRampRequest));
+const retainedCurve = { results: retainedRamp.results, meta: { curve_direction: "right" } };
+const retainedExport = { entitlement: proEntitlement, curves: [retainedCurve] };
+assert.deepEqual(browser("export_ord_csv", retainedExport), native("export_ord_csv", retainedExport));
+assert.deepEqual(browser("lookup", { results: retainedRamp.results, direction: "right", station: "1000" }), native("lookup", { results: retainedRamp.results, direction: "right", station: "1000" }));
+console.log("Single-slope NC/RC and retained ramp exports passed native/Pyodide parity.");
+
 // Independently compare the embedded data with the private reviewed source when available.
 let localWorkbook;
 try {

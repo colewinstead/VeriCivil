@@ -62,6 +62,7 @@ def application_manifest() -> dict[str, Any]:
                 AASHTO_PROFILE_ID: {"facility":["centerline","left_edge","right_edge"],"area":["rural","urban_freeway","urban_high_speed"],
                     "speed":[str(v) for v in range(15,86,5)], "max_superelevation":[4,6,8,10,12],
                     "roadway":["two_way","one_way"], "rotation_axis":["centerline","left_edge","right_edge"],
+                    "one_way_rotation_axis":["left_edge","right_edge"], "lane_counts":[1,2,3,4,5,6,7], "equal_lane_widths_required":True,
                     "initial_section":["crowned","single_slope"],"runout_placement":["on_tangent","in_spiral"],
                     "criteria_workbook_required":False, "criteria_data_source":"embedded_python", "manual_spiral_length_check": True},
                 MDOT_PROFILE_ID: {

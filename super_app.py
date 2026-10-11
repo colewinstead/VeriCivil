@@ -1375,22 +1375,63 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
               "left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement",
               "runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override"]
         local={key:tk.StringVar(value=self.vars[key].get()) for key in keys}
+        lane_count = tk.StringVar(value=str(len(local["lane_widths"].get().split(","))))
+        saved_widths = local["lane_widths"].get().split(",")
+        lane_width = tk.StringVar(value=saved_widths[0] if len(set(saved_widths))==1 else "")
+        try: magnitude_label=str(abs(float(local["initial_slope"].get()))*100)
+        except ValueError: magnitude_label=""
+        slope_magnitude = tk.StringVar(value=magnitude_label)
+        drainage = tk.StringVar(value="Drains left" if local["initial_slope"].get().startswith("-") else "Drains right")
+        widgets={}
         for row,key in enumerate(keys):
-            ttk.Label(dialog,text=key.replace("_"," ").capitalize()).grid(row=row,column=0,sticky="w",padx=10,pady=5)
-            widget=ttk.Combobox(dialog,textvariable=local[key],values=fields[key],state="readonly") if key in fields else ttk.Entry(dialog,textvariable=local[key])
+            ttk.Label(dialog,text="Lane count / equal width (ft)" if key=="lane_widths" else "Initial slope (%) / drainage" if key=="initial_slope" else key.replace("_"," ").capitalize()).grid(row=row,column=0,sticky="w",padx=10,pady=5)
+            if key in {"lane_widths","initial_slope"}:
+                widget=ttk.Frame(dialog)
+                if key=="lane_widths":
+                    ttk.Combobox(widget,textvariable=lane_count,values=[str(n) for n in range(1,8)],state="readonly",width=4).pack(side="left")
+                    ttk.Entry(widget,textvariable=lane_width,width=10).pack(side="left",padx=5)
+                else:
+                    ttk.Entry(widget,textvariable=slope_magnitude,width=8).pack(side="left")
+                    ttk.Combobox(widget,textvariable=drainage,values=["Drains left","Drains right"],state="readonly",width=13).pack(side="left",padx=5)
+            else:
+                widget=ttk.Combobox(dialog,textvariable=local[key],values=fields[key],state="readonly") if key in fields else ttk.Entry(dialog,textvariable=local[key])
+            widgets[key]=widget
             widget.grid(row=row,column=1,sticky="ew",padx=10)
+        def refresh_axis(*_):
+            axes=["left_edge","right_edge"] if local["roadway"].get()=="one_way" else fields["rotation_axis"]
+            widgets["rotation_axis"].configure(values=axes)
+            if _ and local["roadway"].get()=="one_way" and local["rotation_axis"].get()=="centerline":
+                local["rotation_axis"].set("")
+        local["roadway"].trace_add("write",refresh_axis)
+        refresh_axis()
+        def section_values():
+            local["lane_widths"].set(",".join([lane_width.get()] * int(lane_count.get())))
+            if local["initial_section"].get()=="single_slope":
+                try:
+                    magnitude=float(slope_magnitude.get())/100
+                    if magnitude < 0: raise ValueError()
+                except ValueError:
+                    raise ValueError("Enter a positive initial slope magnitude, such as 2 for 2%.") from None
+                local["initial_slope"].set(str((-1 if drainage.get()=="Drains left" else 1)*magnitude))
+            return {key:var.get() for key,var in local.items()}
         dialog.columnconfigure(1,weight=1)
-        ttk.Label(dialog,text="AASHTO only: widths in ft; slopes in decimals. Left/right follow increasing station.\nCircular AASHTO requires a runoff percentage. DOT placement requires an override.\nLonger-spiral zero-crown holds require acknowledgement and drainage review.",wraplength=590).grid(row=len(keys)+1,column=0,columnspan=2,padx=10,pady=8)
+        ttk.Label(dialog,text="AASHTO only: equal lane widths in ft; initial slope as percent (2 means 2%).\nDrains left/right: looking ahead along increasing alignment station.\nCrown slopes remain decimals. Circular AASHTO requires a runoff percentage.\nA saved centerline pivot is preserved; new ramp selections offer pavement edges.\nLonger-spiral zero-crown holds require acknowledgement and drainage review.",wraplength=590).grid(row=len(keys)+1,column=0,columnspan=2,padx=10,pady=8)
         def apply():
-            for key,var in local.items():self.vars[key].set(var.get())
+            try: values=section_values()
+            except ValueError as exc:
+                messagebox.showerror("Check inputs",str(exc),parent=dialog)
+                return
+            for key,value in values.items():self.vars[key].set(value)
             dialog.destroy()
         def check_lengths():
             from super_service import required_spiral_lengths
             try:
-                values = {**{key:var.get() for key,var in self.vars.items()}, **{key:var.get() for key,var in local.items()}}
+                values = {**{key:var.get() for key,var in self.vars.items()}, **section_values()}
                 values["aashto_tables"] = json.loads(values["aashto_tables"]) if values.get("aashto_tables") else None
                 result = required_spiral_lengths(values)
-                messagebox.showinfo("Required spiral lengths", f"Rate e: {result['e']:.4f} ft/ft\nRunoff: {result['Lr']:.3f} ft\nTangent runout: {result['Lt']:.3f} ft\n\nRunout on tangent: {result['minimum_spiral_on_tangent_ft']:.3f} ft minimum spiral\nRunout in spiral: {result['minimum_spiral_in_spiral_ft']:.3f} ft minimum spiral\n\n{result['scope_note']}" + "".join(f"\n\n{warning}" for warning in result["warnings"]), parent=dialog)
+                rate_label=result.get("section_transition",{}).get("target_slope_label") if result.get("section_transition") else f"{result['e']:.4f} ft/ft"
+                section_note=result["section_transition"]["note"] if result.get("section_transition") else ""
+                messagebox.showinfo("Required spiral lengths", f"Curve cross slope / rate: {rate_label}\nRunoff: {result['Lr']:.3f} ft\nTangent runout: {result['Lt']:.3f} ft\n\nRunout on tangent: {result['minimum_spiral_on_tangent_ft']:.3f} ft minimum spiral\nRunout in spiral: {result['minimum_spiral_in_spiral_ft']:.3f} ft minimum spiral\n\n{section_note}\n\n{result['scope_note']}" + "".join(f"\n\n{warning}" for warning in result["warnings"]), parent=dialog)
             except ValueError as exc:
                 messagebox.showerror("Check inputs", str(exc), parent=dialog)
         ttk.Button(dialog,text="Apply",command=apply).grid(row=len(keys)+2,column=0,columnspan=2,pady=8)

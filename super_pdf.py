@@ -680,6 +680,9 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ("TANGENT RUNOUT", _number(results.get("Lt"), 2, " ft")),
             ("TOTAL TRANSITION", _number(segments.get("total_transition"), 2, " ft")),
         ]
+        section_transition = results.get("section_transition")
+        if section_transition:
+            kpis[0] = ("CURVE CROSS SLOPE", _text(section_transition["target_slope_label"]))
         kpi_data = [[Paragraph(label, styles["KpiLabel"]) for label, _ in kpis], [Paragraph(value, styles["KpiValue"]) for _, value in kpis]]
         kpi_table = Table(kpi_data, colWidths=[1.69 * inch] * 4, rowHeights=[0.27 * inch, 0.47 * inch])
         kpi_table.setStyle(TableStyle([
@@ -692,7 +695,9 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         story.extend([kpi_table, Spacer(1, 0.12 * inch)])
 
         warnings = [str(value) for value in (results.get("warnings", []) or []) if value]
-        if results.get("normal_crown_only"):
+        if section_transition:
+            warnings.insert(0, section_transition["note"])
+        elif results.get("normal_crown_only"):
             warnings.insert(0, "Normal crown is maintained; no superelevation transition is required.")
         if warnings:
             alert_text = "<br/>".join(f"- {_text(value)}" for value in warnings)
@@ -717,22 +722,31 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ("Rate source", _text(results.get("e_source"))),
         ]
 
-        if results.get("normal_crown_only"):
+        if results.get("no_transition_required") and section_transition:
+            station_rows = [("Initial section retained", _station(results,results["alignment_anchors"].get("TS",results["pc_ft"]))),
+                            ("Retained section ends", _station(results,results["alignment_anchors"].get("ST",results["pt_ft"])))]
+        elif results.get("normal_crown_only"):
             station_rows = [("Normal crown begins", _station(results, results.get("reverse_crown_ft"))), ("Normal crown ends", _station(results, results.get("pt_ft")))]
         elif results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
             station_rows=[(label,_station(results,results.get(key))) for label,key in [("Start transition","pnc_ft"),("Start runoff","reverse_crown_ft"),("Full super entry","full_super_ft"),("Full super exit","full_super_out_ft"),("End runoff","reverse_crown_out_ft"),("End transition","pnc_out_ft")]]
+        if results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
             input_rows.extend([("Roadway / section",_text(f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
                                ("Rotation axis",_text(f"{inputs.get('rotation_axis',results.get('facility'))} / {results.get('pivot_relationship','')}")),
-                               ("Placement",_text(inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% runoff on tangent")),
+                               ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% runoff on tangent")),
                                ("Criteria data",_text(results.get("calculation_metadata",{}).get("criteria_workbook",{}).get("storage","Manual rate"))),
                                ("Source workbook SHA-256",_text(results.get("calculation_metadata",{}).get("criteria_workbook",{}).get("file_sha256","Manual rate")))])
             if results.get("section_lanes"):
+                if section_transition:
+                    input_rows.extend([("Curve cross slope",_text(section_transition["target_slope_label"])),
+                                       ("Initial drainage",_text(section_transition["initial_drainage_direction"])),
+                                       ("Left / right convention", "Looking ahead along increasing alignment station; signed slope is positive when rising toward the left"),
+                                       ("Section basis",_text(section_transition["basis"]))])
                 input_rows.extend([("Actual lanes",_text(len(results["section_lanes"]))),("Rotated width / lane factor",_text(f"n1={results['n1']:g}, bw={results['bw']:.8f}")),("Units",_text("; ".join(str(v) for v in results.get("units",{}).values()))), ("Geometry source",_text(inputs.get("geometry_provenance","Manual station-only")))])
                 station_rows.extend((name,_station(results,station)) for name,station in results.get("alignment_anchors",{}).items())
                 if results.get("spiral_lengths"):
                     lengths=results["spiral_lengths"]
                     input_rows.append(("Spiral actual / required",_text(f"Entry {lengths['entry_actual_ft']:.3f} ft; exit {lengths['exit_actual_ft']:.3f} ft; required {lengths['required_ft']:.3f} ft ({lengths['placement']})")))
-        elif results.get("transition_method") == "tdot_simple_curve_half_total":
+        elif not results.get("normal_crown_only") and results.get("transition_method") == "tdot_simple_curve_half_total":
             station_rows = [
                 ("Start normal crown", _station(results, results.get("pnc_ft"))),
                 ("Zero crown / start runoff", _station(results, results.get("zero_crown_ft"))),
@@ -742,7 +756,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                 ("Zero crown / end runoff", _station(results, results.get("zero_crown_out_ft"))),
                 ("Normal crown restored", _station(results, results.get("pnc_out_ft"))),
             ]
-        else:
+        elif not results.get("normal_crown_only"):
             station_rows = []
             coordination = results.get("reverse_curve_coordination", {}) or {}
             if coordination.get("entry"):

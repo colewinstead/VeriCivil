@@ -253,6 +253,136 @@ class AASHTOTests(unittest.TestCase):
         self.assertEqual(favorable["Lt"], 0)
         self.assertAlmostEqual(favorable["Lr"], 48)
 
+    def test_single_slope_nc_rc_boundaries_and_physical_edges(self):
+        pack = criteria.built_in_tables()
+        for maximum in criteria.MAX_RATES:
+            table = pack["tables"][str(maximum)]
+            column = 1 + (45 - 15) // 5
+            for radius, state in [(table["rows"][0][column], "normal"),
+                                  (table["rows"][1][column], "reverse")]:
+                for direction in ("left", "right"):
+                    for slope in (-0.02, 0.02, -0.015, 0.015):
+                        for pivot in ("left_edge", "right_edge"):
+                            with self.subTest(maximum=maximum, radius=radius, direction=direction, slope=slope, pivot=pivot):
+                                values = inputs(e_manual="", speed=45, radius=radius,
+                                    max_superelevation=maximum, area="urban_freeway" if maximum == 4 else "rural",
+                                    roadway="one_way", initial_section="single_slope", initial_slope=slope,
+                                    lane_widths="12,12", rotation_axis=pivot, curve_direction=direction,
+                                    alignment_type="spiral", ts=500, pc=1000, pt=2000, st=2500,
+                                    acknowledge_spiral_override=True)
+                                r = aashto.calculate(values)
+                                check = super_service.required_spiral_lengths({**values, "ts":"", "st":""})
+                                self.assertEqual(r["crown_state"], state)
+                                sign = -1 if direction == "left" else 1
+                                unchanged = state == "normal" or slope * sign > 0
+                                target = slope if unchanged else sign * abs(slope)
+                                self.assertEqual(r["no_transition_required"], unchanged)
+                                self.assertAlmostEqual(r["section_transition"]["target_signed_slope"], target)
+                                self.assertEqual((r["Lr"], r["Lt"]), (check["Lr"], check["Lt"]))
+                                expected = 0 if unchanged else 24 * abs(slope) / criteria.relative_gradient(45)
+                                self.assertAlmostEqual(r["Lr"], expected)
+                                self.assertAlmostEqual(r["Lt"], expected)
+                                self.assertEqual(len(r["section_lanes"]), 2)
+                                for lane in r["section_lanes"]:
+                                    for event in lane["events"]:
+                                        if unchanged or event["station_ft"] in (1000, 2000):
+                                            bank = slope if unchanged else target
+                                            self.assertAlmostEqual(event["left_elevation_ft"], bank * lane["left_distance_from_pivot_ft"])
+                                            self.assertAlmostEqual(event["right_elevation_ft"], bank * lane["right_distance_from_pivot_ft"])
+                                        pivot_event = "left_elevation_ft" if pivot == "left_edge" and lane["left_offset_ft"] == 12 else "right_elevation_ft" if pivot == "right_edge" and lane["right_offset_ft"] == -12 else None
+                                        if pivot_event:
+                                            self.assertAlmostEqual(event[pivot_event], 0)
+                                if unchanged:
+                                    self.assertFalse(r["hold_intervals"])
+                                    self.assertFalse(r["qa_findings"])
+                                    self.assertFalse(r["calculation_metadata"]["manual_overrides"]["placement"])
+
+    def test_user_ramp_case_and_retained_slope_overrides(self):
+        values = inputs(e_manual="", speed=45, radius=5000, max_superelevation=8,
+                        roadway="one_way", initial_section="single_slope", initial_slope=.02,
+                        lane_widths="12", rotation_axis="left_edge", curve_direction="right",
+                        runoff_tangent_percent="")
+        r = aashto.calculate(values)
+        self.assertEqual((r["crown_state"], r["Lr"], r["Lt"]), ("reverse", 0, 0))
+        self.assertEqual(r["section_transition"]["target_slope_label"], "+2%")
+        self.assertTrue(r["no_transition_required"])
+        self.assertTrue(all(e["event_type"] == "Initial section" for e in r["section_lanes"][0]["events"]))
+        for key in ("Lr_manual", "Lt_manual"):
+            with self.assertRaisesRegex(ValueError, "initial single slope is retained"):
+                aashto.calculate({**values, key:10})
+        unchanged = aashto.calculate({**values, "Lr_manual":0, "Lt_manual":0})
+        self.assertEqual((unchanged["Lr"], unchanged["Lt"]), (0, 0))
+        self.assertTrue(unchanged["calculation_metadata"]["manual_overrides"]["runoff_length"])
+        adverse = super_service.required_spiral_lengths({**values, "curve_direction":"left"})
+        self.assertAlmostEqual(adverse["Lr"], 45)
+        self.assertAlmostEqual(adverse["Lt"], 45)
+        self.assertEqual(adverse["section_transition"]["target_slope_label"], "-2%")
+        self.assertEqual(adverse["minimum_spiral_in_spiral_ft"], 90)
+
+    def test_single_slope_rc_spiral_shortage_is_not_bypassed(self):
+        values = inputs(e_manual="", speed=45, radius=5000, max_superelevation=8,
+                        roadway="one_way", initial_section="single_slope", initial_slope=.02,
+                        lane_widths="12", rotation_axis="right_edge", alignment_type="spiral",
+                        pc=1000, pt=2000, ts=960, st=2040)
+        with self.assertRaises(aashto.TransitionError) as caught:
+            aashto.calculate(values)
+        self.assertTrue(all(f["code"] == "INSUFFICIENT_SPIRAL" for f in caught.exception.findings if f["severity"] == "block"))
+        with self.assertRaisesRegex(aashto.TransitionError, "gradient"):
+            aashto.calculate({**values, "ts":900, "st":2100, "Lr_manual":44})
+
+    def test_retained_ramp_projects_lookup_qa_and_exports(self):
+        r = self.result(e_manual="", speed=45, radius=5000, max_superelevation=8,
+                        roadway="one_way", initial_section="single_slope", initial_slope=.02,
+                        lane_widths="12", rotation_axis="left_edge", curve_direction="right",
+                        runoff_tangent_percent="")
+        curve = {"results":r, "meta":{"curve_direction":"right"}}
+        project = super_project.normalize_project({"version":super_project.PROJECT_VERSION,"curves":[curve], "vars":r["inputs"]})
+        loaded = super_project.loads_project(super_project.dumps_project(project))["curves"][0]["results"]
+        self.assertEqual(loaded["section_transition"], r["section_transition"])
+        self.assertIsNone(super_qa._changing_transition_window(curve, True))
+        diagram = super_qa.curve_diagram(r, "right")
+        self.assertTrue(all(interval["phase"] == "Initial section retained" for intervals in diagram["intervals"].values() for interval in intervals))
+        lookup = super_service.lookup(r, "right", "1500", "")
+        self.assertEqual(set(lookup["station"]["slopes"]), {"Lane 1"})
+        csv_text = super_service.export_ord_csv([curve])["content"]
+        self.assertTrue(csv_text)
+        stale_curve = copy.deepcopy(curve)
+        stale_curve["results"]["no_transition_required"] = False
+        with self.assertRaisesRegex(ValueError, "Saved AASHTO results differ"):
+            aashto.validate_export_curves([stale_curve])
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder)/"ramp.pdf"
+            super_pdf.export_pdf(str(target), [curve])
+            from pypdf import PdfReader
+            text = " ".join(page.extract_text() for page in PdfReader(target).pages)
+            for phrase in ("Initial single slope is retained", "+2%", "10.9.6.2.14", "Initial section retained"):
+                self.assertIn(phrase, text)
+
+    def test_ramp_controls_manifest_and_empty_section_inputs(self):
+        options = super_service.application_manifest()["options"]["profiles"][criteria.PROFILE_ID]
+        self.assertEqual(options["one_way_rotation_axis"], ["left_edge", "right_edge"])
+        self.assertTrue(options["equal_lane_widths_required"])
+        self.assertEqual(options["lane_counts"], list(range(1,8)))
+        for change, message in [({"rotation_axis":""}, "rotation axis"),
+                                ({"initial_section":"single_slope","initial_slope":"-"}, "slope magnitude"),
+                                ({"lane_widths":"12,"}, "every lane")]:
+            with self.assertRaisesRegex(ValueError, message):
+                self.result(**change)
+
+    def test_imported_retained_ramp_has_no_fabricated_transitions(self):
+        # Synthetic clothoid geometry, not evidence of a native ORD round trip.
+        xml, *_ = synthetic_alignment()
+        curves = super_service.build_all_landxml_curves(xml, "synthetic-ramp.xml",
+            inputs(e_manual="", speed=15, roadway="one_way", initial_section="single_slope",
+                   initial_slope=.02, lane_widths="12", rotation_axis="left_edge"))
+        r = curves[0]["results"]
+        self.assertEqual((r["crown_state"],r["Lr"],r["Lt"]),("normal",0,0))
+        self.assertEqual([e["station_ft"] for e in r["section_lanes"][0]["events"]], [500,700,1100,1300])
+        self.assertTrue(all(e["event_type"] == "Initial section" for e in r["section_lanes"][0]["events"]))
+        report = super_service.corridor_qa(xml,"synthetic-ramp.xml",curves)
+        self.assertFalse([f for f in report["findings"] if f["severity"]=="block"])
+        self.assertTrue(super_service.export_overlay_dxf(curves,{"content":xml,"filename":"synthetic-ramp.xml"})["content"])
+
     def test_unsupported_sections_and_nonfinite_inputs(self):
         for change in (
             {"lane_widths": "10,12"},

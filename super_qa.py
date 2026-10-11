@@ -129,7 +129,9 @@ def _criterion_for_segment(results: dict, start: dict, end: dict) -> dict:
     sources = _source_map(results)
     if results.get("transition_method")=="aashto_fixed_pivot":
         station=(float(start["station_ft"])+float(end["station_ft"]))/2
-        if results.get("normal_crown_only"):
+        if results.get("no_transition_required") and results.get("section_transition"):
+            component,phase="Single-slope section","Initial section retained"
+        elif results.get("normal_crown_only"):
             component,phase="Superelevation rate","Normal crown"
         elif results["full_super_ft"]<=station<=results["full_super_out_ft"]:
             component,phase="Superelevation rate","Full super"
@@ -623,7 +625,8 @@ def _transition_bounds(curve: dict) -> tuple[float, float] | None:
 
 
 def _normal_crown_only(curve: dict) -> bool:
-    return bool((curve.get("results", {}) or {}).get("normal_crown_only"))
+    results = curve.get("results", {}) or {}
+    return bool(results.get("no_transition_required", results.get("normal_crown_only")))
 
 
 def _changing_transition_window(curve: dict, entering: bool) -> tuple[float, float] | None:

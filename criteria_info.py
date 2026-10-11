@@ -198,7 +198,7 @@ _PROFILE_METADATA = {
         "profile_id":AASHTO_PROFILE_ID,"profile_name":"AASHTO Green Book 2018 (October 2019 errata)",
         "revision":"2018 / October 2019 errata","governing_authority":"AASHTO",
         "source_status":"EMBEDDED CRITERIA; INDEPENDENT ENGINEERING REVIEW REQUIRED; PUBLIC REDISTRIBUTION RIGHTS UNRESOLVED",
-        "source_documents":[{"title":"A Policy on Geometric Design of Highways and Streets, 7th edition","edition":"2018","applicable_sections":["3.3.5","3.3.5.1","3.3.8.2","3.3.8.4.6","3.3.8.6"],"url":"https://store.transportation.org/"},
+        "source_documents":[{"title":"A Policy on Geometric Design of Highways and Streets, 7th edition","edition":"2018","applicable_sections":["3.3.5","3.3.5.1","3.3.8.2","3.3.8.4.6","3.3.8.6","10.9.6.2.14"],"url":"https://store.transportation.org/"},
                             {"title":"GDHS-7-E1 October 2019 errata","url":"https://downloads.transportation.org/GDHS-7-Errata.pdf"},
                             {"title":"FHWA 2018 Green Book superelevation workbook","revision":"2022-04-15","url":"https://highways.dot.gov/federal-lands/design/tools/superelevation-tables"}],
         "referenced_identifiers":["Tables 3-8–3-12","Table 3-15","Table 3-16a","Equation 3-23","Equation 3-24","Equation 3-25","Figure 3-8"],
