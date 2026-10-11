@@ -148,6 +148,8 @@ The `aashto-green-book-2018-2019-10` profile loads reviewed Tables 3-8 through 3
 
 LandXML reverse-curve notices appear only when opposing curves have overlapping calculated runoff/runout. Before both curves are added, the shared Python engine can provide a labelled spacing preview from the current design inputs; incomplete or unsupported inputs leave the spacing unchecked. Corridor QA and PDF record the overlap interval, available spacing, current independent transition demand, and a recommendation for sufficient tangent or combined spiral/tangent space. Constant-slope holds do not add transition demand. This demand is not a universal agency minimum. Actual eligible MDOT pairs may be linked explicitly; AASHTO/TDOT overlaps require engineering review. Detection does not modify horizontal geometry or shorten transitions.
 
+For an AASHTO manual check without LandXML, select **Manual calculation → Required spiral lengths**. Enter speed and radius and confirm maximum superelevation and the roadway section. PC/PT are optional references; TS/ST are not needed. Results show minimum spiral length for runoff only (runout on tangent) and runoff plus runout (both in spiral), with governing sources. This advice does not construct a horizontal alignment or produce exportable curve stations. Use **Transition stations** with established geometry for lane events and curve exports.
+
 <details>
 <summary><strong>ORD import checklist</strong></summary>
 

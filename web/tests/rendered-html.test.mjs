@@ -343,7 +343,7 @@ test("recalculates after reapplying an identical LandXML preset", async () => {
   const source = await readFile(new URL("../app/CalculatorApp.tsx", import.meta.url), "utf8");
   assert.match(source, /const \[calculationRequest, setCalculationRequest\] = useState\(0\)/);
   assert.match(source, /setCalculationRequest\(\(request\) => request \+ 1\)/);
-  assert.match(source, /\[calculationKey, calculationRequest, runtime, call, entitlement\]/);
+  assert.match(source, /\[calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode\]/);
 });
 
 test("preserves coordinated reverse-curve results when a saved curve is selected", async () => {
