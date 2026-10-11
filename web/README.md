@@ -7,11 +7,14 @@ This interface runs the repository's shared Python calculation, LandXML, project
 Requires Python 3.11+ and Node.js 22.13+.
 
 ```bash
-npm install
+# Run these commands inside VeriCivil/web.
+npm ci --ignore-scripts
 npm run dev
 ```
 
-The `predev` and `prebuild` hooks copy the authoritative shared Python modules from the repository root into the ignored `public/python` staging directory. Do not edit staged copies.
+Open the local URL printed by the server and keep the terminal running. From the repository root, enter this directory with `cd web` on macOS/Linux or `Set-Location .\web` in Windows PowerShell.
+
+The `predev` and `prebuild` hooks use `python3` on macOS/Linux and `python` on Windows to copy the authoritative shared Python modules from the repository root into the ignored `public/python` staging directory. The selected interpreter must be on PATH; npm cannot use interactive shell aliases. Native Python calculation dependencies are not needed just to start the browser app. Do not edit staged copies.
 
 ## Verification
 

@@ -61,6 +61,8 @@ def _pair_ineligibility(prior: dict, following: dict) -> str | None:
     following_direction = str(following.get("meta", {}).get("curve_direction", "left")).lower()
     if not prior_profile.startswith("mdot") or not following_profile.startswith("mdot"):
         return "Both linked curves must use an MDOT criteria profile."
+    if prior_results.get("runoff_tangent_fraction") is not None or following_results.get("runoff_tangent_fraction") is not None:
+        return "Custom runoff placement is not eligible for the MDOT 0.7Lr reverse-curve coordination rule."
     if prior_direction == following_direction:
         return "Linked reverse curves must turn in opposite directions."
     if prior_results.get("normal_crown_only") or following_results.get("normal_crown_only"):
@@ -205,6 +207,11 @@ def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str]) -> dict
         preset.get("station_equations"),
         preset.get("alignment_station_range"),
         str(shared_inputs.get("criteria_profile", "mdot-rdsd-2026-04-22")),
+        profile_options={**shared_inputs,"curve_direction":preset.get("curve_direction","left"),
+                         "alignment_type":preset.get("alignment_type","circular"),
+                         "ts":preset.get("ts_station_label",""), "st":preset.get("st_station_label",""),
+                         "linear_unit":preset.get("linear_unit"),
+                         "geometry_provenance":{"source":"LandXML","alignment":preset.get("alignment_name"),"curve_id":preset.get("landxml_curve_id"),"linear_unit":preset.get("linear_unit"),"available_entry_tangent_ft":preset.get("available_entry_tangent_ft"),"available_exit_tangent_ft":preset.get("available_exit_tangent_ft")}},
     )
     return {
         "results": results,
@@ -223,4 +230,13 @@ def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str]) -> dict
 
 def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, str]) -> list[dict]:
     """Build independent curves; reverse coordination is an explicit pair action."""
-    return [build_curve_from_preset(preset, shared_inputs) for preset in presets]
+    curves=[]
+    for index,preset in enumerate(presets):
+        try:
+            curves.append(build_curve_from_preset(preset,shared_inputs))
+        except ValueError as exc:
+            for finding in getattr(exc,"findings",[]):
+                finding["curve_indexes"]=[index]
+                finding["message"]=f"{preset.get('curve_name',f'Curve {index+1}')}: {finding['message']}"
+            raise
+    return curves

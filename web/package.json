@@ -6,12 +6,12 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "predev": "python ../scripts/prepare_web_runtime.py",
+    "predev": "node build/prepare-python-runtime.mjs",
     "dev": "vinext dev",
-    "prebuild": "python ../scripts/prepare_web_runtime.py",
+    "prebuild": "node build/prepare-python-runtime.mjs",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && npm run test:billing && node --test tests/rendered-html.test.mjs && node tests/pyodide-parity.mjs",
+    "test": "npm run build && npm run test:billing && node --test tests/runtime-staging.test.mjs tests/rendered-html.test.mjs && node tests/pyodide-parity.mjs",
     "test:billing": "node --experimental-strip-types --test tests/billing-entitlement.test.mjs tests/analytics-policy.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-pages --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"

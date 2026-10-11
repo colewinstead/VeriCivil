@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { loadPyodide } from "pyodide";
 
 const runtimeRoot = new URL("../public/python/", import.meta.url);
@@ -27,6 +28,175 @@ import super_service
 
 const freeEntitlement = { plan: "free", status: "active" };
 const proEntitlement = { plan: "pro", status: "active" };
+
+const aashtoInputs = {
+  criteria_profile: "aashto-green-book-2018-2019-10", pc: "1000", pt: "2000",
+  speed: "60", radius: "1500", area: "rural", e_manual: "0.06",
+  lane_widths: "12,12", normal_crown: "0.02", runoff_tangent_percent: "70", curve_direction: "left",
+};
+const native = (operation, input) => JSON.parse(execFileSync("python3", ["-c",
+  "import json,sys,super_service; print(json.dumps(super_service.dispatch(sys.argv[1],sys.stdin.read()),default=list))", operation],
+{ cwd: new URL("../../", import.meta.url), input: JSON.stringify(input), encoding: "utf8" }));
+const browser = (operation, input) => {
+  pyodide.globals.set("aashto_payload", JSON.stringify(input));
+  pyodide.globals.set("aashto_operation", operation);
+  return JSON.parse(pyodide.runPython("__import__('json').dumps(super_service.dispatch(aashto_operation,aashto_payload),default=list)"));
+};
+const spacingXml = await readFile(new URL("../../tests/fixtures/reverse_spacing_synthetic.xml", import.meta.url), "utf8");
+const spacingInputs = { speed: "30", e_manual: "0.06", Lr_manual: "100", Lt_manual: "25" };
+const spacingCurves = browser("build_all_landxml_curves", { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs });
+for (const curves of [[], spacingCurves]) {
+  const request = { entitlement: proEntitlement, content: spacingXml, curves, shared_inputs: spacingInputs };
+  const report = browser("corridor_qa", request);
+  assert.deepEqual(report, native("corridor_qa", request));
+  const overlap = report.findings.find(finding => finding.reverse_curve_candidate);
+  assert.equal(overlap.overlap_ft, 170);
+  assert.equal(overlap.basis, curves.length ? "calculated_lane_events" : "current_inputs_preview");
+}
+// Run the public synthetic boundary/selection cases in the browser engine too.
+pyodide.FS.writeFile("/app/test_aashto_criteria.py", await readFile(new URL("../../test_aashto_criteria.py", import.meta.url), "utf8"), { encoding: "utf8" });
+pyodide.runPython(`
+import unittest
+from test_aashto_criteria import TableSelectionTests
+selection_checks = unittest.TestResult()
+unittest.defaultTestLoader.loadTestsFromTestCase(TableSelectionTests).run(selection_checks)
+assert selection_checks.wasSuccessful(), repr(selection_checks.errors + selection_checks.failures)
+assert selection_checks.testsRun > 0
+`);
+console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
+
+for (const maximum of [4, 6, 8, 10, 12]) {
+  const request = { entitlement: proEntitlement, inputs: {
+    ...aashtoInputs, e_manual: "", speed: 40, radius: 1824.076,
+    max_superelevation: maximum, area: maximum === 4 ? "urban_freeway" : "rural",
+  } };
+  const result = browser("calculate", request);
+  assert.deepEqual(result, native("calculate", request), `Embedded AASHTO ${maximum}% parity`);
+  assert.equal(result.results.calculation_metadata.criteria_workbook.storage, "embedded_python");
+  if (maximum === 8) assert.deepEqual([result.results.e, result.results.Lr, result.results.Lt], [0.04, 84, 42]);
+}
+console.log("Embedded AASHTO criteria passed native/Pyodide parity for all five maxima without a workbook.");
+
+for (const maximum of [4, 6, 8, 10, 12]) {
+  const request = { entitlement: proEntitlement, inputs: {
+    ...aashtoInputs, e_manual: "", speed: 40, radius: 1824.076,
+    max_superelevation: maximum, area: maximum === 4 ? "urban_freeway" : "rural",
+    pc: "", pt: "", ts: "", st: "", alignment_type: "spiral", runoff_tangent_percent: "",
+  } };
+  const check = browser("required_spiral_lengths", request);
+  assert.deepEqual(check, native("required_spiral_lengths", request));
+  assert.equal(check.result_type, "spiral_length_check");
+  assert.equal(check.minimum_spiral_on_tangent_ft, check.Lr);
+  assert.equal(check.minimum_spiral_in_spiral_ft, check.Lr + check.Lt);
+  assert.equal(check.alignment_anchors, undefined);
+}
+console.log("Manual spiral length checks passed native/Pyodide parity for all five maxima without stations.");
+
+for (const maximum of [4, 6, 8, 10, 12]) {
+  for (const direction of ["left", "right"]) {
+    for (const radius of [5000, 30000]) {
+      const request = { entitlement: proEntitlement, inputs: {
+        ...aashtoInputs, e_manual: "", speed: 45, radius, max_superelevation: maximum,
+        area: maximum === 4 ? "urban_freeway" : "rural", curve_direction: direction,
+        roadway: "one_way", initial_section: "single_slope", initial_slope: "0.02",
+        lane_widths: "12,12", rotation_axis: "right_edge", pc: "", pt: "", ts: "", st: "",
+      } };
+      const check = browser("required_spiral_lengths", request);
+      assert.deepEqual(check, native("required_spiral_lengths", request));
+      if (radius === 30000 || (direction === "right" && maximum <= 8)) {
+        assert.equal(check.no_transition_required, true);
+        assert.equal(check.Lr, 0);
+        assert.equal(check.Lt, 0);
+        assert.equal(check.section_transition.target_signed_slope, 0.02);
+      } else if (direction === "left" && maximum <= 8) {
+        assert.equal(check.Lr, 90);
+        assert.equal(check.Lt, 90);
+      }
+    }
+  }
+}
+const retainedRampRequest = { entitlement: proEntitlement, inputs: {
+  ...aashtoInputs, e_manual: "", speed: 45, radius: 5000, max_superelevation: 8,
+  roadway: "one_way", initial_section: "single_slope", lane_widths: "12",
+  rotation_axis: "left_edge", initial_slope: "0.02", curve_direction: "right", runoff_tangent_percent: "",
+} };
+const retainedRamp = browser("calculate", retainedRampRequest);
+assert.deepEqual(retainedRamp, native("calculate", retainedRampRequest));
+const retainedCurve = { results: retainedRamp.results, meta: { curve_direction: "right" } };
+const retainedExport = { entitlement: proEntitlement, curves: [retainedCurve] };
+assert.deepEqual(browser("export_ord_csv", retainedExport), native("export_ord_csv", retainedExport));
+assert.deepEqual(browser("lookup", { results: retainedRamp.results, direction: "right", station: "1000" }), native("lookup", { results: retainedRamp.results, direction: "right", station: "1000" }));
+console.log("Single-slope NC/RC and retained ramp exports passed native/Pyodide parity.");
+
+const wideRampRequest = { entitlement: proEntitlement, inputs: {
+  ...aashtoInputs, e_manual: "", pc: "10+00", pt: "15+00", speed: 45, radius: 700,
+  max_superelevation: 8, roadway: "one_way", initial_section: "single_slope",
+  lane_widths: "16", rotation_axis: "left_edge", initial_slope: "0.02",
+  curve_direction: "right", runoff_tangent_percent: 50,
+} };
+const wideRamp = browser("calculate", wideRampRequest);
+assert.deepEqual(wideRamp, native("calculate", wideRampRequest));
+assert.equal(wideRamp.results.Lr, 180);
+const wideRampExport = { entitlement: proEntitlement, curves: [{ results: wideRamp.results, meta: { curve_direction: "right" } }] };
+for (const engine of [native, browser]) {
+  const report = engine("export_pdf", wideRampExport);
+  const text = execFileSync("python3", ["-c",
+    "import io,sys; from pypdf import PdfReader; print(' '.join(' '.join(p.extract_text() for p in PdfReader(io.BytesIO(sys.stdin.buffer.read())).pages).split()))"],
+  { input: Buffer.from(report.content), encoding: "utf8" });
+  for (const phrase of ["Criteria AASHTO Green Book 2018 (October 2019 errata)", "Rotated width (max) 16.00 ft", "Lane-width ratio (to 12 ft) 1.3333", "Lane adjustment factor 1.0000"]) {
+    assert.ok(text.includes(phrase), phrase);
+  }
+  assert.doesNotMatch(text, /embedded_python|SHA-256/);
+  assert.ok(!text.includes(wideRamp.results.calculation_metadata.criteria_workbook.file_sha256));
+}
+console.log("16-ft ramp PDF values and criteria labels passed native/Pyodide checks.");
+
+// Independently compare the embedded data with the private reviewed source when available.
+let localWorkbook;
+try {
+  localWorkbook = await readFile(new URL("../../docs/AASHTO Super Tables.xlsx", import.meta.url));
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  console.log("Licensed AASHTO workbook absent: private table parity skipped; synthetic selection cases passed.");
+}
+if (localWorkbook) {
+  const payload = { content_base64: localWorkbook.toString("base64") };
+  const pack = browser("import_aashto_workbook", payload);
+  assert.deepEqual(pack, native("import_aashto_workbook", payload));
+  for (const maximum of [4, 6, 8, 10, 12]) {
+    const request = { entitlement: proEntitlement, inputs: {
+      ...aashtoInputs, aashto_tables: pack, e_manual: "", speed: 40, radius: 1824.076,
+      max_superelevation: maximum, area: maximum === 4 ? "urban_freeway" : "rural",
+    } };
+    const result = browser("calculate", request);
+    assert.deepEqual(result, native("calculate", request), `Automatic AASHTO ${maximum}% parity`);
+    if (maximum === 8) assert.equal(result.results.e, 0.04);
+  }
+  console.log("Local AASHTO workbook import and automatic rates passed native/Pyodide parity for all five maxima.");
+}
+const aashtoCases = [
+  ...[4, 6, 8, 10, 12].map(maximum => ({ max_superelevation: maximum, e_manual: String(maximum/100), area: maximum===4 ? "urban_freeway" : "rural" })),
+  ...[0, 25, 50, 100].map(percent => ({ runoff_tangent_percent: percent })),
+  ...["left", "right"].flatMap(direction => ["centerline", "left_edge", "right_edge"].map(pivot => ({ curve_direction: direction, rotation_axis: pivot }))),
+  ...["on_tangent", "in_spiral"].map(placement => ({ alignment_type: "spiral", ts: "700", st: "2250", runout_placement: placement, acknowledge_spiral_override: true })),
+  ...["-0.02", "0.02"].map(slope => ({ roadway: "one_way", initial_section: "single_slope", lane_widths: "12", rotation_axis: "left_edge", initial_slope: slope })),
+];
+for (const changes of aashtoCases) {
+  const request = { entitlement: proEntitlement, inputs: { ...aashtoInputs, ...changes } };
+  assert.deepEqual(browser("calculate", request), native("calculate", request), `AASHTO native/Pyodide parity: ${JSON.stringify(changes)}`);
+}
+const ramp = browser("calculate", { entitlement: proEntitlement, inputs: { ...aashtoInputs, roadway: "one_way", initial_section: "single_slope", lane_widths: "12", rotation_axis: "left_edge" } });
+const rampCurve = { results: ramp.results, meta: { curve_direction: "left" } };
+const rampExport = { entitlement: proEntitlement, curves: [rampCurve] };
+assert.deepEqual(browser("export_ord_csv", rampExport), native("export_ord_csv", rampExport));
+assert.deepEqual(Object.keys(browser("lookup", { results: ramp.results, direction: "left", station: "1000" }).station.slopes), ["Lane 1"]);
+const syntheticXml = execFileSync("python3", ["-c", "from test_aashto_criteria import synthetic_alignment; print(synthetic_alignment(200,300,'right')[0],end='')"], { cwd: new URL("../../", import.meta.url), encoding: "utf8" });
+assert.deepEqual(browser("parse_landxml", { entitlement: proEntitlement, content: syntheticXml, filename: "synthetic.xml" }), native("parse_landxml", { entitlement: proEntitlement, content: syntheticXml, filename: "synthetic.xml" }));
+pyodide.globals.set("synthetic_spiral_xml", syntheticXml);
+const coordinates = pyodide.runPython("[super_service.super_landxml.parse_landxml_text(synthetic_spiral_xml).xy_at_station(s) for s in (700,1100,1400)]");
+const xy = coordinates.toJs({ create_proxies: false }); coordinates.destroy();
+const expectedXy = JSON.parse(execFileSync("python3", ["-c", "import json,super_landxml,sys; d=super_landxml.parse_landxml_text(sys.stdin.read()); print(json.dumps([d.xy_at_station(s) for s in (700,1100,1400)]))"], { cwd: new URL("../../", import.meta.url), input: syntheticXml, encoding: "utf8" }));
+xy.forEach((point,i) => point.forEach((value,j) => assert.ok(Math.abs(value-expectedXy[i][j])<1e-7)));
 
 const payload = JSON.stringify({
   entitlement: freeEntitlement,
