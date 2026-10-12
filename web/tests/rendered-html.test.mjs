@@ -401,12 +401,13 @@ test("shows concise guidance for invalid project files", async () => {
   assert.match(source, /The selected project file is empty/);
 });
 
-test("defaults embedded LandXML projects to the first curve", async () => {
+test("reopens embedded LandXML projects on saved or included curves", async () => {
   const source = await readFile(new URL("../app/CalculatorApp.tsx", import.meta.url), "utf8");
   assert.match(source, /const hasLandxmlCurves/);
-  assert.match(source, /landxml_curve_index\) === 0/);
+  assert.match(source, /landxml_curve_index != null/);
   assert.match(source, /loadCurveFrom\(restoredCurves\[firstLandxmlCurve\], firstLandxmlCurve/);
-  assert.match(source, /applyPreset\(0, loaded\.landxml\)/);
+  assert.match(source, /excluded_landxml_curve_indexes \|\| \[\]/);
+  assert.match(source, /applyPreset\(firstIncludedPreset, loaded\.landxml\)/);
 });
 
 test("ships interactive diagram zoom and corridor QA controls", async () => {
