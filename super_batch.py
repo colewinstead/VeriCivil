@@ -236,7 +236,7 @@ def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, 
             curves.append(build_curve_from_preset(preset,shared_inputs))
         except ValueError as exc:
             for finding in getattr(exc,"findings",[]):
-                finding["curve_indexes"]=[index]
+                finding["curve_indexes"]=[preset.get("landxml_curve_index", index)]
                 finding["message"]=f"{preset.get('curve_name',f'Curve {index+1}')}: {finding['message']}"
             raise
     return curves

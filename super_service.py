@@ -209,11 +209,12 @@ def calculate_with_entitlement(inputs: dict[str, Any], entitlement: Any = None) 
     return calculate_curve(inputs)
 
 
-def parse_landxml(content: str, filename: str = "alignment.xml") -> dict[str, Any]:
-    data = super_landxml.parse_landxml_text(content, filename)
-    source = super_project.make_landxml_source(filename, content)
+def parse_landxml(content: str, filename: str = "alignment.xml", alignment_index: int = 0) -> dict[str, Any]:
+    data = super_landxml.parse_landxml_text(content, filename, alignment_index)
+    source = super_project.make_landxml_source(filename, content, alignment_index)
     return {
         "source": source,
+        "alignments": data.alignments,
         "summary": {
             "filename": source["filename"],
             "alignment_name": data.alignment_name,
@@ -229,10 +230,17 @@ def parse_landxml(content: str, filename: str = "alignment.xml") -> dict[str, An
     }
 
 
-def build_all_landxml_curves(content: str, filename: str, shared_inputs: dict[str, Any]) -> list[dict]:
-    data = super_landxml.parse_landxml_text(content, filename)
-    normalized = dict(shared_inputs)
-    return super_batch.build_curves_from_presets(data.curve_records(), normalized)
+def build_all_landxml_curves(content: str, filename: str, shared_inputs: dict[str, Any],
+                            excluded_curve_indexes: list[int] | None = None, alignment_index: int = 0) -> list[dict]:
+    data = super_landxml.parse_landxml_text(content, filename, alignment_index)
+    presets = data.curve_records()
+    excluded = excluded_curve_indexes if excluded_curve_indexes is not None else []
+    if not isinstance(excluded, list) or any(type(index) is not int or not 0 <= index < len(presets) for index in excluded):
+        raise ValueError("Excluded LandXML curves must be valid source curve indexes.")
+    selected = [preset for index, preset in enumerate(presets) if index not in excluded]
+    if not selected:
+        raise ValueError("Select at least one LandXML curve to add.")
+    return super_batch.build_curves_from_presets(selected, dict(shared_inputs))
 
 
 def coordinate_reverse_curves(
@@ -325,13 +333,13 @@ def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, A
 
 
 def corridor_qa(content: str, filename: str, curves: list[dict], excluded_curve_indexes: list[int] | None = None,
-                shared_inputs: dict | None = None) -> dict[str, Any]:
-    data = super_landxml.parse_landxml_text(content, filename)
+                shared_inputs: dict | None = None, alignment_index: int = 0) -> dict[str, Any]:
+    data = super_landxml.parse_landxml_text(content, filename, alignment_index)
     return super_qa.analyze_corridor(data, curves, excluded_curve_indexes, shared_inputs)
 
 
-def plan_view(content: str, filename: str, curves: list[dict]) -> dict[str, Any]:
-    data = super_landxml.parse_landxml_text(content, filename)
+def plan_view(content: str, filename: str, curves: list[dict], alignment_index: int = 0) -> dict[str, Any]:
+    data = super_landxml.parse_landxml_text(content, filename, alignment_index)
     preview = super_dxf.overlay_preview_model(curves, data)
     errors, issue_warnings = super_dxf.overlay_export_issues(curves, data)
     warnings = list(dict.fromkeys([*preview.get("warnings", []), *issue_warnings]))
@@ -355,7 +363,7 @@ def _distance_to_range(station_range: tuple[float, float], station: float) -> fl
 def project_load(content: str) -> dict[str, Any]:
     data = super_project.loads_project(content)
     source = data.get("landxml_source")
-    landxml = parse_landxml(source["content"], source["filename"]) if source else None
+    landxml = parse_landxml(source["content"], source["filename"], source.get("alignment_index", 0)) if source else None
     return {"project": data, "landxml": landxml}
 
 
@@ -409,13 +417,13 @@ def export_detail_dxf(curves: list[dict]) -> dict[str, Any]:
     return {"content": content, "warnings": list(dict.fromkeys(warnings + _calculation_warnings(curves)))}
 
 
-def export_overlay_dxf(curves: list[dict], landxml_source: dict[str, str]) -> dict[str, Any]:
+def export_overlay_dxf(curves: list[dict], landxml_source: dict[str, Any]) -> dict[str, Any]:
     from aashto_superelevation import validate_export_curves
     validate_export_curves(curves)
     source = super_project.normalize_landxml_source(landxml_source)
     if not source:
         raise ValueError("Select LandXML before exporting an overlay DXF.")
-    data = super_landxml.parse_landxml_text(source["content"], source["filename"])
+    data = super_landxml.parse_landxml_text(source["content"], source["filename"], source.get("alignment_index", 0))
     errors, diagnostic_warnings = super_dxf.overlay_export_issues(curves, data)
     if errors:
         raise ValueError("\n".join(errors))
@@ -451,9 +459,10 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
         "present_results": lambda: present_results(
             payload["results"], payload.get("direction", "left"), bool(payload.get("station_format", True))
         ),
-        "parse_landxml": lambda: parse_landxml(payload["content"], payload.get("filename", "alignment.xml")),
+        "parse_landxml": lambda: parse_landxml(payload["content"], payload.get("filename", "alignment.xml"), payload.get("alignment_index", 0)),
         "build_all_landxml_curves": lambda: build_all_landxml_curves(
-            payload["content"], payload.get("filename", "alignment.xml"), payload.get("shared_inputs", {})
+            payload["content"], payload.get("filename", "alignment.xml"), payload.get("shared_inputs", {}),
+            payload.get("excluded_curve_indexes", []), payload.get("alignment_index", 0)
         ),
         "coordinate_reverse_curves": lambda: coordinate_reverse_curves(
             payload.get("curves", []), payload.get("enabled", True), payload.get("pairs")
@@ -470,9 +479,10 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
             payload["content"], payload.get("filename", "alignment.xml"), payload.get("curves", []),
             payload.get("excluded_curve_indexes", []),
             payload.get("shared_inputs"),
+            payload.get("alignment_index", 0),
         ),
         "plan_view": lambda: plan_view(
-            payload["content"], payload.get("filename", "alignment.xml"), payload.get("curves", [])
+            payload["content"], payload.get("filename", "alignment.xml"), payload.get("curves", []), payload.get("alignment_index", 0)
         ),
         "project_load": lambda: project_load(payload["content"]),
         "project_save": lambda: project_save(payload["project"]),

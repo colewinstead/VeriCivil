@@ -72,6 +72,9 @@ button:disabled { opacity: .48; cursor: not-allowed; transform: none; }
 .source-card .button { width: 100%; margin-bottom: 8px; }
 .source-card p { margin: 6px 0; color: var(--muted); font-size: .7rem; line-height: 1.45; }
 .source-card button { width: 100%; margin-top: 5px; }
+.landxml-selection summary { cursor: pointer; font-size: .8rem; }
+.landxml-choices { max-height: 220px; overflow-y: auto; }
+.landxml-choices label { margin: 8px 0; }
 .source-card .reverse-curve-guidance { margin: 10px 0 0; padding: 10px; border: 1px solid #29433a; border-radius: 7px; background: #0d1d18; line-height: 1.45; }
 .source-card .reverse-curve-guidance strong { display: inline; color: var(--text); font-size: .72rem; }
 .curve-list { margin: 18px 0 10px; min-height: 210px; }
