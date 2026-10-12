@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const billingUsers = sqliteTable("billing_users", {
   id: text("id").primaryKey(),
@@ -99,3 +99,22 @@ export const analyticsEvents = sqliteTable("analytics_events", {
   uniqueIndex("analytics_events_session_event_idx").on(table.eventDay, table.sessionHash, table.calculatorId, table.eventName, table.eventDetail),
   index("analytics_events_day_calculator_idx").on(table.eventDay, table.calculatorId),
 ]);
+
+export const engineeringSamples = sqliteTable("engineering_samples", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventDay: text("event_day").notNull(),
+  standard: text("standard").notNull(),
+  speed: real("speed").notNull(),
+  radius: real("radius").notNull(),
+  pc: text("pc").notNull(),
+  pt: text("pt").notNull(),
+  sampleCount: integer("sample_count").notNull().default(1),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("engineering_samples_daily_idx").on(table.eventDay, table.standard, table.speed, table.radius, table.pc, table.pt)]);
+
+export const retainedLandxmlFiles = sqliteTable("retained_landxml", {
+  id: text("id").primaryKey(),
+  content: text("content").notNull(),
+  bytes: integer("bytes").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

@@ -36,6 +36,13 @@
       "when": 1786936108508,
       "tag": "0004_wandering_saracen",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790914582185,
+      "tag": "0005_strong_polaris",
+      "breakpoints": true
     }
   ]
 }

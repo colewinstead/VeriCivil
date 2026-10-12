@@ -30,6 +30,7 @@ export default function TermsPage() {
 
       <section><h2>4. Local engineering data</h2>
         <p>Project files, project names, LandXML, engineering inputs, calculations, and PDF, CSV, and DXF exports are processed locally on the user&apos;s device. They are not uploaded to authentication, billing, or entitlement services.</p>
+        <p>Separate product analytics collect DOT standard, speed, radius, and PC/PT stationing without account linkage. LandXML retention for product improvement is enabled by default with a control beside the file selector to disable it before selecting a file. Retained material must be authorized for sharing. The Privacy Policy describes retention and access.</p>
         <p>The customer controls local storage, access, backups, recovery, and secure transfer. Provider cannot recover files that remain only on the customer&apos;s device. A customer may voluntarily send selected material for support only through an authorized channel.</p>
       </section>
 
@@ -39,7 +40,7 @@ export default function TermsPage() {
       </section>
 
       <section><h2>6. Billing, renewal, cancellation, and refunds</h2>
-        <p>Pro costs <strong>$29 USD per month</strong> and renews automatically each month until canceled. The exact charge is displayed again in Stripe Checkout before payment. Customers may cancel through the Stripe-hosted billing portal. Cancellation takes effect at the end of the current paid period, and Pro remains available through that period.</p>
+        <p>New Pro subscriptions cost <strong>$0.99 USD per month (99 cents)</strong> and renew automatically each month until canceled. Existing subscriptions retain the price agreed at checkout unless separately changed. The exact charge is displayed again in Stripe Checkout before payment. Customers may cancel through the Stripe-hosted billing portal. Cancellation takes effect at the end of the current paid period, and Pro remains available through that period.</p>
         <p>Payments already made are nonrefundable and are not prorated except where applicable law requires otherwise. Taxes may be added where required. A checkout success page does not grant Pro; access begins after a verified billing event updates the entitlement ledger.</p>
       </section>
 

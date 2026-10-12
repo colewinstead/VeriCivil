@@ -84,7 +84,8 @@ class PilotOperationsTests(unittest.TestCase):
         self.assertIn("Payment and automated Pro activation remain disabled", operations)
         self.assertIn("incorrect-result suspicion", operations)
         self.assertIn("licensed professional", terms)
-        self.assertIn("Engineering work stays local", privacy)
+        self.assertIn("Local calculations and engineering analytics", privacy)
+        self.assertIn("Uncheck the retention control before selecting a file", privacy)
         self.assertIn("internal PE record", commercial)
 
         verifier = (ROOT / "scripts" / "verify_windows_release.ps1").read_text(encoding="utf-8")

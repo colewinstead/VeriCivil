@@ -17,7 +17,7 @@ import {
 } from "./entitlements";
 import SuperelevationAnalysis from "./SuperelevationAnalysis";
 import UpgradeNotice from "./UpgradeNotice";
-import { trackCalculatorEvent } from "@/lib/analytics/client";
+import { trackCalculatorEvent, trackEngineeringCalculation, retainLandxml } from "@/lib/analytics/client";
 
 type Dict = Record<string, any>;
 type RuntimeState = "loading" | "ready" | "error";
@@ -157,6 +157,22 @@ export default function CalculatorApp() {
   const [spiralLengthCheck, setSpiralLengthCheck] = useState<Dict | null>(null);
   const lengthCheckMode = !!inputs.manual_spiral_length_check && String(inputs.criteria_profile).startsWith("aashto") && !landxml;
   const [landxmlPreset, setLandxmlPreset] = useState(0);
+  const [allowLandxmlRetention, setAllowLandxmlRetention] = useState(false);
+  const [retentionReady, setRetentionReady] = useState(false);
+  const retentionAllowed = useRef(false);
+  const [retentionNotice, setRetentionNotice] = useState("");
+  useEffect(() => {
+    let allowed = navigator.doNotTrack !== "1";
+    try { allowed = allowed && localStorage.getItem("vericivil_landxml_retention_v1") !== "off"; } catch { /* Session preference still works. */ }
+    retentionAllowed.current = allowed;
+    setAllowLandxmlRetention(allowed);
+    setRetentionReady(true);
+  }, []);
+  const changeLandxmlRetention = (allowed: boolean) => {
+    retentionAllowed.current = allowed;
+    setAllowLandxmlRetention(allowed);
+    try { localStorage.setItem("vericivil_landxml_retention_v1", allowed ? "on" : "off"); } catch { /* Session preference still works. */ }
+  };
   const [excludedCurveIndexes, setExcludedCurveIndexes] = useState<number[]>([]);
   const [reverseCurvePairs, setReverseCurvePairs] = useState<number[][]>([]);
   const [calculationRequest, setCalculationRequest] = useState(0);
@@ -331,6 +347,7 @@ export default function CalculatorApp() {
       if (lastTrackedCalculation.current !== key) {
         lastTrackedCalculation.current = key;
         trackCalculatorEvent("superelevation", "calculation_completed");
+        trackEngineeringCalculation(inputs);
       }
     } else if (!result) {
       setCalculation(null);
@@ -384,6 +401,7 @@ export default function CalculatorApp() {
         if (lastTrackedCalculation.current !== calculationKey) {
           lastTrackedCalculation.current = calculationKey;
           trackCalculatorEvent("superelevation", "calculation_completed");
+          trackEngineeringCalculation(inputs);
         }
       } catch (reason) {
         if (sequence === calculationSequence.current) {
@@ -488,6 +506,8 @@ export default function CalculatorApp() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    // Capture choice before reading/parsing, and check again before transmission.
+    const retainAtSelection = retentionAllowed.current;
     if (landxml && !window.confirm(`Replace embedded ${landxml.source.filename} with ${file.name}? The saved project changes only when you save.`)) return;
     const content = await file.text();
     const result = await run("Reading LandXML", () => call("parse_landxml", { content, filename: file.name }));
@@ -496,6 +516,11 @@ export default function CalculatorApp() {
       setExcludedCurveIndexes([]);
       setNotice(`${file.name} is embedded in working project state. Save the project to persist it.`);
       applyPreset(0, result);
+      const retained = await retainLandxml(content, retainAtSelection && retentionAllowed.current);
+      setRetentionNotice(retained === "stored"
+        ? "A copy was retained for product improvement. Turning retention off affects future selections."
+        : retained === "skipped" ? "This LandXML was processed locally and was not sent for retention."
+        : "Import succeeded locally. No retention was confirmed (file limit 1 MiB, storage capacity, or connection unavailable).");
     }
   };
 
@@ -950,12 +975,12 @@ export default function CalculatorApp() {
       {runtime !== "ready" && <section className="runtime-gate" role="status">
         <div className="gate-card"><p className="eyebrow">Browser-only processing</p><h2>{runtime === "error" ? "The workspace could not start" : runtimeMessage}</h2>
           <div className="progress"><i style={{ width: `${progress}%` }} /></div>
-          <p>{runtime === "error" ? "Check your connection and retry. No project information was transmitted." : "Python and the engineering libraries are loading into this tab. Your project files never upload to a server."}</p>
+          <p>{runtime === "error" ? "Check your connection and retry." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
           {runtime === "error" && <button className="primary" onClick={startWorker}>Retry</button>}
         </div>
       </section>}
 
-      <div className="privacy-strip"><strong>Local processing</strong><span>LandXML, calculations, and exports remain on this device.</span><span className="version">App {manifest?.application_version || "…"} · Engine {manifest?.calculation_engine_version || "…"}</span></div>
+      <div className="privacy-strip"><strong>Local calculations</strong><span>DOT standard, speed, radius, and PC/PT are collected without account linkage. LandXML retention is controlled below. <a href="/privacy">Privacy details</a></span><span className="version">App {manifest?.application_version || "…"} · Engine {manifest?.calculation_engine_version || "…"}</span></div>
 
       {(error || notice) && <div className={`toast ${error ? "error" : "notice"}`} role="alert"><strong>{error ? "Action needed" : "Complete"}</strong><span>{error || notice}</span><button aria-label="Dismiss message" onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
 
@@ -967,6 +992,9 @@ export default function CalculatorApp() {
           {input("project_name", "Project name")}{input("route_name", "Route name")}
           <div className="source-card">
             <div><p className="eyebrow">Alignment source</p><strong>{landxml?.source?.filename || "No LandXML selected"}</strong></div>
+            <label className="retention-choice"><input type="checkbox" checked={allowLandxmlRetention} disabled={!retentionReady || (typeof navigator !== "undefined" && navigator.doNotTrack === "1")} onChange={event => changeLandxmlRetention(event.target.checked)} /> Allow retention of my LandXML for product improvement</label>
+            <p className="retention-details">Enabled by default. Uncheck before selecting a file to keep its contents on this device. Retained copies may contain project names and coordinates, are limited to 1 MiB, and expire after 30 days. Only administrators can access them. Only share files you have permission to provide. This choice affects future selections; calculations and exports work either way.</p>
+            {retentionNotice && <p role="status">{retentionNotice}</p>}
             {allows(entitlement, CAPABILITIES.landxml) ? <label className="button accent">{landxml ? "Replace XML" : "Select LandXML"}<input type="file" accept=".xml,text/xml,application/xml" onChange={selectLandxml} /></label> : <button className="button accent" onClick={() => requestCapability(CAPABILITIES.landxml)}>Select LandXML {proChip(CAPABILITIES.landxml)}</button>}
             {landxml && <><p>{landxml.summary.alignment_name || "Unnamed alignment"} · {landxml.summary.linear_unit || "units undeclared"}</p><p>CRS: {landxml.summary.coordinate_system?.display_name || "Not declared in LandXML"}</p><p>{landxml.summary.curve_count} curves · {excludedCurveIndexes.length} excluded from QA · SHA {landxml.source.sha256.slice(0, 10)}…</p><button onClick={addAll} disabled={!inputs.speed}>Add all LandXML curves</button></>}
             {reverseOverlapFindings.map((finding: Dict) => <p className="reverse-curve-guidance" role="status" key={finding.curve_indexes.join("-")}><strong>{finding.message}</strong><br/>{finding.details}</p>)}

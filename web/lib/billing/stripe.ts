@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import releaseInfo from "@/app/generated/release-info.json";
 import { getBillingConfig } from "./config";
 import { PRO_PRICE } from "./legal";
+import { matchesProPrice } from "./pro-price";
 
 export function getStripe() {
   const config = getBillingConfig();
@@ -18,12 +19,7 @@ export function getStripe() {
 
 export async function verifyConfiguredProPrice(stripe: Stripe, priceId: string) {
   const price = await stripe.prices.retrieve(priceId);
-  const valid = price.active
-    && price.currency === PRO_PRICE.currency
-    && price.unit_amount === PRO_PRICE.unitAmount
-    && price.type === "recurring"
-    && price.recurring?.interval === PRO_PRICE.interval
-    && price.recurring.interval_count === 1;
+  const valid = matchesProPrice(price);
   if (!valid) {
     throw new Error(`The configured Stripe price must be ${PRO_PRICE.display} USD and billed monthly.`);
   }
