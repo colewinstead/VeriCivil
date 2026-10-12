@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -258,6 +258,8 @@ class LandXMLData:
     coordinate_system: CoordinateSystemInfo | None
     warnings: list[str]
     _segments: list[LineSegment | ArcSegment | SpiralSegment]
+    alignment_index: int = 0
+    alignments: list[dict] = field(default_factory=list)
 
     def station_range(self) -> tuple[float, float]:
         return self.start_station, self.start_station + sum(segment.length for segment in self._segments)
@@ -384,12 +386,15 @@ class LandXMLData:
         return records
 
 
-def _parse_landxml_root(root: ET.Element, source_name: str) -> LandXMLData:
+def _parse_landxml_root(root: ET.Element, source_name: str, alignment_index: int = 0) -> LandXMLData:
     file_path = Path(source_name)
 
-    alignment = root.find(".//lx:Alignment", NS)
-    if alignment is None:
+    alignments = root.findall(".//lx:Alignment", NS)
+    if not alignments:
         raise ValueError("No Alignment node found in LandXML.")
+    if type(alignment_index) is not int or not 0 <= alignment_index < len(alignments):
+        raise ValueError("Select a valid LandXML alignment.")
+    alignment = alignments[alignment_index]
 
     coord_geom = alignment.find("lx:CoordGeom", NS)
     if coord_geom is None:
@@ -511,7 +516,7 @@ def _parse_landxml_root(root: ET.Element, source_name: str) -> LandXMLData:
     if station_equations:
         warnings.append("Station equations found; displayed civil stationing will be applied to inputs and export labels.")
 
-    superelevation_nodes = [dict(node.attrib) for node in root.findall(".//lx:Superelevation", NS)]
+    superelevation_nodes = [dict(node.attrib) for node in alignment.findall(".//lx:Superelevation", NS)]
     coordinate_system = _parse_coordinate_system(_coordinate_system_node(root))
     if coordinate_system.status == "missing":
         warnings.append("LandXML does not declare a coordinate system; overlay DXF coordinates will be preserved unchanged.")
@@ -535,22 +540,25 @@ def _parse_landxml_root(root: ET.Element, source_name: str) -> LandXMLData:
         coordinate_system=coordinate_system,
         warnings=warnings,
         _segments=segments,
+        alignment_index=alignment_index,
+        alignments=[{"alignment_index": index, "alignment_name": node.get("name") or "Unnamed alignment"}
+                    for index, node in enumerate(alignments)],
     )
 
 
-def parse_landxml_text(content: str, source_name: str = "alignment.xml") -> LandXMLData:
+def parse_landxml_text(content: str, source_name: str = "alignment.xml", alignment_index: int = 0) -> LandXMLData:
     """Parse LandXML already held in memory, as required by browser clients."""
     try:
         root = ET.fromstring(content)
     except ET.ParseError as exc:
         raise ValueError(f"The LandXML is not valid XML (line {exc.position[0]}, column {exc.position[1]}).") from exc
-    return _parse_landxml_root(root, source_name)
+    return _parse_landxml_root(root, source_name, alignment_index)
 
 
-def load_landxml(path: str | Path) -> LandXMLData:
+def load_landxml(path: str | Path, alignment_index: int = 0) -> LandXMLData:
     file_path = Path(path)
     try:
         tree = ET.parse(file_path)
     except ET.ParseError as exc:
         raise ValueError(f"The LandXML is not valid XML (line {exc.position[0]}, column {exc.position[1]}).") from exc
-    return _parse_landxml_root(tree.getroot(), str(file_path))
+    return _parse_landxml_root(tree.getroot(), str(file_path), alignment_index)

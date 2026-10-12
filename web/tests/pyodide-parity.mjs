@@ -46,6 +46,19 @@ const browser = (operation, input) => {
 const spacingXml = await readFile(new URL("../../tests/fixtures/reverse_spacing_synthetic.xml", import.meta.url), "utf8");
 const spacingInputs = { speed: "30", e_manual: "0.06", Lr_manual: "100", Lt_manual: "25" };
 const spacingCurves = browser("build_all_landxml_curves", { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs });
+const selectionRequest = { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs, excluded_curve_indexes: [0] };
+const selectedCurves = browser("build_all_landxml_curves", selectionRequest);
+assert.deepEqual(selectedCurves, native("build_all_landxml_curves", selectionRequest));
+assert.equal(selectedCurves.length, 1);
+assert.equal(selectedCurves[0].meta.landxml_curve_index, 1);
+const multiXml = spacingXml.replace(/(<Alignment\b[\s\S]*?<\/Alignment>)/, "$1$1");
+const multiRequest = { ...selectionRequest, content: multiXml, alignment_index: 1 };
+assert.deepEqual(browser("parse_landxml", multiRequest), native("parse_landxml", multiRequest));
+assert.equal(browser("parse_landxml", multiRequest).source.alignment_index, 1);
+assert.equal(browser("parse_landxml", multiRequest).alignments.length, 2);
+const multiCurves = browser("build_all_landxml_curves", multiRequest);
+assert.deepEqual(multiCurves, native("build_all_landxml_curves", multiRequest));
+assert.deepEqual(browser("corridor_qa", { ...multiRequest, curves: multiCurves }), native("corridor_qa", { ...multiRequest, curves: multiCurves }));
 for (const curves of [[], spacingCurves]) {
   const request = { entitlement: proEntitlement, content: spacingXml, curves, shared_inputs: spacingInputs };
   const report = browser("corridor_qa", request);

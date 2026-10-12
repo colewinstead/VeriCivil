@@ -172,20 +172,23 @@ def normalize_project(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def make_landxml_source(filename: str, content: str) -> dict[str, str]:
+def make_landxml_source(filename: str, content: str, alignment_index: int = 0) -> dict[str, Any]:
     """Create the portable, integrity-checked LandXML record introduced in schema v4."""
     if not isinstance(content, str) or not content.strip():
         raise ProjectFormatError("Embedded LandXML content must be non-empty text.")
+    if type(alignment_index) is not int or alignment_index < 0:
+        raise ProjectFormatError("LandXML alignment index must be a nonnegative integer.")
     safe_name = Path(str(filename or "alignment.xml")).name or "alignment.xml"
     return {
         "filename": safe_name,
         "encoding": "utf-8",
         "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         "content": content,
+        "alignment_index": alignment_index,
     }
 
 
-def normalize_landxml_source(value: object) -> dict[str, str] | None:
+def normalize_landxml_source(value: object) -> dict[str, Any] | None:
     if value in (None, ""):
         return None
     if not isinstance(value, dict):
@@ -193,7 +196,8 @@ def normalize_landxml_source(value: object) -> dict[str, str] | None:
     encoding = str(value.get("encoding") or "utf-8").lower()
     if encoding != "utf-8":
         raise ProjectFormatError("Embedded LandXML must use UTF-8 encoding.")
-    source = make_landxml_source(str(value.get("filename") or "alignment.xml"), value.get("content"))
+    source = make_landxml_source(str(value.get("filename") or "alignment.xml"), value.get("content"),
+                                 value.get("alignment_index", 0))
     supplied_hash = str(value.get("sha256") or "").lower()
     if supplied_hash and supplied_hash != source["sha256"]:
         raise ProjectFormatError("Embedded LandXML failed its SHA-256 integrity check.")

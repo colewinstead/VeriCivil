@@ -1985,7 +1985,8 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
         try:
             if self._landxml_source:
                 data = super_landxml.parse_landxml_text(
-                    self._landxml_source["content"], self._landxml_source["filename"]
+                    self._landxml_source["content"], self._landxml_source["filename"],
+                    self._landxml_source.get("alignment_index", 0)
                 )
             else:
                 data = super_landxml.load_landxml(path)

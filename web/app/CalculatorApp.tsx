@@ -453,7 +453,7 @@ export default function CalculatorApp() {
     let active = true;
     setCorridorQa(null);
     const timer = window.setTimeout(() => {
-      call("corridor_qa", { content: landxml.source.content, filename: landxml.source.filename, curves, excluded_curve_indexes: excludedCurveIndexes, shared_inputs: corridorInputs })
+      call("corridor_qa", { content: landxml.source.content, filename: landxml.source.filename, alignment_index: landxml.source.alignment_index, curves, excluded_curve_indexes: excludedCurveIndexes, shared_inputs: corridorInputs })
         .then((value) => { if (active) setCorridorQa(value); })
         .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     }, AUTO_CALC_DELAY_MS);
@@ -466,7 +466,7 @@ export default function CalculatorApp() {
       return;
     }
     let active = true;
-    call("plan_view", { content: landxml.source.content, filename: landxml.source.filename, curves: diagramCurves })
+    call("plan_view", { content: landxml.source.content, filename: landxml.source.filename, alignment_index: landxml.source.alignment_index, curves: diagramCurves })
       .then((value) => { if (active) setPlanView(value); })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
@@ -525,6 +525,31 @@ export default function CalculatorApp() {
   };
 
   const curveObject = () => !lengthCheckMode && calculation ? { results: calculation.results, meta, notes: inputs.curve_notes || "" } : null;
+
+  const selectAlignment = async (alignmentIndex: number) => {
+    if (!landxml) return;
+    if (curves.length && !window.confirm("Switch alignment and clear the calculated curves? Save this project first to keep them.")) return;
+    const result = await run("Reading alignment", () => call("parse_landxml", {
+      content: landxml.source.content, filename: landxml.source.filename, alignment_index: alignmentIndex,
+    }));
+    if (!result) return;
+    setLandxml(result);
+    setCurves([]);
+    setReverseCurvePairs([]);
+    setExcludedCurveIndexes([]);
+    setBlockedFindings([]);
+    setSelectedCurve(-1);
+    setDiagramInspector(null);
+    setLookupResult(null);
+    if (result.curve_presets.length) applyPreset(0, result);
+    else {
+      setLandxmlPreset(-1);
+      setCalculation(null);
+      setInputs(current => ({ ...current, alignment_name: result.summary.alignment_name, curve_name: "", pc: "", pt: "", radius: "", geometry_provenance: {}, station_equations: [], alignment_station_range: null }));
+      setDirty(true);
+    }
+    setNotice(`Working with ${result.summary.alignment_name || "Unnamed alignment"}.`);
+  };
 
   const includeSourceCurve = (curve: Dict) => {
     const sourceIndex = curve.meta?.landxml_curve_index;
@@ -675,13 +700,14 @@ export default function CalculatorApp() {
     const result = await run("Building all curves", () => call("build_all_landxml_curves", {
       content: landxml.source.content,
       filename: landxml.source.filename,
+      alignment_index: landxml.source.alignment_index,
       shared_inputs: inputs,
+      excluded_curve_indexes: excludedCurveIndexes,
     }));
     if (result) {
       setBlockedFindings([]);
       setCurves(result);
       setReverseCurvePairs([]);
-      setExcludedCurveIndexes([]);
       setSelectedCurve(result.length ? 0 : -1);
       if (result.length) await loadCurveFrom(result[0], 0);
       setDirty(true);
@@ -996,7 +1022,23 @@ export default function CalculatorApp() {
             <p className="retention-details">Enabled by default. Uncheck before selecting a file to keep its contents on this device. Retained copies may contain project names and coordinates, are limited to 1 MiB, and expire after 30 days. Only administrators can access them. Only share files you have permission to provide. This choice affects future selections; calculations and exports work either way.</p>
             {retentionNotice && <p role="status">{retentionNotice}</p>}
             {allows(entitlement, CAPABILITIES.landxml) ? <label className="button accent">{landxml ? "Replace XML" : "Select LandXML"}<input type="file" accept=".xml,text/xml,application/xml" onChange={selectLandxml} /></label> : <button className="button accent" onClick={() => requestCapability(CAPABILITIES.landxml)}>Select LandXML {proChip(CAPABILITIES.landxml)}</button>}
-            {landxml && <><p>{landxml.summary.alignment_name || "Unnamed alignment"} · {landxml.summary.linear_unit || "units undeclared"}</p><p>CRS: {landxml.summary.coordinate_system?.display_name || "Not declared in LandXML"}</p><p>{landxml.summary.curve_count} curves · {excludedCurveIndexes.length} excluded from QA · SHA {landxml.source.sha256.slice(0, 10)}…</p><button onClick={addAll} disabled={!inputs.speed}>Add all LandXML curves</button></>}
+            {landxml && <><p>{landxml.summary.alignment_name || "Unnamed alignment"} · {landxml.summary.linear_unit || "units undeclared"}</p><p>CRS: {landxml.summary.coordinate_system?.display_name || "Not declared in LandXML"}</p><p>{landxml.summary.curve_count} curves · {excludedCurveIndexes.length} excluded from QA · SHA {landxml.source.sha256.slice(0, 10)}…</p>
+              {landxml.alignments.length > 1 && <label className="field"><span>Alignment</span><select value={landxml.source.alignment_index} disabled={!!busy} onChange={event => selectAlignment(Number(event.target.value))}>
+                {landxml.alignments.map((alignment: Dict) => <option key={alignment.alignment_index} value={alignment.alignment_index}>{alignment.alignment_index + 1}. {alignment.alignment_name}</option>)}
+              </select></label>}
+              <details className="landxml-selection" open>
+                <summary>Choose curves to add</summary>
+                <p>Uncheck curves you do not need. To exclude an added curve, select it in Calculated curves and use Remove.</p>
+                <div className="landxml-choices">{landxml.curve_presets.map((preset: Dict, index: number) => <label className="retention-choice" key={preset.landxml_curve_id}>
+                  <input type="checkbox" checked={!excludedCurveIndexes.includes(index)} disabled={!!busy || curves.some(curve => curve.meta?.landxml_curve_index === index)} onChange={event => {
+                    setExcludedCurveIndexes(current => event.target.checked ? current.filter(value => value !== index) : [...current, index].sort((a, b) => a - b));
+                    setDirty(true);
+                  }} />
+                  <span>{preset.curve_name} · {preset.curve_direction} · R {preset.radius_ft} ft</span>
+                </label>)}</div>
+              </details>
+              <button onClick={addAll} disabled={!inputs.speed || !!busy || excludedCurveIndexes.length === landxml.curve_presets.length}>Add selected LandXML curves</button>
+            </>}
             {reverseOverlapFindings.map((finding: Dict) => <p className="reverse-curve-guidance" role="status" key={finding.curve_indexes.join("-")}><strong>{finding.message}</strong><br/>{finding.details}</p>)}
           </div>
           <div className="curve-list"><div className="list-title"><h3>Calculated curves</h3><span>{curves.length}</span></div>

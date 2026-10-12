@@ -1135,7 +1135,7 @@ class LocalORDGeometryValidation(unittest.TestCase):
             self.skipTest(
                 "Private real ORD file is not distributed; native ORD round trip remains separate."
             )
-        data = super_landxml.parse_landxml_text(path.read_text())
+        data = super_landxml.parse_landxml_text(path.read_text(encoding="utf-8-sig"))
         self.assertEqual((len(data.spirals), len(data.curves)), (8, 4))
         self.assertEqual(data.linear_unit, "USSurveyFoot")
         station = data.start_station

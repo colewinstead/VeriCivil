@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import copy
 import unittest
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import super_project
 import super_service
+import super_landxml
 from commercial_entitlements import LocalDevelopmentEntitlementProvider, Plan
 
 
@@ -145,6 +148,69 @@ class WebServiceTests(unittest.TestCase):
         )
         self.assertTrue(diagram["profiles"]["left"])
         self.assertEqual(qa["status"], "pass")
+
+    def test_landxml_selection_skips_blocked_curves_and_keeps_source_identity(self):
+        root = ET.fromstring(FIXTURE.read_text(encoding="utf-8"))
+        root.find(".//{*}Curve").set("radius", "400")
+        content = ET.tostring(root, encoding="unicode")
+        inputs = {**self.inputs(), "criteria_profile": "aashto-green-book-2018-2019-10",
+                  "lane_widths": "12,12", "runoff_tangent_percent": "50"}
+        with self.assertRaisesRegex(ValueError, "below Table"):
+            super_service.build_all_landxml_curves(content, FIXTURE.name, inputs)
+        curves = super_service.dispatch("build_all_landxml_curves", json.dumps(self.pro_payload({
+            "content": content, "shared_inputs": inputs, "excluded_curve_indexes": [0],
+        })))
+        self.assertEqual(len(curves), 1)
+        self.assertEqual(curves[0]["meta"]["landxml_curve_index"], 1)
+        self.assertEqual(curves[0]["meta"]["landxml_curve_id"], "curve-2")
+        report = super_service.corridor_qa(content, FIXTURE.name, curves, [0], inputs)
+        self.assertEqual(report["status"], "pass")
+        with self.assertRaises(ValueError) as blocked:
+            super_service.build_all_landxml_curves(content, FIXTURE.name,
+                                                 {**inputs, "runoff_tangent_percent": "100"}, [0])
+        self.assertTrue(blocked.exception.findings)
+        self.assertTrue(all(finding["curve_indexes"] == [1] for finding in blocked.exception.findings))
+        with self.assertRaisesRegex(ValueError, "below Table"):
+            super_service.build_all_landxml_curves(content, FIXTURE.name, inputs, [1])
+        for excluded in ([0, 1], [-1], [2], [True], "0"):
+            with self.subTest(excluded=excluded), self.assertRaises(ValueError):
+                super_service.build_all_landxml_curves(content, FIXTURE.name, inputs, excluded)
+
+    def test_multiple_landxml_alignments_keep_geometry_qa_exports_and_saved_selection(self):
+        root = ET.fromstring(FIXTURE.read_text(encoding="utf-8"))
+        alignment = root.find(".//{*}Alignment")
+        second = copy.deepcopy(alignment)
+        second.set("name", "Ramp B")
+        second.set("staStart", "50000")
+        for point in second.iter():
+            if point.tag.rsplit("}", 1)[-1] in {"Start", "End", "Center"}:
+                north, east, z = map(float, point.text.split())
+                point.text = f"{north + 10000} {east + 20000} {z}"
+        ET.SubElement(alignment, "{http://www.landxml.org/schema/LandXML-1.2}Superelevation", {"name": "First only"})
+        root.find(".//{*}Alignments").append(second)
+        content = ET.tostring(root, encoding="unicode")
+        payload = self.pro_payload({"content": content, "alignment_index": 1})
+        parsed = super_service.dispatch("parse_landxml", json.dumps(payload))
+        self.assertEqual([a["alignment_name"] for a in parsed["alignments"]], ["SR 82", "Ramp B"])
+        self.assertEqual(parsed["summary"]["start_station"], 50000)
+        data = super_landxml.parse_landxml_text(content, alignment_index=1)
+        self.assertEqual(data.superelevation_nodes, [])
+        curves = super_service.dispatch("build_all_landxml_curves", json.dumps({**payload, "shared_inputs": self.inputs()}))
+        self.assertTrue(all(c["meta"]["alignment_name"] == "Ramp B" for c in curves))
+        report = super_service.dispatch("corridor_qa", json.dumps({**payload, "curves": curves}))
+        self.assertEqual(report["status"], "pass")
+        preview = super_service.dispatch("plan_view", json.dumps({**payload, "curves": curves}))
+        self.assertEqual(preview["alignment_name"], "Ramp B")
+        self.assertFalse(preview["errors"])
+        self.assertIn(b"SECTION", super_service.export_overlay_dxf(curves, parsed["source"])["content"])
+        saved = super_service.project_save({"version": 5, "vars": self.inputs(), "curves": curves, "landxml_source": parsed["source"]})
+        restored = super_service.project_load(saved)["landxml"]
+        self.assertEqual(restored["source"]["alignment_index"], 1)
+        self.assertEqual(restored["summary"]["alignment_name"], "Ramp B")
+        self.assertEqual(restored["source"]["content"], content)
+        for index in (-1, 2, True, "1"):
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                super_service.parse_landxml(content, alignment_index=index)
 
     def test_present_results_accepts_pyodide_omitted_optional_values(self):
         results = self.calculate_results_without_none_values()
