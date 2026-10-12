@@ -784,15 +784,22 @@ export default function CalculatorApp() {
     setLandxml(loaded.landxml || null);
 
     const hasLandxmlCurves = (loaded.landxml?.curve_presets?.length || 0) > 0;
+    const firstIncludedPreset = loaded.landxml?.curve_presets?.findIndex((_: Dict, index: number) =>
+      !(loaded.project.excluded_landxml_curve_indexes || []).includes(index)) ?? -1;
     const firstLandxmlCurve = hasLandxmlCurves
-      ? restoredCurves.findIndex((curve: Dict) => Number(curve.meta?.landxml_curve_index) === 0)
+      ? restoredCurves.findIndex((curve: Dict) => curve.meta?.landxml_curve_index != null)
       : -1;
 
     if (firstLandxmlCurve >= 0) {
       await loadCurveFrom(restoredCurves[firstLandxmlCurve], firstLandxmlCurve, restoredInputs.station_format);
-    } else if (hasLandxmlCurves) {
-      applyPreset(0, loaded.landxml);
+    } else if (firstIncludedPreset >= 0) {
+      applyPreset(firstIncludedPreset, loaded.landxml);
       setSelectedCurve(-1);
+    } else if (hasLandxmlCurves) {
+      setCalculation(null);
+      setLandxmlPreset(-1);
+      setSelectedCurve(-1);
+      setInputs(current => ({ ...current, pc: "", pt: "", radius: "" }));
     } else if (loaded.project.last_results) {
       const presented = await run("Restoring results", () => call("present_results", { results: loaded.project.last_results, direction: loaded.project.last_meta?.curve_direction || "left", station_format: loaded.project.vars?.station_format !== false }));
       if (!presented) return;
