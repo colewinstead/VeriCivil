@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { AnalyticsCalculator, AnalyticsEventInput } from "./events";
+import { loadEngineeringAnalytics, type EngineeringReport } from "./engineering-store";
 
 export type AnalyticsTotals = {
   openedSessions: number;
@@ -16,6 +17,7 @@ export type AnalyticsReport = {
   summary: AnalyticsTotals;
   calculators: Array<AnalyticsTotals & { calculator: AnalyticsCalculator }>;
   daily: Array<AnalyticsTotals & { day: string }>;
+  engineering: EngineeringReport;
 };
 
 export function emptyUsageAnalytics(days = 30): AnalyticsReport {
@@ -26,6 +28,7 @@ export function emptyUsageAnalytics(days = 30): AnalyticsReport {
     summary: { openedSessions: 0, calculatingSessions: 0, calculations: 0, errors: 0, exports: 0 },
     calculators: [],
     daily: [],
+    engineering: { calculations: [], files: [] },
   };
 }
 
@@ -102,5 +105,6 @@ export async function loadUsageAnalytics(days = 30): Promise<AnalyticsReport> {
     summary: totals(summaryResult.results[0]),
     calculators: calculatorResult.results.map((row: AggregateRow) => ({ calculator: row.calculator_id as AnalyticsCalculator, ...totals(row) })),
     daily: dailyResult.results.map((row: AggregateRow) => ({ day: row.event_day || "", ...totals(row) })),
+    engineering: await loadEngineeringAnalytics(boundedDays),
   };
 }

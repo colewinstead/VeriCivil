@@ -20,7 +20,7 @@ export default function Home() {
           <h1>Roadway software<br /><em>you can verify.</em></h1>
           <p>VeriCivil makes focused software for roadway engineers and inspectors: browser-based engineering tools and RoadStation for iPhone. Each tool keeps its assumptions and limits in view.</p>
           <div className="hero-actions"><a className="marketing-button primary-action" href="/roadstation">Explore RoadStation <span>→</span></a><a className="marketing-button secondary-action" href="/calculators">Browse engineering tools <span>↗</span></a></div>
-          <div className="hero-trust"><span><i /> Files stay local</span><span><i /> Methods stay visible</span><span><i /> Engineering review required</span></div>
+          <div className="hero-trust"><span><i /> Calculations run locally</span><span><i /> Methods stay visible</span><span><i /> Engineering review required</span></div>
         </div>
         <div className="platform-hero-showcase" aria-label="Authentic Superelevation Calculator views">
           <a className="hero-capture hero-capture-main" href="/calculators/superelevation">
@@ -34,7 +34,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="platform-signal-strip" aria-label="VeriCivil product principles"><div><span>LOCAL</span><strong>Project files stay on device</strong></div><i>→</i><div><span>VISIBLE</span><strong>Assumptions and provenance</strong></div><i>→</i><div><span>TESTED</span><strong>Tested engineering logic</strong></div></section>
+      <section className="platform-signal-strip" aria-label="VeriCivil product principles"><div><span>LOCAL</span><strong>File retention is your choice</strong></div><i>→</i><div><span>VISIBLE</span><strong>Assumptions and provenance</strong></div><i>→</i><div><span>TESTED</span><strong>Tested engineering logic</strong></div></section>
 
       <section className="platform-product" id="products">
         <div className="platform-product-copy">

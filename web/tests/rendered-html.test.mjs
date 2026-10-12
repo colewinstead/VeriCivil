@@ -84,7 +84,7 @@ test("RoadStation product and release resources keep the brand and positioning l
   assert.match(supportHtml, /support@vericivil\.com/);
   assert.match(privacyHtml, /not sent to the developer/);
   assert.match(privacyHtml, /operated by CW Aerial Media LLC under the VeriCivil brand/);
-  assert.match(privacyHtml, /Effective October 9, 2026/);
+  assert.match(privacyHtml, /Effective October 11, 2026/);
   for (const asset of ["sample.landxml", "inspection.webp", "projects.webp", "crs.webp", "field-position.webp", "og.png"]) {
     await access(new URL(`../public/roadstation/${asset}`, import.meta.url));
   }
@@ -185,10 +185,11 @@ test("renders public legal pages and branded signed-out account access", async (
   for (const html of [terms, privacy]) {
     assert.match(html, /CW Aerial Media LLC/);
     assert.match(html, /VeriCivil brand/);
-    assert.match(html, /Effective (?:<!-- -->)?October 9, 2026/);
+    assert.match(html, /Effective (?:<!-- -->)?October 11, 2026/);
   }
-  assert.match(terms, /\$29 USD per month/i);
-  assert.match(terms, /renews automatically/i);
+  assert.match(terms, /\$0\.99 USD per month \(99 cents\)/i);
+  assert.match(terms, /Existing subscriptions retain the price agreed at checkout/i);
+  assert.match(terms, /renew(?:s)? automatically/i);
   assert.match(terms, /nonrefundable/i);
   assert.match(terms, /licensed professional responsible for the project/i);
   assert.match(privacy, /not automatically uploaded/i);
@@ -280,8 +281,22 @@ test("records bounded anonymous calculator usage for the protected admin dashboa
   assert.match(analyticsRoute, /requireSameOrigin/);
   assert.match(adminRoute, /isProductAdmin/);
   assert.match(adminClient, /Calculator usage/);
-  assert.match(adminClient, /No project names, engineering inputs/);
+  assert.match(adminClient, /Engineering statistics exclude names, account identifiers/);
   assert.match(privacy, /Privacy-preserving product analytics/);
+});
+
+test("retained LandXML downloads deny unauthenticated visitors", async () => {
+  const response = await render("/api/admin/analytics/landxml/018f47a2-9b2d-7cc1-8db1-6e9f8f81b218");
+  assert.equal(response.status, 403);
+});
+
+test("engineering analytics rejects cross-origin ingestion before accessing storage", async () => {
+  const { default: worker } = await import(new URL("../dist/server/index.js", import.meta.url));
+  const response = await worker.fetch(new Request("http://localhost/api/analytics/engineering", {
+    method: "POST", headers: { origin: "https://other.test", "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "landxml", retain: true, content: "<LandXML />" }),
+  }), { ASSETS: { fetch: async () => new Response(null, { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
+  assert.equal(response.status, 403);
 });
 
 test("payment activation is webhook-driven and does not grant from the success redirect", async () => {

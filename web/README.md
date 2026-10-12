@@ -1,6 +1,8 @@
 # Superelevation Calculator browser app
 
-This interface runs the repository's shared Python calculation, LandXML, project, PDF, CSV, and DXF modules inside a Web Worker through Pyodide. Calculation inputs and project files are processed locally in the tab and are not uploaded.
+This interface runs the repository's shared Python calculation, LandXML, project, PDF, CSV, and DXF modules inside a Web Worker through Pyodide. Processing runs locally. Separate product analytics collect DOT standard, speed, radius, and PC/PT without account/session linkage. LandXML retention is enabled by default with a persistent opt-out control before selection; Do Not Track suppresses both engineering statistics and file retention.
+
+Engineering analytics use the existing D1 binding and migration `0005_strong_polaris.sql`. Successful calculations contribute daily aggregate input combinations (90-day expiry, up to 10,000 rows). Successfully parsed LandXML up to 1 MiB can be retained (30-day expiry, up to 100 files). Limits or storage failures never prevent local import/calculation. Expired records are purged on the next engineering collection or admin report/download request; no scheduled purge is configured. Downloads and deletion require the existing configured product-admin authorization. Raw XML is served only as an attachment with `nosniff`; metadata from the raw file is never rendered as HTML. No account/session token, original filename, or IP address is stored with these records. Raw XML itself may still identify projects or people; removing account linkage does not anonymize it.
 
 ## Development
 
