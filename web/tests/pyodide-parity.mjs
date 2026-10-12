@@ -34,7 +34,8 @@ const aashtoInputs = {
   speed: "60", radius: "1500", area: "rural", e_manual: "0.06",
   lane_widths: "12,12", normal_crown: "0.02", runoff_tangent_percent: "70", curve_direction: "left",
 };
-const native = (operation, input) => JSON.parse(execFileSync("python3", ["-c",
+const nativePython = process.platform === "win32" ? "python" : "python3";
+const native = (operation, input) => JSON.parse(execFileSync(nativePython, ["-c",
   "import json,sys,super_service; print(json.dumps(super_service.dispatch(sys.argv[1],sys.stdin.read()),default=list))", operation],
 { cwd: new URL("../../", import.meta.url), input: JSON.stringify(input), encoding: "utf8" }));
 const browser = (operation, input) => {

@@ -84,7 +84,7 @@ test("RoadStation product and release resources keep the brand and positioning l
   assert.match(supportHtml, /support@vericivil\.com/);
   assert.match(privacyHtml, /not sent to the developer/);
   assert.match(privacyHtml, /operated by CW Aerial Media LLC under the VeriCivil brand/);
-  assert.match(privacyHtml, /Effective October 11, 2026/);
+  assert.match(privacyHtml, /Effective October 9, 2026/);
   for (const asset of ["sample.landxml", "inspection.webp", "projects.webp", "crs.webp", "field-position.webp", "og.png"]) {
     await access(new URL(`../public/roadstation/${asset}`, import.meta.url));
   }
