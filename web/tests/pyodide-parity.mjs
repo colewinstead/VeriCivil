@@ -141,7 +141,7 @@ assert.equal(wideRamp.results.Lr, 180);
 const wideRampExport = { entitlement: proEntitlement, curves: [{ results: wideRamp.results, meta: { curve_direction: "right" } }] };
 for (const engine of [native, browser]) {
   const report = engine("export_pdf", wideRampExport);
-  const text = execFileSync("python3", ["-c",
+  const text = execFileSync(nativePython, ["-c",
     "import io,sys; from pypdf import PdfReader; print(' '.join(' '.join(p.extract_text() for p in PdfReader(io.BytesIO(sys.stdin.buffer.read())).pages).split()))"],
   { input: Buffer.from(report.content), encoding: "utf8" });
   for (const phrase of ["Criteria AASHTO Green Book 2018 (October 2019 errata)", "Rotated width (max) 16.00 ft", "Lane-width ratio (to 12 ft) 1.3333", "Lane adjustment factor 1.0000"]) {
@@ -191,12 +191,12 @@ const rampCurve = { results: ramp.results, meta: { curve_direction: "left" } };
 const rampExport = { entitlement: proEntitlement, curves: [rampCurve] };
 assert.deepEqual(browser("export_ord_csv", rampExport), native("export_ord_csv", rampExport));
 assert.deepEqual(Object.keys(browser("lookup", { results: ramp.results, direction: "left", station: "1000" }).station.slopes), ["Lane 1"]);
-const syntheticXml = execFileSync("python3", ["-c", "from test_aashto_criteria import synthetic_alignment; print(synthetic_alignment(200,300,'right')[0],end='')"], { cwd: new URL("../../", import.meta.url), encoding: "utf8" });
+const syntheticXml = execFileSync(nativePython, ["-c", "from test_aashto_criteria import synthetic_alignment; print(synthetic_alignment(200,300,'right')[0],end='')"], { cwd: new URL("../../", import.meta.url), encoding: "utf8" });
 assert.deepEqual(browser("parse_landxml", { entitlement: proEntitlement, content: syntheticXml, filename: "synthetic.xml" }), native("parse_landxml", { entitlement: proEntitlement, content: syntheticXml, filename: "synthetic.xml" }));
 pyodide.globals.set("synthetic_spiral_xml", syntheticXml);
 const coordinates = pyodide.runPython("[super_service.super_landxml.parse_landxml_text(synthetic_spiral_xml).xy_at_station(s) for s in (700,1100,1400)]");
 const xy = coordinates.toJs({ create_proxies: false }); coordinates.destroy();
-const expectedXy = JSON.parse(execFileSync("python3", ["-c", "import json,super_landxml,sys; d=super_landxml.parse_landxml_text(sys.stdin.read()); print(json.dumps([d.xy_at_station(s) for s in (700,1100,1400)]))"], { cwd: new URL("../../", import.meta.url), input: syntheticXml, encoding: "utf8" }));
+const expectedXy = JSON.parse(execFileSync(nativePython, ["-c", "import json,super_landxml,sys; d=super_landxml.parse_landxml_text(sys.stdin.read()); print(json.dumps([d.xy_at_station(s) for s in (700,1100,1400)]))"], { cwd: new URL("../../", import.meta.url), input: syntheticXml, encoding: "utf8" }));
 xy.forEach((point,i) => point.forEach((value,j) => assert.ok(Math.abs(value-expectedXy[i][j])<1e-7)));
 
 const payload = JSON.stringify({
