@@ -937,7 +937,7 @@ class ReviewedTableValidation(unittest.TestCase):
         cls.pack = criteria.built_in_tables()
 
     def test_embedded_criteria_matches_reviewed_local_workbook(self):
-        path = Path(__file__).parent / "docs/AASHTO Super Tables.xlsx"
+        path = Path(__file__).parent / "local/references/AASHTO Super Tables.xlsx"
         if not path.exists():
             self.skipTest("Source workbook absent; embedded boundaries remain covered.")
         source = criteria.import_workbook(base64.b64encode(path.read_bytes()).decode())
@@ -1045,7 +1045,7 @@ class ReviewedTableValidation(unittest.TestCase):
 
         path = (
             Path(__file__).parent
-            / "docs/AASHTO-a-Policy-on-Geometric-Design_unlocked.pdf"
+            / "local/references/AASHTO-a-Policy-on-Geometric-Design_unlocked.pdf"
         )
         if not path.exists():
             self.skipTest("Restricted source PDF is not distributed.")

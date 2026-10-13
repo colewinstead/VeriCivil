@@ -96,6 +96,8 @@ ORD CSV's verified LS/RS mapping supports two lanes about their common edge, or 
 
 ## Validation and outstanding acceptance
 
+Private source material belongs in the ignored `local/references/` folder: the Green Book PDF, `AASHTO Super Tables.xlsx`, its CSV, and reference screenshots. Local source-comparison tests read the PDF and workbook there and skip those private checks when the files are absent. Generated local reports are kept in `local/output/`. These files are not staged or published with the repository.
+
 Automated tests cover all five maximum-rate options, every locally available radius cell against the source PDF plus errata, all published rate boundaries, corrected runoff/equation agreement, gradient/lane factors, crown and pivot sequences, percentage placement, both spiral methods, unequal/short/long spirals, continuity, station equations/regions, invalid definitions, actual-lane exports, stale/overlap blocking, project/report diagnostics, entitlements, and existing MDOT/TDOT regressions. Native Python/Pyodide parity covers the new section and placement cases and independent synthetic clothoid coordinates. Restricted-source tests explicitly skip when their private inputs are absent.
 
 A local CROSSGATES ORD LandXML check evaluates eight spirals/four curve groups, compares evaluated endpoints to ORD-serialized endpoints, and checks the declared USSurveyFoot unit and station equation. This is **serialized-file geometry evidence**, not a native ORD/CAD overlay or corridor round trip. Private real-file content is not added to the repository.

@@ -197,7 +197,7 @@ console.log("16-ft ramp PDF values and criteria labels passed native/Pyodide che
 // Independently compare the embedded data with the private reviewed source when available.
 let localWorkbook;
 try {
-  localWorkbook = await readFile(new URL("../../docs/AASHTO Super Tables.xlsx", import.meta.url));
+  localWorkbook = await readFile(new URL("../../local/references/AASHTO Super Tables.xlsx", import.meta.url));
 } catch (error) {
   if (error.code !== "ENOENT") throw error;
   console.log("Licensed AASHTO workbook absent: private table parity skipped; synthetic selection cases passed.");

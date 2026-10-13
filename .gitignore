@@ -49,6 +49,7 @@ SuperElevation_legacy_*.exe
 /excel/
 
 # Local report assets and private fixture inputs
+/local/
 /Website pics/
 /tests/fixtures/cw.xml
 /tests/fixtures/sr82.json
