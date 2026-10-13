@@ -1,0 +1,113 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<LandXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.landxml.org/schema/LandXML-1.2 http://www.landxml.org/schema/landxml-1.2/LandXML-1.2.xsd" version="1.2" date="2026-10-12" time="12:06:59" xmlns="http://www.landxml.org/schema/LandXML-1.2">
+	<Units>
+		<Imperial areaUnit="squareFoot" linearUnit="USSurveyFoot" volumeUnit="cubicYard" temperatureUnit="fahrenheit" pressureUnit="inHG" directionUnit="radians" />
+	</Units>
+	<Application name="OpenRoads Designer" version="26.00.00.154" manufacturer="Bentley Systems, Inc." manufacturerURL="http://www.bentley.com" />
+	<CgPoints />
+	<Alignments>
+		<Alignment name="Road Name107" length="7965.0849372213725" state="proposed" staStart="0">
+			<CoordGeom name="Road Name107" state="proposed">
+				<Line dir="4.6219847045861195" length="106.24862554813561">
+					<Start>547304.72160946368 1721442.9710607177 0</Start>
+					<End>547198.90686973813 1721433.3788092781 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Line>
+				<Curve crvType="arc" rot="cw" radius="4763.3800797263584" length="546.81207933059363" chord="546.51188599499824">
+					<Start>547198.90686973813 1721433.3788092774 0</Start>
+					<Center>547628.95045097102 1716689.4508690392 0</Center>
+					<End>546658.35349935829 1721352.8971635145 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Curve crvType="arc" rot="ccw" radius="4787.3800797263584" length="157.15664750423582" chord="157.14959106901807">
+					<Start>546658.35349935864 1721352.8971635145 0</Start>
+					<Center>545682.86625420465 1726039.8399477077 0</Center>
+					<End>546503.99600715458 1721323.4054939512 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Curve crvType="arc" rot="cw" radius="8573.9667559463232" length="1172.9954818767346" chord="1172.0809210862465">
+					<Start>546503.99600715423 1721323.4054939512 0</Start>
+					<Center>547974.59977933532 1712876.4989313497 0</Center>
+					<End>545365.72596663842 1721043.9148850953 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Curve crvType="arc" rot="cw" radius="6710.0000000322188" length="706.96775031194397" chord="706.64079961739412">
+					<Start>545365.7259666383 1721043.9148850958 0</Start>
+					<Center>547407.43475576327 1714652.0821885336 0</Center>
+					<End>544704.84751600749 1720793.7531510601 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Curve crvType="arc" rot="cw" radius="1800" length="769.14414711029804" chord="763.30599098218852">
+					<Start>544704.84751600784 1720793.7531510605 0</Start>
+					<Center>545429.83366079757 1719146.2110150703 0</Center>
+					<End>544087.26341440238 1720345.1710367117 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Line dir="3.8705454241661328" length="1288.6140925508419">
+					<Start>544087.26341440238 1720345.1710367117 0</Start>
+					<End>543228.93186979543 1719384.0294035205 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Line>
+				<Curve crvType="arc" rot="cw" radius="1000" length="693.60513988103014" chord="679.78496241544167">
+					<Start>543228.9318697959 1719384.0294035203 0</Start>
+					<Center>543974.80422890419 1718717.9405026084 0</Center>
+					<End>542975.4288913575 1718753.2807728846 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Line dir="3.1769402842846608" length="1550.013421082574">
+					<Start>542975.42889135703 1718753.2807728846 0</Start>
+					<End>542920.65099812497 1717204.2355869883 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Line>
+				<Curve crvType="arc" rot="cw" radius="599.99999999999989" length="408.55087232209451" chord="400.70380583579492">
+					<Start>542920.65099812474 1717204.2355869876 0</Start>
+					<Center>543520.27620065294 1717183.0314248223 0</Center>
+					<End>543041.02220505953 1716822.0388934484 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Line dir="2.4960221637457694" length="200.00000000064395">
+					<Start>543041.02220505953 1716822.0388934484 0</Start>
+					<End>543161.35304885148 1716662.2875615836 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Line>
+				<Curve crvType="arc" rot="ccw" radius="399.99999999999994" length="214.97667970244336" chord="212.3987287264668">
+					<Start>543161.35304885102 1716662.2875615845 0</Start>
+					<Center>542841.85038512212 1716421.6258740018 0</Center>
+					<End>543239.51429548056 1716464.7931578918 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Curve>
+				<Line dir="3.0334638630003319" length="149.99999999980295">
+					<Start>543239.51429548056 1716464.7931578918 0</Start>
+					<End>543255.70202693983 1716315.6691915076 0</End>
+					<Feature>
+						<Property label="style" value="Alignment\Prop HA Conceptual" />
+					</Feature>
+				</Line>
+			</CoordGeom>
+		</Alignment>
+	</Alignments>
+</LandXML>

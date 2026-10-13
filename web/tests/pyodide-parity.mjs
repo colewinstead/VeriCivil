@@ -79,6 +79,35 @@ assert selection_checks.testsRun > 0
 `);
 console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
 
+pyodide.FS.mkdirTree("/app/tests/fixtures");
+pyodide.FS.writeFile("/app/tests/fixtures/compound_synthetic.xml", await readFile(new URL("../../tests/fixtures/compound_synthetic.xml", import.meta.url), "utf8"));
+pyodide.FS.writeFile("/app/test_compound_transitions.py", await readFile(new URL("../../test_compound_transitions.py", import.meta.url), "utf8"));
+pyodide.runPython(`
+from test_compound_transitions import CompoundTransitionTests
+compound_checks = unittest.TestResult()
+unittest.defaultTestLoader.loadTestsFromTestCase(CompoundTransitionTests).run(compound_checks)
+assert compound_checks.wasSuccessful(), repr(compound_checks.errors + compound_checks.failures)
+assert compound_checks.testsRun > 0
+`);
+const compoundXml = await readFile(new URL("../../tests/fixtures/compound_synthetic.xml", import.meta.url), "utf8");
+const compoundRequest = { entitlement: proEntitlement, content: compoundXml, shared_inputs: {
+  ...aashtoInputs, speed: "45", e_manual: "0.05", Lr_manual: "200", Lt_manual: "100",
+} };
+let compoundCurves = browser("build_all_landxml_curves", compoundRequest);
+assert.deepEqual(compoundCurves, native("build_all_landxml_curves", compoundRequest));
+const compoundEdit = { entitlement: proEntitlement, curves: compoundCurves, curve_index: 0,
+  inputs: { ...compoundCurves[0].results.inputs, speed: "45", radius: "1000", e_manual: "0.03" } };
+const editedCompound = browser("calculate", compoundEdit);
+assert.deepEqual(editedCompound, native("calculate", compoundEdit));
+compoundCurves[0].results = editedCompound.results;
+const compoundCoordination = { entitlement: proEntitlement, curves: compoundCurves, pairs: [] };
+compoundCurves = browser("coordinate_reverse_curves", compoundCoordination);
+assert.deepEqual(compoundCurves, native("coordinate_reverse_curves", compoundCoordination));
+assert.ok(Math.abs(compoundCurves[0].results.compound_curve_transitions.exit.length_ft - 80) < 1e-7);
+const compoundQa = { ...compoundRequest, curves: compoundCurves };
+assert.deepEqual(browser("corridor_qa", compoundQa), native("corridor_qa", compoundQa));
+console.log("Compound runoff regression checks and native/Pyodide batch, edit, coordination, and QA parity passed.");
+
 for (const maximum of [4, 6, 8, 10, 12]) {
   const request = { entitlement: proEntitlement, inputs: {
     ...aashtoInputs, e_manual: "", speed: 40, radius: 1824.076,

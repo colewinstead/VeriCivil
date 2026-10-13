@@ -44,6 +44,10 @@ def _linear_value(station: float, start_station: float, start_value: float, end_
 
 
 def _full_super_slopes(results: dict, direction: str) -> dict[str, float]:
+    section = results.get("section_transition")
+    if section:
+        bank_pct = float(section["target_signed_slope"]) * 100
+        return {"left": bank_pct, "right": -bank_pct}
     nc_pct = abs(float(results.get("inputs", {}).get("normal_crown", 0.02) or 0.02) * 100.0)
     e_pct = abs(float(results.get("e", 0.0) or 0.0) * 100.0)
     reverse_crown = str(results.get("crown_state", "")).lower().startswith("reverse")

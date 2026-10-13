@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2">
+  <Units><Imperial linearUnit="USSurveyFoot" directionUnit="radians" /></Units>
+  <Alignments><Alignment name="Synthetic compound" staStart="0" length="3670.353755551324">
+    <CoordGeom>
+      <Line length="500"><Start>0 0</Start><End>0 500</End></Line>
+      <Curve rot="ccw" radius="1000" length="1570.7963267948965">
+        <Start>0 500</Start><Center>1000 500</Center><End>1000 1500</End>
+      </Curve>
+      <Curve rot="ccw" radius="700" length="1099.5574287564276">
+        <Start>1000 1500</Start><Center>1000 800</Center><End>1700 800</End>
+      </Curve>
+      <Line length="500"><Start>1700 800</Start><End>1700 300</End></Line>
+    </CoordGeom>
+  </Alignment></Alignments>
+</LandXML>

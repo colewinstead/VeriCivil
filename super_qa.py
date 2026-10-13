@@ -126,6 +126,10 @@ def _source_map(results: dict) -> dict[str, dict]:
 
 
 def _criterion_for_segment(results: dict, start: dict, end: dict) -> dict:
+    station = (float(start["station_ft"]) + float(end["station_ft"])) / 2
+    for plan in results.get("compound_curve_transitions", {}).values():
+        if plan["start_ft"] <= station <= plan["end_ft"]:
+            return {"component": "Compound transition", "reference": plan["rule"], "mode": "project_input", "phase": "Compound runoff"}
     sources = _source_map(results)
     if results.get("transition_method")=="aashto_fixed_pivot":
         station=(float(start["station_ft"])+float(end["station_ft"]))/2
@@ -750,6 +754,19 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         ))
 
     alignment_start, alignment_end = data.station_range()
+    compound_sides = {}
+    compound_valid = True
+    if any(c.get("results", {}).get("compound_curve_transitions") for c in curves):
+        import aashto_superelevation
+        try:
+            aashto_superelevation.validate_export_curves(curves)
+        except ValueError as exc:
+            compound_valid = False
+            findings.append(_finding("INVALID_COMPOUND_TRANSITION", "block", str(exc)))
+    for i, j in super_batch.compound_pairs([c or {} for c in matched]):
+        if compound_valid and matched[i]["results"].get("compound_curve_transitions", {}).get("exit"):
+            compound_sides.setdefault(i, []).append("exit")
+            compound_sides.setdefault(j, []).append("entry")
     for index, curve in enumerate(matched):
         if curve is None:
             continue
@@ -772,7 +789,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 values={**results["inputs"],"linear_unit":data.linear_unit,
                         "geometry_provenance":{"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}}}
                 try:
-                    aashto_superelevation.calculate(values,data.station_equations,data.station_range())
+                    aashto_superelevation.calculate(values,data.station_equations,data.station_range(), compound_sides=tuple(compound_sides.get(index, [])))
                 except ValueError as exc:
                     for item in getattr(exc,"findings",[]) or [{"code":"INVALID_IMPORTED_TRANSITION","severity":"block","message":str(exc)}]:
                         if item["severity"]=="block":
@@ -833,6 +850,8 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                         findings.append(candidate)
             continue
         if _normal_crown_only(prior) or _normal_crown_only(following):
+            continue
+        if compound_valid and "exit" in compound_sides.get(prior_index, []) and "entry" in compound_sides.get(next_index, []):
             continue
         prior_coordination = (prior.get("results", {}) or {}).get("reverse_curve_coordination", {}) or {}
         pair_check = next(

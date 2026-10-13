@@ -52,7 +52,7 @@ def _station(values, key, label, equations, alignment_range):
     return station
 
 
-def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False) -> dict:
+def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False, compound_sides=()) -> dict:
     import Super
     from app_info import CALCULATION_ENGINE_VERSION
     from criteria_info import criteria_metadata
@@ -591,7 +591,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
             attained = pc_bank / e
             limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius)
-            if pc_bank >= limit:
+            if pc_bank >= limit and len(compound_sides) < 2:
                 finding(
                     "PC_BANK_LIMIT",
                     "block",
@@ -607,7 +607,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 }
             )
     full_start, full_end = (pc, pt) if spiral else (pc_full, pt_full)
-    if full_start > full_end + 1e-7:
+    if full_start > full_end + 1e-7 and not compound_sides:
         finding(
             "TRANSITION_OVERLAP",
             "block",
@@ -616,7 +616,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             full_start,
         )
     if alignment_range and (
-        start < alignment_range[0] - 1e-7 or end > alignment_range[1] + 1e-7
+        ("entry" not in compound_sides and start < alignment_range[0] - 1e-7)
+        or ("exit" not in compound_sides and end > alignment_range[1] + 1e-7)
     ):
         finding(
             "INSUFFICIENT_TANGENT",
@@ -641,7 +642,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 raise ValueError(
                     "Available tangent length must be finite and nonnegative."
                 )
-            if available is not None and tangent_demand > float(available) + 1e-7:
+            if side not in compound_sides and available is not None and tangent_demand > float(available) + 1e-7:
                 finding(
                     "INSUFFICIENT_TANGENT",
                     "block",
@@ -917,18 +918,45 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
 
 def validate_export_curves(curves: list[dict]) -> None:
     """Recheck saved engineering results and overlaps before affected exports."""
+    import copy
+    import super_batch
+    pairs = super_batch.compound_pairs(curves)
+    sides = {}
+    for i, j in pairs:
+        sides.setdefault(i, []).append("exit")
+        sides.setdefault(j, []).append("entry")
+    expected_curves = copy.deepcopy(curves)
+    for index, curve in enumerate(expected_curves):
+        result = curve.get("results", {})
+        if result.get("transition_method") == "aashto_fixed_pivot":
+            curve["results"] = calculate(result.get("inputs", {}), result.get("station_equations"),
+                                         result.get("alignment_station_range"), compound_sides=tuple(sides.get(index, [])))
+        elif index in sides or result.get("compound_curve_transitions"):
+            import Super
+            values = result["inputs"]
+            arguments = [str(values[key]) if values.get(key) is not None else "" for key in
+                         ("pc", "pt", "speed_mph", "radius_ft", "facility", "area_type", "lane_width_ft", "lanes_rotated",
+                          "e_manual", "friction_input", "relative_gradient_input", "normal_crown", "Lr_manual", "Lt_manual")]
+            curve["results"] = Super.calculate_superelevation(*arguments, result.get("station_equations"),
+                result.get("alignment_station_range"), values["criteria_profile"], profile_options=values,
+                compound_sides=tuple(sides.get(index, [])))
+    if pairs or any(c.get("results", {}).get("compound_curve_transitions") for c in curves):
+        reverse_pairs = sorted({tuple(check["paired_curve_indexes"]) for curve in curves
+                                for check in curve.get("results", {}).get("reverse_curve_coordination", {}).get("checks", [])})
+        expected_curves = super_batch.coordinate_reverse_curve_transitions(expected_curves, pairs=reverse_pairs)
+        for actual, expected in zip(curves, expected_curves):
+            if actual.get("results", {}).get("compound_curve_transitions") or expected.get("results", {}).get("compound_curve_transitions"):
+                for key in ("e", "Lr", "Lt", "compound_curve_transitions", "lane_events", "section_lanes", "full_super_ft", "full_super_out_ft", "pnc_ft", "pnc_out_ft"):
+                    if actual["results"].get(key) != expected["results"].get(key):
+                        raise ValueError("Saved compound results differ from the current curve set/engine; recalculate all adjoining curves before exporting.")
     intervals = []
-    for curve in curves:
+    for index, curve in enumerate(curves):
         result = curve.get("results", {})
         if result.get("result_type") == "spiral_length_check":
             raise ValueError("A spiral length check has no established transition stations and cannot be exported as a calculated curve.")
         is_aashto = result.get("transition_method") == "aashto_fixed_pivot"
         if is_aashto:
-            expected = calculate(
-                result.get("inputs", {}),
-                result.get("station_equations"),
-                result.get("alignment_station_range"),
-            )
+            expected = expected_curves[index]["results"]
             for key in (
                 "e",
                 "Lr",
@@ -949,17 +977,17 @@ def validate_export_curves(curves: list[dict]) -> None:
             and result.get("pnc_out_ft") is not None
         ):
             intervals.append(
-                (float(result["pnc_ft"]), float(result["pnc_out_ft"]), is_aashto)
+                (float(result["pnc_ft"]), float(result["pnc_out_ft"]), is_aashto, index)
             )
     intervals.sort()
     for a, b in zip(intervals, intervals[1:]):
-        if (a[2] or b[2]) and a[1] > b[0] + 1e-7:
+        if (a[2] or b[2]) and a[1] > b[0] + 1e-7 and (a[3], b[3]) not in pairs:
             raise ValueError(
                 "AASHTO export blocked: adjacent transition intervals overlap; resolve Corridor QA findings."
             )
 
 
-def override_circular_placement(result: dict, percent: float) -> dict:
+def override_circular_placement(result: dict, percent: float, *, compound_sides=()) -> dict:
     """Only station placement changes; existing DOT rate and lane model survive."""
     percent = float(percent)
     if not math.isfinite(percent) or not 0 <= percent <= 100:
@@ -984,7 +1012,7 @@ def override_circular_placement(result: dict, percent: float) -> dict:
             pnc_out_ft=pt + p * L + Lt,
             full_super_out_ft=pt - (1 - p) * L,
         )
-        if result["full_super_ft"] > result["full_super_out_ft"]:
+        if result["full_super_ft"] > result["full_super_out_ft"] and not compound_sides:
             raise ValueError("Circular transition placement overlaps on the curve.")
     if result.get("reverse_section_ft") is not None:
         result["reverse_section_ft"] = result["zero_crown_ft"] + Lt

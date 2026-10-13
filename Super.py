@@ -1564,6 +1564,8 @@ def calculate_superelevation(
     alignment_station_range: tuple[float, float] | None = None,
     criteria_profile: str = MDOT_PROFILE_ID,
     profile_options: dict | None = None,
+    *,
+    compound_sides: tuple[str, ...] = (),
 ) -> dict:
     profile_id = normalize_profile_id(criteria_profile)
     from aashto_criteria import PROFILE_ID as AASHTO_PROFILE_ID
@@ -1575,13 +1577,13 @@ def calculate_superelevation(
                   "area": area_type, "e_manual": e_manual_input, "normal_crown": normal_crown_input,
                   "Lr_manual": L_manual_input, "Lt_manual": Lt_manual_input,
                   "friction":friction_input, "rel_grad":rel_grad_input}
-        return calculate(values, station_equations, alignment_station_range)
+        return calculate(values, station_equations, alignment_station_range, compound_sides=compound_sides)
     if profile_options and str(profile_options.get("override_standard_placement")).lower() in {"true","1"}:
         from aashto_superelevation import override_circular_placement
         result = calculate_superelevation(pc_input, pt_input, speed_input, radius_input, facility, area_type,
             lane_width_input, lanes_rotated_input, e_manual_input, friction_input, rel_grad_input,
             normal_crown_input, L_manual_input, Lt_manual_input, station_equations, alignment_station_range, profile_id)
-        return override_circular_placement(result, profile_options.get("runoff_tangent_percent", ""))
+        return override_circular_placement(result, profile_options.get("runoff_tangent_percent", ""), compound_sides=compound_sides)
     if profile_id == tdot_criteria.TDOT_PROFILE_ID:
         return _calculate_tdot_superelevation(
             pc_input,
@@ -1794,6 +1796,20 @@ def calculate_superelevation(
 
 
 def format_results(results: dict, station_format: bool) -> list[str]:
+    if results.get("compound_curve_transitions"):
+        bank_label = results["section_transition"]["target_slope_label"] if results.get("section_transition") else f"{results['e'] * 100:g}%"
+        lines = [f"Criteria: {results.get('calculation_metadata', {}).get('criteria', {}).get('profile_name', '')}",
+                 f"Curve bank: {bank_label}",
+                 f"Reference runoff: {results['Lr']:.3f} ft; reference runout: {results['Lt']:.3f} ft"]
+        for side, plan in results["compound_curve_transitions"].items():
+            lines.append(f"Compound {side}: {plan['start_e'] * 100:g}% to {plan['end_e'] * 100:g}% over {plan['length_ft']:.3f} ft")
+            for label, key in (("Start", "start_ft"), ("Junction", "boundary_ft"), ("End", "end_ft")):
+                lines.append(f"  {label}: {format_result_station(results, plan[key], station_format)}")
+        for side, keys in (("entry", ("pnc_ft", "full_super_ft")), ("exit", ("full_super_out_ft", "pnc_out_ft"))):
+            if side not in results["compound_curve_transitions"]:
+                lines.append(f"Outer {side} transition: {format_result_station(results, results[keys[0]], station_format)} to {format_result_station(results, results[keys[1]], station_format)}")
+        lines.extend(f"Warning: {warning}" for warning in results.get("warnings", []))
+        return lines
     if results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
         lines=[f"Criteria: {results.get('calculation_metadata', {}).get('criteria', {}).get('profile_name', '')}",
                f"Rate: {results['e']:.4f} ft/ft", f"Runoff: {results['Lr']:.3f} ft", f"Runout: {results['Lt']:.3f} ft",

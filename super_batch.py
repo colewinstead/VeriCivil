@@ -1,10 +1,162 @@
 from __future__ import annotations
 
 import copy
+import math
 from typing import Iterable
 
 import Super
 import super_transition
+import super_exports
+
+
+def compound_pairs(curves: list[dict]) -> list[tuple[int, int]]:
+    """Find adjoining circular arcs; a real intervening tangent stays independent."""
+    pairs = []
+    for index, (prior, following) in enumerate(zip(curves, curves[1:])):
+        a, b = prior.get("results", {}), following.get("results", {})
+        if (a.get("pt_ft") is not None and b.get("pc_ft") is not None
+                and math.isclose(float(a["pt_ft"]), float(b["pc_ft"]), rel_tol=0, abs_tol=1e-7)
+                and prior.get("meta", {}).get("curve_direction", "left") == following.get("meta", {}).get("curve_direction", "left")
+                and prior.get("meta", {}).get("alignment_name", "") == following.get("meta", {}).get("alignment_name", "")
+                and all(r.get("inputs", {}).get("alignment_type", "circular") == "circular" for r in (a, b))):
+            pairs.append((index, index + 1))
+    return pairs
+
+
+def restore_compound_transitions(curves: list[dict]) -> None:
+    for curve in curves:
+        baseline = curve.get("results", {}).get("uncoordinated_compound_transition")
+        if baseline is not None:
+            curve["results"] = copy.deepcopy(baseline)
+
+
+def coordinate_compound_curve_transitions(curves: Iterable[dict]) -> list[dict]:
+    """Apply the project compound rule at the controlling curve's existing rate."""
+    curves = copy.deepcopy(list(curves))
+    restore_compound_transitions(curves)
+    plans = {}
+    for i, j in compound_pairs(curves):
+        a, b = curves[i]["results"], curves[j]["results"]
+        if any(r.get("normal_crown_only") and not r.get("section_transition") for r in (a, b)):
+            raise ValueError("Compound curves require banked sections on both arcs; normal-crown compound transitions need a separate design.")
+        if a.get("calculation_metadata", {}).get("criteria", {}).get("profile_id") != b.get("calculation_metadata", {}).get("criteria", {}).get("profile_id"):
+            raise ValueError("Compound curves must use the same criteria profile.")
+        if a.get("section_definition") != b.get("section_definition") or any(
+            a.get("inputs", {}).get(key) != b.get("inputs", {}).get(key)
+            for key in ("facility", "lane_width_ft", "lanes_rotated", "normal_crown")
+        ):
+            raise ValueError("Compound curves must use the same cross section and rotation axis.")
+        direction = curves[i].get("meta", {}).get("curve_direction", "left")
+        outside = super_transition.outside_lane(direction)
+        if any(super_transition._full_super_slopes(r, direction)[outside] <= 0 for r in (a, b)):
+            raise ValueError("Compound transitions require both sections to bank toward the curve; an adverse initial section needs a separate design.")
+        e1 = abs(super_transition._full_super_slopes(a, direction)[super_transition.outside_lane(direction)]) / 100
+        e2 = abs(super_transition._full_super_slopes(b, direction)[super_transition.outside_lane(direction)]) / 100
+        controlling = b if float(b["inputs"]["radius_ft"]) < float(a["inputs"]["radius_ft"]) else a
+        magnitude = e2 if controlling is b else e1
+        runoff = float(controlling["Lr"])
+        # A favorable single-slope ramp's runoff starts at its initial bank.
+        initial = controlling.get("section_transition", {}).get("initial_signed_slope", 0) if controlling.get("section_transition") else 0
+        bank_sign = -1 if direction == "left" else 1
+        runoff_change = magnitude - abs(initial) if initial * bank_sign > 0 else magnitude
+        if runoff_change <= 0 or runoff <= 0:
+            if abs(e2 - e1) > 1e-12:
+                raise ValueError("The controlling compound curve needs a positive runoff rate.")
+            rate = 0.0
+        else:
+            rate = runoff_change / runoff
+        length = abs(e2 - e1) / rate if rate else 0.0
+        p = controlling.get("runoff_tangent_fraction")
+        if p is None:
+            if controlling.get("transition_method") == "aashto_fixed_pivot":
+                p = float(controlling["inputs"]["runoff_tangent_percent"]) / 100
+            elif controlling.get("transition_method") == "tdot_simple_curve_half_total":
+                p = (runoff - float(controlling["Lt"])) / (2 * runoff)
+            else:
+                p = 0.7
+        if not all(math.isfinite(v) for v in (e1, e2, rate, length, p)) or not 0 <= p <= 1:
+            raise ValueError("Compound runoff rate and placement must be finite and valid.")
+        before = p if controlling is b else 1 - p
+        boundary = float(a["pt_ft"])
+        plan = {"pair_id": f"compound-{i}-{j}", "boundary_ft": boundary,
+                "start_ft": boundary - before * length, "end_ft": boundary + (1 - before) * length,
+                "length_ft": length, "start_e": e1, "end_e": e2,
+                "rate_pct_per_ft": rate * 100, "before_fraction": before,
+                "controlling_curve_index": j if controlling is b else i,
+                "rule": "Project compound transition; reduced slope change at the controlling curve's runoff rate"}
+        plans[i, "exit"] = plans[j, "entry"] = plan
+
+    for index, curve in enumerate(curves):
+        entry, exit_plan = plans.get((index, "entry")), plans.get((index, "exit"))
+        if entry is None and exit_plan is None:
+            continue
+        result = curve["results"]
+        original = copy.deepcopy(result)
+        result["uncoordinated_compound_transition"] = original
+        result["compound_curve_transitions"] = {side: plan for side, plan in (("entry", entry), ("exit", exit_plan)) if plan}
+        changes_bank = any(plan["length_ft"] > 1e-9 for plan in result["compound_curve_transitions"].values())
+        result["normal_crown_only"] = bool(original.get("normal_crown_only")) and not changes_bank
+        if "no_transition_required" in result:
+            result["no_transition_required"] = bool(original["no_transition_required"]) and not changes_bank
+        if result.get("section_transition"):
+            result["section_transition"]["no_transition_required"] = result["no_transition_required"]
+            result["section_transition"]["note"] = "Single-slope bank retained between the compound transitions. Cross-slope sign: + rises toward left; - rises toward right, looking ahead along increasing alignment station."
+        if entry:
+            result.update(pnc_ft=entry["start_ft"], reverse_crown_ft=entry["start_ft"], full_super_ft=entry["end_ft"])
+        if exit_plan:
+            result.update(full_super_out_ft=exit_plan["start_ft"], reverse_crown_out_ft=exit_plan["end_ft"], pnc_out_ft=exit_plan["end_ft"])
+        if result["full_super_ft"] > result["full_super_out_ft"] + 1e-7:
+            raise ValueError(f"Compound transitions overlap on Curve {index + 1}; the selected runoff rate and placement cannot attain its design bank.")
+        direction = curve.get("meta", {}).get("curve_direction", "left")
+        targets = super_transition._full_super_slopes(original, direction)
+
+        def events_for(side, events, lane=None):
+            rows = []
+            if not entry:
+                rows.extend(copy.deepcopy(event) for event in events if event["station_ft"] <= original["full_super_ft"] + 1e-7)
+            if not exit_plan:
+                rows.extend(copy.deepcopy(event) for event in events if event["station_ft"] >= original["full_super_out_ft"] - 1e-7)
+            for plan in (entry, exit_plan):
+                if plan is None:
+                    continue
+                controls = [("PCC", plan["boundary_ft"], "Compound junction")] if plan["length_ft"] <= 1e-9 else [
+                    ("COMPOUND START", plan["start_ft"], "Compound runoff start"),
+                    ("PCC", plan["boundary_ft"], "Compound junction"),
+                    ("COMPOUND END", plan["end_ft"], "Compound runoff end")]
+                for label, station, event_type in controls:
+                    t = (station - plan["start_ft"]) / plan["length_ft"] if plan["length_ft"] else 0
+                    bank = plan["start_e"] + t * (plan["end_e"] - plan["start_e"])
+                    slope = bank * 100 * (1 if side == super_transition.outside_lane(direction) else -1)
+                    event = super_transition._event(label, station, slope, plan["rule"], event_type, compound_pair_id=plan["pair_id"])
+                    if lane:
+                        signed_bank = bank * (-1 if direction == "left" else 1)
+                        event.update(right_elevation_ft=signed_bank * lane["right_distance_from_pivot_ft"],
+                                     left_elevation_ft=signed_bank * lane["left_distance_from_pivot_ft"])
+                    rows.append(event)
+            for label, station in (("PC", result["pc_ft"]), ("PT", result["pt_ft"])):
+                if result["full_super_ft"] < station < result["full_super_out_ft"]:
+                    event = super_transition._event(label, station, targets[side], "Full bank through the circular arc", label)
+                    if lane:
+                        bank = abs(targets[side]) / 100 * (-1 if direction == "left" else 1)
+                        event.update(right_elevation_ft=bank * lane["right_distance_from_pivot_ft"], left_elevation_ft=bank * lane["left_distance_from_pivot_ft"])
+                    rows.append(event)
+            rows.sort(key=lambda event: event["station_ft"])
+            return rows
+
+        if original.get("section_lanes"):
+            for lane in result["section_lanes"]:
+                lane["events"] = events_for(lane["side"], lane["events"], lane)
+            result["lane_events"] = {side: next((lane["events"] for lane in result["section_lanes"] if lane["side"] == side), []) for side in ("left", "right")}
+        else:
+            left, right = super_exports.build_lane_rows(original, direction, False)
+            result["lane_events"] = {side: events_for(side, events) for side, events in (("left", left), ("right", right))}
+        limits = result.get("alignment_station_range")
+        if limits and (result["pnc_ft"] < limits[0] - 1e-7 or result["pnc_out_ft"] > limits[1] + 1e-7):
+            raise ValueError("Compound transition extends beyond the established alignment.")
+        for side, plan in result["compound_curve_transitions"].items():
+            result["calculation_metadata"].setdefault("calculation_sources", []).append({"component": f"Compound {side}", "reference": plan["rule"], "mode": "project_input", **plan})
+            result.setdefault("warnings", []).append(f"Project compound {side}: {plan['start_e'] * 100:g}% to {plan['end_e'] * 100:g}% over {plan['length_ft']:.3f} ft; existing runoff rate retained.")
+    return curves
 
 
 _ENTRY_TRANSITION_KEYS = ("pnc_ft", "reverse_crown_ft", "full_super_ft")
@@ -92,9 +244,10 @@ def coordinate_reverse_curve_transitions(
 ) -> list[dict]:
     """Coordinate explicitly paired MDOT reverse curves at standard rates."""
     coordinated = copy.deepcopy(list(curves))
+    restore_compound_transitions(coordinated)
     _restore_reverse_curve_transitions(coordinated)
     if not enabled:
-        return coordinated
+        return coordinate_compound_curve_transitions(coordinated)
 
     for prior_index, following_index in _normalized_pairs(coordinated, pairs):
         prior = coordinated[prior_index]
@@ -185,10 +338,10 @@ def coordinate_reverse_curve_transitions(
             continue
         statuses = {check.get("status") for check in coordination.get("checks", [])}
         coordination["status"] = next(iter(statuses), "coordinated")
-    return coordinated
+    return coordinate_compound_curve_transitions(coordinated)
 
 
-def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str]) -> dict:
+def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str], *, compound_sides=()) -> dict:
     results = Super.calculate_superelevation(
         str(preset["pc_station_label"]),
         str(preset.get("pt_station_label", "") or ""),
@@ -212,6 +365,7 @@ def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str]) -> dict
                          "ts":preset.get("ts_station_label",""), "st":preset.get("st_station_label",""),
                          "linear_unit":preset.get("linear_unit"),
                          "geometry_provenance":{"source":"LandXML","alignment":preset.get("alignment_name"),"curve_id":preset.get("landxml_curve_id"),"linear_unit":preset.get("linear_unit"),"available_entry_tangent_ft":preset.get("available_entry_tangent_ft"),"available_exit_tangent_ft":preset.get("available_exit_tangent_ft")}},
+        compound_sides=compound_sides,
     )
     return {
         "results": results,
@@ -229,14 +383,23 @@ def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str]) -> dict
 
 
 def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, str]) -> list[dict]:
-    """Build independent curves; reverse coordination is an explicit pair action."""
+    """Coordinate adjoining compound arcs; reverse coordination remains explicit."""
+    presets = list(presets)
+    adjacency = [{"results": {"pc_ft": Super.parse_station_reference(str(p["pc_station_label"]), p.get("station_equations"), p.get("alignment_station_range")),
+                               "pt_ft": Super.parse_station_reference(str(p["pt_station_label"]), p.get("station_equations"), p.get("alignment_station_range")) if p.get("pt_station_label") else None,
+                               "inputs": {"alignment_type": p.get("alignment_type", "circular")}},
+                  "meta": p} for p in presets]
+    sides = {}
+    for i, j in compound_pairs(adjacency):
+        sides.setdefault(i, []).append("exit")
+        sides.setdefault(j, []).append("entry")
     curves=[]
     for index,preset in enumerate(presets):
         try:
-            curves.append(build_curve_from_preset(preset,shared_inputs))
+            curves.append(build_curve_from_preset(preset,shared_inputs,compound_sides=tuple(sides.get(index, []))))
         except ValueError as exc:
             for finding in getattr(exc,"findings",[]):
                 finding["curve_indexes"]=[preset.get("landxml_curve_index", index)]
                 finding["message"]=f"{preset.get('curve_name',f'Curve {index+1}')}: {finding['message']}"
             raise
-    return curves
+    return coordinate_compound_curve_transitions(curves)

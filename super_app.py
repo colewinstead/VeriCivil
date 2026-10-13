@@ -1339,29 +1339,17 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             and self.vars["area"].get().strip().lower().startswith("local")
         ):
             self.vars["facility"].set("centerline")
-        return Super.calculate_superelevation(
-            self.vars["pc"].get(),
-            self.vars["pt"].get(),
-            self.vars["speed"].get(),
-            self.vars["radius"].get(),
-            self.vars["facility"].get(),
-            self.vars["area"].get(),
-            self.vars["lane_width"].get(),
-            self.vars["lanes_rotated"].get(),
-            e_manual,
-            friction,
-            rel_grad,
-            normal_crown,
-            Lr_manual,
-            Lt_manual,
-            self._station_equations(),
-            self._alignment_station_range(),
-            self.vars["criteria_profile"].get(),
-            profile_options={**{key:var.get() for key,var in self.vars.items()},"e_manual":e_manual,"Lr_manual":Lr_manual,"Lt_manual":Lt_manual,"rel_grad":rel_grad,"friction":friction,
-                             "linear_unit":self._landxml_data.linear_unit if self._landxml_data else self.vars["linear_unit"].get(),
-                             "geometry_provenance":geometry,
-                             "aashto_tables":json.loads(self.vars["aashto_tables"].get()) if self.vars["aashto_tables"].get() else None},
-        )
+        from super_service import calculate_curve
+        selection = list(self.curve_listbox.curselection())
+        return calculate_curve({**{key: var.get() for key, var in self.vars.items()},
+                                "e_manual": e_manual, "Lr_manual": Lr_manual, "Lt_manual": Lt_manual,
+                                "rel_grad": rel_grad, "friction": friction, "normal_crown": normal_crown,
+                                "station_equations": self._station_equations(),
+                                "alignment_station_range": self._alignment_station_range(),
+                                "linear_unit": self._landxml_data.linear_unit if self._landxml_data else self.vars["linear_unit"].get(),
+                                "geometry_provenance": geometry,
+                                "aashto_tables": json.loads(self.vars["aashto_tables"].get()) if self.vars["aashto_tables"].get() else None},
+                               self.curves, selection[0] if selection else -1)["results"]
 
     def _show_aashto_settings(self) -> None:
         dialog=tk.Toplevel(self)
@@ -1827,7 +1815,11 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             "meta": self._current_meta(),
             "notes": self.vars["curve_notes"].get().strip(),
         }
-        self.curves.append(curve)
+        try:
+            self.curves = super_batch.coordinate_compound_curve_transitions([*self.curves, curve])
+        except ValueError as exc:
+            messagebox.showerror("Add Curve", str(exc))
+            return
         self.curve_listbox.insert("end", super_project.curve_label(curve["meta"], curve["results"]))
         self.curve_listbox.selection_clear(0, "end")
         self.curve_listbox.selection_set(self.curve_listbox.size() - 1)
@@ -1875,7 +1867,11 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             "meta": self._current_meta(),
             "notes": self.vars["curve_notes"].get().strip(),
         }
-        self.curves[idx] = curve
+        try:
+            self.curves = super_batch.coordinate_compound_curve_transitions([curve if i == idx else item for i, item in enumerate(self.curves)])
+        except ValueError as exc:
+            messagebox.showerror("Update Curve", str(exc))
+            return
         self.curve_listbox.delete(idx)
         self.curve_listbox.insert(idx, super_project.curve_label(curve["meta"], curve["results"]))
         self.curve_listbox.selection_set(idx)
@@ -1886,6 +1882,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             self.curve_listbox.delete(idx)
             if idx < len(self.curves):
                 self.curves.pop(idx)
+        self.curves = super_batch.coordinate_compound_curve_transitions(self.curves)
         self._update_overlay_button()
 
     def _load_selected_curve(self, _event: tk.Event) -> None:

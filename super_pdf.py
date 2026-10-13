@@ -812,6 +812,16 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                     ("Reverse-curve rule", _text(check.get("rule"))),
                 ])
 
+        if results.get("compound_curve_transitions"):
+            station_rows = []
+            for side, plan in results["compound_curve_transitions"].items():
+                input_rows.append((f"Compound {side}", f"{plan['start_e'] * 100:g}% to {plan['end_e'] * 100:g}%; {_number(plan['length_ft'], 3, ' ft')}"))
+                for label, key in (("start", "start_ft"), ("junction", "boundary_ft"), ("end", "end_ft")):
+                    station_rows.append((f"Compound {side} {label}", _station(results, plan[key])))
+            for side, keys in (("entry", ("pnc_ft", "full_super_ft")), ("exit", ("full_super_out_ft", "pnc_out_ft"))):
+                if side not in results["compound_curve_transitions"]:
+                    station_rows.append((f"Outer {side} transition", f"{_station(results, results[keys[0]])} to {_station(results, results[keys[1]])}"))
+
         note_parts = [
             results.get("friction_note"),
             results.get("rel_grad_note"),
@@ -880,8 +890,12 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ]))
         if results.get("section_lanes"):
-            story.append(Paragraph("Lane transitions",styles["Section"]))
-            story.append(Paragraph("Slope signs follow the recorded lane side, outward from alignment. Edge heights are physical left/right, relative to the fixed pivot.",styles["SmallMuted"]))
+            lane_heading = Paragraph("Lane transitions", styles["Section"])
+            lane_heading.keepWithNext = True
+            story.append(lane_heading)
+            lane_intro = Paragraph("Slope signs follow the recorded lane side, outward from alignment. Edge heights are physical left/right, relative to the fixed pivot.",styles["SmallMuted"])
+            lane_intro.keepWithNext = True
+            story.append(lane_intro)
             for lane in results["section_lanes"]:
                 rows=[{**event,"station":Super.format_result_station(results,event["station_ft"],True),
                        "slope":f"{event['slope_pct']:.3f}","slope_label":f"{event['slope_pct']:+.3f}%"} for event in lane["events"]]

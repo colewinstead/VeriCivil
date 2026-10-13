@@ -127,7 +127,7 @@ def _station_range(value: Any) -> tuple[float, float] | None:
     return start, end
 
 
-def calculate_curve(inputs: dict[str, Any]) -> dict[str, Any]:
+def calculate_curve(inputs: dict[str, Any], curves: list[dict] | None = None, curve_index: int = -1) -> dict[str, Any]:
     """Calculate one curve and return structured presentation data."""
     values = {**DEFAULT_INPUTS, **(inputs or {})}
     profile_id = normalize_profile_id(str(values.get("criteria_profile", MDOT_PROFILE_ID)))
@@ -160,15 +160,32 @@ def calculate_curve(inputs: dict[str, Any]) -> dict[str, Any]:
         _station_range(values.get("alignment_station_range")),
         profile_id,
     )
-    results = Super.calculate_superelevation(*arguments, profile_options=values)
+    context = None
+    compound_sides = []
+    if curves and type(curve_index) is int and 0 <= curve_index < len(curves):
+        import copy
+        context = copy.deepcopy(curves)
+        context[curve_index] = {"results": {"pc_ft": Super.parse_station_reference(arguments[0], arguments[14], arguments[15]),
+                                             "pt_ft": Super.parse_station_reference(arguments[1], arguments[14], arguments[15]) if arguments[1] else None,
+                                             "inputs": values},
+                                "meta": {**curves[curve_index].get("meta", {}), "curve_direction": values.get("curve_direction", "left")}}
+        for i, j in super_batch.compound_pairs(context):
+            if i == curve_index:
+                compound_sides.append("exit")
+            if j == curve_index:
+                compound_sides.append("entry")
+    results = Super.calculate_superelevation(*arguments, profile_options=values, compound_sides=tuple(compound_sides))
     baseline_arguments = list(arguments)
     for index in (8, 9, 10, 12, 13):
         baseline_arguments[index] = ""
     try:
-        baseline = Super.calculate_superelevation(*baseline_arguments, profile_options={**values, "e_manual":"", "Lr_manual":"", "Lt_manual":""})
+        baseline = Super.calculate_superelevation(*baseline_arguments, profile_options={**values, "e_manual":"", "Lr_manual":"", "Lt_manual":""}, compound_sides=tuple(compound_sides))
     except ValueError:
         baseline = results
     direction = str(values.get("curve_direction", "left") or "left")
+    if context is not None and compound_sides:
+        context[curve_index]["results"] = results
+        results = super_batch.coordinate_compound_curve_transitions(context)[curve_index]["results"]
     station_format = bool(values.get("station_format", True))
     return {**present_results(results,direction,station_format), "baseline":baseline}
 
@@ -201,12 +218,12 @@ def present_results(results: dict, direction: str = "left", station_format: bool
     }
 
 
-def calculate_with_entitlement(inputs: dict[str, Any], entitlement: Any = None) -> dict[str, Any]:
+def calculate_with_entitlement(inputs: dict[str, Any], entitlement: Any = None, curves: list[dict] | None = None, curve_index: int = -1) -> dict[str, Any]:
     """Authorize the requested profile, then call the unchanged calculation service."""
     values = {**DEFAULT_INPUTS, **(inputs or {})}
     profile_id = normalize_profile_id(str(values.get("criteria_profile", MDOT_PROFILE_ID)))
     require_profile_access(snapshot_from_payload(entitlement), profile_id)
-    return calculate_curve(inputs)
+    return calculate_curve(inputs, curves, curve_index)
 
 
 def parse_landxml(content: str, filename: str = "alignment.xml", alignment_index: int = 0) -> dict[str, Any]:
@@ -452,7 +469,7 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
             payload.get("plan", "free"), payload.get("status", "active")
         ).snapshot().as_dict(),
         "calculate": lambda: calculate_with_entitlement(
-            payload.get("inputs", payload), payload.get("entitlement")
+            payload.get("inputs", payload), payload.get("entitlement"), payload.get("curves"), payload.get("curve_index", -1)
         ),
         "required_spiral_lengths": lambda: required_spiral_lengths(payload.get("inputs", {})),
         "import_aashto_workbook": lambda: __import__("aashto_criteria").import_workbook(payload["content_base64"]),

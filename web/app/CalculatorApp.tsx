@@ -336,7 +336,7 @@ export default function CalculatorApp() {
 
   const calculate = async () => {
     const sequence = ++calculationSequence.current;
-    const result = await run("Calculating", () => call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs }));
+    const result = await run("Calculating", () => call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs, curves, curve_index: selectedCurve }));
     if (result && sequence === calculationSequence.current) {
       setBlockedFindings([]);
       setCalculation(lengthCheckMode ? null : result);
@@ -392,7 +392,7 @@ export default function CalculatorApp() {
       setNotice("");
       setBusy("Calculating");
       try {
-        const result = await call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs });
+        const result = await call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs, curves, curve_index: selectedCurve });
         if (sequence !== calculationSequence.current) return;
         setCalculation(lengthCheckMode ? null : result);
         setSpiralLengthCheck(lengthCheckMode ? { ...result, inputKey: calculationKey } : null);
