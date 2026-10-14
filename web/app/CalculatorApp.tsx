@@ -203,6 +203,9 @@ export default function CalculatorApp() {
     workerRef.current?.terminate();
     pendingRef.current.forEach(({ reject }) => reject(new Error("Browser workspace restarted.")));
     pendingRef.current.clear();
+    loadedCurveCalculation.current = null;
+    setError("");
+    setBlockedFindings([]);
     setRuntime("loading");
     setProgress(4);
     const worker = new Worker("/pyodide-worker.js");
@@ -216,11 +219,11 @@ export default function CalculatorApp() {
         setRuntime("ready");
         setManifest(message.manifest);
         if (message.manifest?.commercial) {
-          const provider = isLocalEntitlementDevelopment()
+          const provider = entitlementProviderRef.current ?? (isLocalEntitlementDevelopment()
             ? new LocalDevelopmentEntitlementProvider(message.manifest.commercial)
-            : new RemoteEntitlementProvider(message.manifest.commercial);
+            : new RemoteEntitlementProvider(message.manifest.commercial));
           entitlementProviderRef.current = provider;
-          provider.getSnapshot().then(setEntitlement);
+          provider.refresh().then(setEntitlement);
           setLocalDevelopment(isLocalEntitlementDevelopment());
         }
       } else if (message.type === "fatal") {
@@ -1041,6 +1044,7 @@ export default function CalculatorApp() {
         <a className="workspace-home" href="/">Product home</a><a className="workspace-home" href="/account" target="_blank" rel="noreferrer">{entitlement.plan === "free" ? "Account" : `${entitlement.plan.toUpperCase()} account`}</a>
         {localDevelopment && <label className="development-entitlement"><span>Local test plan</span><select value={entitlement.plan} onChange={(event) => changeDevelopmentEntitlement(event.target.value as CommercialPlan)}><option value="free">Free</option><option value="pro">Pro</option><option value="team">Team</option></select></label>}
         <div className={`runtime ${runtime}`}><span></span>{runtime === "ready" ? "Private browser engine ready" : runtimeMessage}</div>
+        {runtime === "ready" && <button onClick={startWorker} disabled={!!busy} title="Load the latest Python engine while keeping your project and curve inputs">Reload engine</button>}
       </header>
 
       {upgradeFeature && <UpgradeNotice feature={upgradeFeature} onClose={() => setUpgradeFeature("")} />}

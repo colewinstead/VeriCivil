@@ -2,7 +2,7 @@
 
 APP_NAME = "Superelevation Calculator"
 APP_VERSION = "1.6.18"
-CALCULATION_ENGINE_VERSION = "1.5.0"
+CALCULATION_ENGINE_VERSION = "1.5.1"
 
 
 
