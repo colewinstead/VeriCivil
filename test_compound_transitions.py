@@ -122,7 +122,7 @@ class CompoundTransitionTests(unittest.TestCase):
         path = FIXTURE.parent / "840 choice ramps.xml"
         if not path.exists():
             self.skipTest("User ramp fixture is local-only.")
-        xml = path.read_text()
+        xml = path.read_text(encoding="utf-8-sig")
         shared = {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "35", "max_superelevation": "8",
                   "roadway": "one_way", "initial_section": "single_slope", "initial_slope": "0.02", "lane_widths": "12",
                   "rotation_axis": "left_edge", "runoff_tangent_percent": "50", "circular_placement_basis": "runoff_runout"}
@@ -142,7 +142,7 @@ class CompoundTransitionTests(unittest.TestCase):
     def test_invalid_curve_input_overrides_are_rejected(self):
         for overrides in ([], {"-1": {}}, {"99": {}}, {"0": "35"}, {"0.0": {}}, {"bad": {}}):
             with self.subTest(overrides=overrides), self.assertRaisesRegex(ValueError, "Curve-specific inputs"):
-                super_service.build_all_landxml_curves(FIXTURE.read_text(), FIXTURE.name, {}, curve_inputs=overrides)
+                super_service.build_all_landxml_curves(FIXTURE.read_text(encoding="utf-8-sig"), FIXTURE.name, {}, curve_inputs=overrides)
 
     def test_tangent_reverse_and_spiral_connections_stay_independent(self):
         curves = self.curves()
@@ -156,7 +156,7 @@ class CompoundTransitionTests(unittest.TestCase):
         self.assertEqual(super_batch.coordinate_compound_curve_transitions(curves), curves)
 
     def test_landxml_batch_qa_exports_and_saved_result_validation(self):
-        xml = FIXTURE.read_text()
+        xml = FIXTURE.read_text(encoding="utf-8-sig")
         values = {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "45", "e_manual": "0.05",
                   "Lr_manual": "200", "Lt_manual": "100", "runoff_tangent_percent": "70"}
         curves = super_service.build_all_landxml_curves(xml, FIXTURE.name, values)
@@ -213,7 +213,7 @@ class CompoundTransitionTests(unittest.TestCase):
         values = {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "45", "max_superelevation": "8",
                   "roadway": "one_way", "initial_section": "single_slope", "initial_slope": "0.02",
                   "lane_widths": "12", "rotation_axis": "left_edge", "runoff_tangent_percent": "50"}
-        xml = path.read_text()
+        xml = path.read_text(encoding="utf-8-sig")
         excluded = [0, 1, 5, 6, 7]
         curves = super_service.build_all_landxml_curves(xml, path.name, values, excluded)
         self.assertEqual([c["meta"]["landxml_curve_index"] for c in curves], [2, 3, 4])
