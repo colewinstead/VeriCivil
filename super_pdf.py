@@ -732,7 +732,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         if results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
             input_rows.extend([("Roadway / section",_text(f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
                                ("Rotation axis",_text(f"{inputs.get('rotation_axis',results.get('facility'))} / {results.get('pivot_relationship','')}")),
-                               ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% runoff on tangent")),
+                               ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% {'runoff + runout' if inputs.get('circular_placement_basis') == 'runoff_runout' else 'runoff'} on tangent")),
                                ("Criteria",_text(profile_name))])
             if results.get("section_lanes"):
                 if section_transition:

@@ -39,6 +39,7 @@ DEFAULT_INPUTS = {
     "lanes_rotated": "2",
     "normal_crown": "0.02",
     "station_format": True,
+    "circular_placement_basis": "runoff",
 }
 
 
@@ -64,6 +65,7 @@ def application_manifest() -> dict[str, Any]:
                     "roadway":["two_way","one_way"], "rotation_axis":["centerline","left_edge","right_edge"],
                     "one_way_rotation_axis":["left_edge","right_edge"], "lane_counts":[1,2,3,4,5,6,7], "equal_lane_widths_required":True,
                     "initial_section":["crowned","single_slope"],"runout_placement":["on_tangent","in_spiral"],
+                    "circular_placement_basis":["runoff","runoff_runout"],
                     "criteria_workbook_required":False, "criteria_data_source":"embedded_python", "manual_spiral_length_check": True},
                 MDOT_PROFILE_ID: {
                     "facility": ["centerline", "outside edge"],
@@ -174,7 +176,14 @@ def calculate_curve(inputs: dict[str, Any], curves: list[dict] | None = None, cu
                 compound_sides.append("exit")
             if j == curve_index:
                 compound_sides.append("entry")
-    results = Super.calculate_superelevation(*arguments, profile_options=values, compound_sides=tuple(compound_sides))
+    try:
+        results = Super.calculate_superelevation(*arguments, profile_options=values, compound_sides=tuple(compound_sides))
+    except ValueError as exc:
+        curve_name = str(values.get("curve_name") or "").strip() or "Unnamed curve"
+        exc.args = (f"{curve_name}: {exc}",)
+        for finding in getattr(exc, "findings", []):
+            finding["message"] = f"{curve_name}: {finding['message']}"
+        raise
     baseline_arguments = list(arguments)
     for index in (8, 9, 10, 12, 13):
         baseline_arguments[index] = ""
@@ -203,6 +212,7 @@ def required_spiral_lengths(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def present_results(results: dict, direction: str = "left", station_format: bool = True) -> dict[str, Any]:
+    results = {**results, "warnings": super_qa.calculation_warnings(results)}
     left_rows, right_rows = super_exports.build_lane_rows(results, direction, station_format)
     section_lanes=[]
     for lane in results.get("section_lanes",[]):
@@ -229,6 +239,13 @@ def calculate_with_entitlement(inputs: dict[str, Any], entitlement: Any = None, 
 def parse_landxml(content: str, filename: str = "alignment.xml", alignment_index: int = 0) -> dict[str, Any]:
     data = super_landxml.parse_landxml_text(content, filename, alignment_index)
     source = super_project.make_landxml_source(filename, content, alignment_index)
+    presets = data.curve_records()
+    adjacency = [{"results": {"pc_ft": preset["pc_station_ft"], "pt_ft": preset["pt_station_ft"],
+                              "inputs": {"alignment_type": preset.get("alignment_type", "circular")}},
+                  "meta": preset} for preset in presets]
+    for first, second in super_batch.compound_pairs(adjacency):
+        presets[first].setdefault("compound_neighbor_indexes", []).append(second)
+        presets[second].setdefault("compound_neighbor_indexes", []).append(first)
     return {
         "source": source,
         "alignments": data.alignments,
@@ -243,21 +260,34 @@ def parse_landxml(content: str, filename: str = "alignment.xml", alignment_index
             "curve_count": len(data.curves),
             "warnings": list(data.warnings),
         },
-        "curve_presets": data.curve_records(),
+        "curve_presets": presets,
     }
 
 
 def build_all_landxml_curves(content: str, filename: str, shared_inputs: dict[str, Any],
-                            excluded_curve_indexes: list[int] | None = None, alignment_index: int = 0) -> list[dict]:
+                            excluded_curve_indexes: list[int] | None = None, alignment_index: int = 0,
+                            curve_inputs: dict[str, dict] | None = None) -> list[dict]:
     data = super_landxml.parse_landxml_text(content, filename, alignment_index)
     presets = data.curve_records()
+    overrides = {}
+    if curve_inputs is not None:
+        if not isinstance(curve_inputs, dict):
+            raise ValueError("Curve-specific inputs must be an object keyed by source curve index.")
+        for key, values in curve_inputs.items():
+            try:
+                index = int(key)
+            except (ValueError, TypeError):
+                raise ValueError("Curve-specific inputs must use valid source curve indexes.") from None
+            if str(index) != str(key) or not 0 <= index < len(presets) or not isinstance(values, dict):
+                raise ValueError("Curve-specific inputs must use valid source curve indexes and input objects.")
+            overrides[index] = values
     excluded = excluded_curve_indexes if excluded_curve_indexes is not None else []
     if not isinstance(excluded, list) or any(type(index) is not int or not 0 <= index < len(presets) for index in excluded):
         raise ValueError("Excluded LandXML curves must be valid source curve indexes.")
     selected = [preset for index, preset in enumerate(presets) if index not in excluded]
     if not selected:
         raise ValueError("Select at least one LandXML curve to add.")
-    return super_batch.build_curves_from_presets(selected, dict(shared_inputs))
+    return super_batch.build_curves_from_presets(selected, dict(shared_inputs), overrides)
 
 
 def coordinate_reverse_curves(
@@ -479,7 +509,7 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
         "parse_landxml": lambda: parse_landxml(payload["content"], payload.get("filename", "alignment.xml"), payload.get("alignment_index", 0)),
         "build_all_landxml_curves": lambda: build_all_landxml_curves(
             payload["content"], payload.get("filename", "alignment.xml"), payload.get("shared_inputs", {}),
-            payload.get("excluded_curve_indexes", []), payload.get("alignment_index", 0)
+            payload.get("excluded_curve_indexes", []), payload.get("alignment_index", 0), payload.get("curve_inputs")
         ),
         "coordinate_reverse_curves": lambda: coordinate_reverse_curves(
             payload.get("curves", []), payload.get("enabled", True), payload.get("pairs")

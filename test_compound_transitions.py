@@ -11,6 +11,7 @@ import super_batch
 import super_exports
 import super_lane
 import super_service
+import super_project
 
 
 FIXTURE = Path(__file__).parent / "tests/fixtures/compound_synthetic.xml"
@@ -82,8 +83,66 @@ class CompoundTransitionTests(unittest.TestCase):
             super_batch.coordinate_compound_curve_transitions(original)
         curves = self.curves()
         curves[1]["results"]["inputs"]["lane_width_ft"] = 14
-        with self.assertRaisesRegex(ValueError, "cross section"):
+        with self.assertRaisesRegex(ValueError, "Curve 1 / Curve 2:.*lane_width_ft: 12.* vs 14"):
             super_batch.coordinate_compound_curve_transitions(curves)
+
+    def test_different_speeds_with_same_section_are_allowed(self):
+        for profile in ("mdot-rdsd-2026-04-22", "tdot-rd11-2026-04-30", "aashto-green-book-2018-2019-10"):
+            with self.subTest(profile=profile):
+                curves = self.curves(profile=profile)
+                curves[1] = self.curves(profile=profile, speed="40")[1]
+                self.assertNotEqual(curves[0]["results"]["inputs"]["speed_mph"], curves[1]["results"]["inputs"]["speed_mph"])
+                result = super_batch.coordinate_compound_curve_transitions(curves)
+                self.assertIn("compound_curve_transitions", result[0]["results"])
+
+    def test_total_transition_basis_preserves_compound_runoff_rate(self):
+        curves = self.curves(profile="aashto-green-book-2018-2019-10", placement=50,
+                             circular_placement_basis="runoff_runout")
+        coordinated = super_batch.coordinate_compound_curve_transitions(curves)
+        plan = coordinated[0]["results"]["compound_curve_transitions"]["exit"]
+        self.assertAlmostEqual(plan["length_ft"], 80)
+        self.assertAlmostEqual(plan["before_fraction"], 0.25)
+        self.assertAlmostEqual(plan["start_ft"], 1980)
+        self.assertAlmostEqual(plan["end_ft"], 2060)
+        aashto_superelevation.validate_export_curves(coordinated)
+
+    def test_edit_placement_with_browser_omitted_unused_section_fields(self):
+        curves = self.curves(profile="aashto-green-book-2018-2019-10")
+        for curve in curves:
+            section = curve["results"]["section_definition"]
+            curve["results"]["section_definition"] = {key: value for key, value in section.items() if value is not None}
+        values = {**curves[0]["results"]["inputs"], "speed": "45", "radius": "1000", "runoff_tangent_percent": "40"}
+        result = super_service.calculate_curve(values, curves, 0)["results"]
+        self.assertIn("compound_curve_transitions", result)
+        curves[1]["results"]["section_definition"]["rotation_axis"] = "right_edge"
+        with self.assertRaisesRegex(ValueError, "rotation_axis"):
+            super_service.calculate_curve(values, curves, 0)
+
+    def test_blocked_curve_can_use_individual_inputs_before_bulk_add(self):
+        path = FIXTURE.parent / "840 choice ramps.xml"
+        if not path.exists():
+            self.skipTest("User ramp fixture is local-only.")
+        xml = path.read_text()
+        shared = {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "35", "max_superelevation": "8",
+                  "roadway": "one_way", "initial_section": "single_slope", "initial_slope": "0.02", "lane_widths": "12",
+                  "rotation_axis": "left_edge", "runoff_tangent_percent": "50", "circular_placement_basis": "runoff_runout"}
+        with self.assertRaisesRegex(ValueError, "Curve 5:.*3-25"):
+            super_service.build_all_landxml_curves(xml, path.name, shared, [0, 1, 7])
+        drafts = {"4": {"runoff_tangent_percent": "40"}, "5": {"speed": "40"}}
+        saved = super_project.normalize_project(json.loads(json.dumps({"version": 5,
+            "vars": {"landxml_shared_inputs": shared, "landxml_curve_inputs": drafts}, "curves": []})))
+        curves = super_service.build_all_landxml_curves(xml, path.name, saved["vars"]["landxml_shared_inputs"],
+            [0, 1, 7], curve_inputs=saved["vars"]["landxml_curve_inputs"])
+        by_source = {curve["meta"]["landxml_curve_index"]: curve["results"]["inputs"] for curve in curves}
+        self.assertEqual(by_source[4]["runoff_tangent_percent"], "40")
+        self.assertTrue(all(values["runoff_tangent_percent"] == "50" for index, values in by_source.items() if index != 4))
+        self.assertEqual(by_source[5]["speed_mph"], 40)
+        self.assertTrue(all(values["speed_mph"] == 35 for index, values in by_source.items() if index != 5))
+
+    def test_invalid_curve_input_overrides_are_rejected(self):
+        for overrides in ([], {"-1": {}}, {"99": {}}, {"0": "35"}, {"0.0": {}}, {"bad": {}}):
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(ValueError, "Curve-specific inputs"):
+                super_service.build_all_landxml_curves(FIXTURE.read_text(), FIXTURE.name, {}, curve_inputs=overrides)
 
     def test_tangent_reverse_and_spiral_connections_stay_independent(self):
         curves = self.curves()
@@ -167,6 +226,11 @@ class CompoundTransitionTests(unittest.TestCase):
         self.assertEqual(curves[0]["results"]["compound_curve_transitions"]["exit"]["length_ft"], 0)
         report = super_service.corridor_qa(xml, path.name, curves, excluded)
         self.assertFalse([f for f in report["findings"] if f["severity"] == "block"], report["findings"])
+        self.assertNotIn("CALCULATION_WARNING", {f["code"] for f in report["findings"]})
+        normal_values = {**values, "speed": "35", "runoff_tangent_percent": "40", "circular_placement_basis": "runoff_runout"}
+        normal_curves = super_service.build_all_landxml_curves(xml, path.name, normal_values, [0, 1, 7])
+        normal_report = super_service.corridor_qa(xml, path.name, normal_curves, [0, 1, 7], shared_inputs=normal_values)
+        self.assertEqual(normal_report["status"], "pass", normal_report["findings"])
         aashto_superelevation.validate_export_curves(curves)
         self.assertTrue(super_service.export_overlay_dxf(curves, {"content": xml, "filename": path.name})["content"])
         # The separate tangent-to-reverse-curve checks are still enforced.

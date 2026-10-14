@@ -18,6 +18,18 @@ class TransitionError(ValueError):
         self.findings = findings
 
 
+def circular_runoff_fraction(percent: float, basis: str, runoff: float, runout: float) -> float:
+    """Convert the selected placement length to the fraction of runoff before PC."""
+    if basis not in {"runoff", "runoff_runout"}:
+        raise ValueError("Circular placement basis must be runoff or runoff_runout.")
+    if not math.isfinite(percent) or not 0 <= percent <= 100:
+        raise ValueError("Transition on tangent must be 0–100 percent.")
+    fraction = percent / 100
+    if basis == "runoff":
+        return fraction
+    return (fraction * (runoff + runout) - runout) / runoff if runoff else 0.0
+
+
 def _number(values, key, default=None):
     raw = values.get(key, default)
     if raw in (None, ""):
@@ -560,10 +572,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             }
         )
     else:
-        p = 0.0 if section_unchanged else _number(values, "runoff_tangent_percent") / 100
-        if not 0 <= p <= 1:
-            raise ValueError("Runoff on tangent must be 0–100 percent.")
-        if p in {0, 1} and e and not no_transition:
+        placement_basis = values.get("circular_placement_basis", "runoff")
+        placement_percent = 0.0 if section_unchanged else _number(values, "runoff_tangent_percent")
+        p = circular_runoff_fraction(placement_percent, placement_basis, Lr, Lt)
+        if placement_percent in {0, 100} and e and not no_transition:
             finding(
                 "EXTREME_RUNOFF_PLACEMENT",
                 "review",
@@ -583,14 +595,19 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         sources.append(
             {
                 "component": "Transition placement",
-                "reference": "§3.3.8.2.3; explicit project runoff percentage",
+                "reference": "§3.3.8.2.3; explicit project runoff percentage" if placement_basis == "runoff" else "Project placement: percentage of total runoff + runout length around PC/PT; §3.3.8.2.3 bank check retained",
                 "mode": "project_input",
+                "placement_basis": placement_basis,
+                "percent_on_tangent": placement_percent,
             }
         )
         if e and not no_transition:
-            pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
+            if p >= 0:
+                pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
+            else:
+                pc_bank = bank_sign * (initial_bank + (pc - start) / Lt * (zero_bank - initial_bank))
             attained = pc_bank / e
-            limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius)
+            limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius) if pc_bank > 0 else math.inf
             if pc_bank >= limit and len(compound_sides) < 2:
                 finding(
                     "PC_BANK_LIMIT",
@@ -776,10 +793,6 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         warnings.append(
             "Manual rate: published radius/rate applicability must be independently verified."
         )
-    if roadway == "one_way":
-        warnings.append(
-            "One-way carriageway uses unadjusted relative gradient; no multilane runoff reduction is assumed for ramps."
-        )
     if not geometry:
         warnings.append(
             "Manual station-only geometry: verify actual tangent availability and curve stations independently. Coordinate overlays require matching LandXML geometry."
@@ -804,6 +817,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "right_normal_slope": right_nc,
             "initial_slope": initial,
             "alignment_type": "spiral" if spiral else "circular",
+            "circular_placement_basis": values.get("circular_placement_basis", "runoff"),
             "runout_placement": (
                 placement if spiral else values.get("runout_placement") or "on_tangent"
             ),
@@ -987,16 +1001,14 @@ def validate_export_curves(curves: list[dict]) -> None:
             )
 
 
-def override_circular_placement(result: dict, percent: float, *, compound_sides=()) -> dict:
+def override_circular_placement(result: dict, percent: float, *, basis: str = "runoff", compound_sides=()) -> dict:
     """Only station placement changes; existing DOT rate and lane model survive."""
     percent = float(percent)
-    if not math.isfinite(percent) or not 0 <= percent <= 100:
-        raise ValueError("Runoff on tangent must be 0–100 percent.")
     if result.get("normal_crown_only"):
         raise ValueError("Normal-crown-only curves do not have runoff placement.")
-    p = percent / 100
     L = result["Lr"]
     Lt = result["Lt"]
+    p = circular_runoff_fraction(percent, basis, L, Lt)
     pc = result["pc_ft"]
     pt = result.get("pt_ft")
     result.update(
@@ -1019,10 +1031,11 @@ def override_circular_placement(result: dict, percent: float, *, compound_sides=
         if pt is not None:
             result["reverse_section_out_ft"] = result["zero_crown_out_ft"] - Lt
     result["inputs"]["runoff_tangent_percent"] = percent
+    result["inputs"]["circular_placement_basis"] = basis
     result["inputs"]["override_standard_placement"] = True
     result["calculation_metadata"]["manual_overrides"]["placement"] = True
     result.setdefault("warnings", []).append(
-        f"Project placement override: {percent:g}% of runoff on tangent; governing DOT placement replaced."
+        f"Project placement override: {percent:g}% of {'runoff + runout' if basis == 'runoff_runout' else 'runoff'} on tangent; governing DOT placement replaced."
     )
     result["runoff_tangent_fraction"] = p
     return result

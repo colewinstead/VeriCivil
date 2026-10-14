@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import SuperelevationPlanView from "./SuperelevationPlanView";
+import { groupQaFindings } from "../lib/qa-findings";
 
 type Dict = Record<string, any>;
 type AnalysisView = "diagram" | "plan" | "qa";
@@ -102,7 +103,12 @@ export default function SuperelevationAnalysis({
   const panRef = useRef<{ x: number; domain: [number, number] } | null>(null);
   const didDragRef = useRef(false);
   const diagrams: Dict[] = corridor?.curves || [];
-  const findings = (qa?.findings || []).filter((finding: Dict) => filter === "all" || finding.severity === filter);
+  const { actionable: findings, pending } = groupQaFindings<Dict & { code: string; severity: string }>(qa?.findings || [], filter);
+  const findingButton = (finding: Dict, index: number) => <button key={`${finding.code}-${index}`} onClick={() => { setView("diagram"); onFinding(finding); }}>
+    <span className={`severity ${finding.severity}`}>{finding.severity}</span>
+    <div><strong>{finding.message}</strong><small>{finding.code.replaceAll("_", " ")}{finding.start ? ` · ${finding.start}${finding.end && finding.end !== finding.start ? ` to ${finding.end}` : ""}` : ""}</small>{finding.details && <p>{finding.details}</p>}</div>
+    <b aria-hidden="true">›</b>
+  </button>;
   const selectedCurveIndex = diagrams.some((item) => item.curve_index === activeCurveIndex)
     ? activeCurveIndex : Number(diagrams[0]?.curve_index ?? 0);
   const visibleMarkers = diagrams.flatMap((diagram) => (diagram.markers || [])
@@ -275,12 +281,13 @@ export default function SuperelevationAnalysis({
         </div>
         <div className="qa-filters"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All findings</button>{(["review", "block"] as const).map((status) => <button key={status} className={filter === status ? "active" : ""} onClick={() => setFilter(status)}>{status}</button>)}</div>
         <div className="qa-findings">
-          {findings.length ? findings.map((finding: Dict, index: number) => <button key={`${finding.code}-${index}`} onClick={() => { setView("diagram"); onFinding(finding); }}>
-            <span className={`severity ${finding.severity}`}>{finding.severity}</span>
-            <div><strong>{finding.message}</strong><small>{finding.code.replaceAll("_", " ")}{finding.start ? ` · ${finding.start}${finding.end && finding.end !== finding.start ? ` to ${finding.end}` : ""}` : ""}</small>{finding.details && <p>{finding.details}</p>}</div>
-            <b aria-hidden="true">›</b>
-          </button>) : <div className="qa-pass"><strong>No {filter === "all" ? "corridor" : filter} findings</strong><span>The calculated set satisfies the current QA checks.</span></div>}
+          {findings.length ? findings.map(findingButton) : <div className="qa-pass"><strong>{pending.length ? "Corridor review is incomplete" : `No ${filter === "all" ? "corridor" : filter} findings`}</strong><span>{pending.length ? "Calculate or add the remaining curves to complete corridor review." : "No findings match this filter."}</span></div>}
         </div>
+        {pending.length > 0 && <details className="qa-pending">
+          <summary>Curves awaiting calculation ({pending.length})</summary>
+          <p>Use Add all to calculate the included curves, or calculate them individually. If a calculation is blocked, resolve its errors above before trying again.</p>
+          <div className="qa-findings">{pending.map(findingButton)}</div>
+        </details>}
       </>}
     </div>}
   </section>;

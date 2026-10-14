@@ -217,6 +217,50 @@ class AASHTOTests(unittest.TestCase):
         with self.assertRaises(aashto.TransitionError):
             self.result(pt="1100", runoff_tangent_percent=0)
 
+    def test_total_transition_placement_and_actual_bank(self):
+        baseline = self.result(runoff_tangent_percent=50)
+        for percent in (0, 25, 50, 100):
+            with self.subTest(percent=percent):
+                r = self.result(circular_placement_basis="runoff_runout", runoff_tangent_percent=percent)
+                total = r["Lr"] + r["Lt"]
+                self.assertEqual((r["e"], r["Lr"], r["Lt"]), (baseline["e"], baseline["Lr"], baseline["Lt"]))
+                self.assertAlmostEqual(r["pnc_ft"], 1000 - percent / 100 * total)
+                self.assertAlmostEqual(r["full_super_ft"], 1000 + (1 - percent / 100) * total)
+                self.assertAlmostEqual(r["pnc_out_ft"], 2000 + percent / 100 * total)
+                self.assertAlmostEqual(r["full_super_out_ft"], 2000 - (1 - percent / 100) * total)
+                self.assertAlmostEqual(r["reverse_crown_ft"], r["pnc_ft"] + r["Lt"])
+                lane = next(lane for lane in r["section_lanes"] if lane["side"] == "right")
+                pc_event = next(event for event in lane["events"] if event["station_ft"] == 1000)
+                self.assertAlmostEqual(pc_event["slope_pct"], {0: -2, 25: 0, 50: 2, 100: 6}[percent])
+        r = self.result(circular_placement_basis="runoff_runout", runoff_tangent_percent=50)
+        lane = next(lane for lane in r["section_lanes"] if lane["side"] == "right")
+        pc_event = next(event for event in lane["events"] if event["station_ft"] == 1000)
+        self.assertAlmostEqual(pc_event["slope_pct"], 2.0)
+        with self.assertRaisesRegex(ValueError, "placement basis"):
+            self.result(circular_placement_basis="unknown")
+        with self.assertRaisesRegex(aashto.TransitionError, "3-25"):
+            self.result(circular_placement_basis="runoff_runout", radius=20000)
+
+    def test_total_placement_with_zero_runout_and_project_round_trip(self):
+        values = inputs(roadway="one_way", initial_section="single_slope", initial_slope="0.02",
+                        curve_direction="right", lane_widths="12", rotation_axis="left_edge", runoff_tangent_percent=50)
+        runoff = super_service.calculate_curve(values)["results"]
+        total = super_service.calculate_curve({**values, "circular_placement_basis": "runoff_runout"})["results"]
+        self.assertEqual(total["Lt"], 0)
+        for key in ("pnc_ft", "full_super_ft", "full_super_out_ft", "pnc_out_ft", "section_lanes"):
+            self.assertEqual(total[key], runoff[key])
+        curve = {"results": total, "meta": {"curve_direction": "right"}}
+        project = super_project.normalize_project(json.loads(json.dumps({"version": 5,
+            "vars": {"circular_placement_basis": "runoff_runout"}, "curves": [curve]})))
+        self.assertEqual(project["vars"]["circular_placement_basis"], "runoff_runout")
+        self.assertEqual(project["curves"][0]["results"]["inputs"]["circular_placement_basis"], "runoff_runout")
+        aashto.validate_export_curves(project["curves"])
+        reply = super_service.export_pdf(project["curves"])
+        from pypdf import PdfReader
+        pdf = PdfReader(io.BytesIO(reply["content"]))
+        text = " ".join(page.extract_text() for page in pdf.pages)
+        self.assertIn("50% runoff + runout on tangent", text)
+
     def test_pivots_edge_elevations_and_no_geometry_change(self):
         for pivot in ("centerline", "left_edge", "right_edge"):
             for direction in ("left", "right"):
@@ -473,6 +517,7 @@ class AASHTOTests(unittest.TestCase):
         finding = reply["error"]["findings"][0]
         self.assertEqual(finding["curve_indexes"], [0])
         self.assertIn("Curve 1", finding["message"])
+        self.assertTrue(reply["error"]["message"].startswith("Curve 1: "))
         project = super_project.normalize_project(
             {
                 "version": super_project.PROJECT_VERSION,
@@ -695,6 +740,23 @@ class AASHTOTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.result(**changes)
 
+    def test_tangent_error_identifies_curve_and_preserves_findings(self):
+        for name, expected in (("Ramp curve 3", "Ramp curve 3"), ("", "Unnamed curve")):
+            with self.subTest(name=name):
+                reply = super_service.dispatch_safe("calculate", json.dumps({
+                    "inputs": inputs(curve_name=name, linear_unit="USSurveyFoot", geometry_provenance={
+                        "source": "LandXML", "available_exit_tangent_ft": 0,
+                    }),
+                    "entitlement": {"plan": "pro", "status": "active"},
+                }))
+                self.assertFalse(reply["ok"])
+                self.assertTrue(reply["error"]["message"].startswith(f"{expected}: "))
+                self.assertIn("Exit tangent", reply["error"]["message"])
+                self.assertTrue(all(f["message"].startswith(f"{expected}: ")
+                                    for f in reply["error"]["findings"]))
+                self.assertTrue(any(f["code"] == "INSUFFICIENT_TANGENT"
+                                    for f in reply["error"]["findings"]))
+
     def test_actual_lane_lookup_and_saved_result_presentation(self):
         r = self.result(
             roadway="one_way", initial_section="single_slope", lane_widths="12"
@@ -859,6 +921,11 @@ class AASHTOTests(unittest.TestCase):
             )["results"]
             self.assertEqual((a["e"], a["Lr"], a["Lt"]), (b["e"], b["Lr"], b["Lt"]))
             self.assertAlmostEqual(b["reverse_crown_ft"], 1000 - 0.4 * b["Lr"])
+            total = super_service.calculate_curve({**v, "override_standard_placement": True,
+                "circular_placement_basis": "runoff_runout", "runoff_tangent_percent": "50"})["results"]
+            self.assertEqual((a["e"], a["Lr"], a["Lt"]), (total["e"], total["Lr"], total["Lt"]))
+            self.assertAlmostEqual(total["pnc_ft"], 1000 - (total["Lr"] + total["Lt"]) / 2)
+            self.assertAlmostEqual(total["full_super_ft"], 1000 + (total["Lr"] + total["Lt"]) / 2)
 
 
 class TableSelectionTests(unittest.TestCase):

@@ -41,11 +41,16 @@ def coordinate_compound_curve_transitions(curves: Iterable[dict]) -> list[dict]:
             raise ValueError("Compound curves require banked sections on both arcs; normal-crown compound transitions need a separate design.")
         if a.get("calculation_metadata", {}).get("criteria", {}).get("profile_id") != b.get("calculation_metadata", {}).get("criteria", {}).get("profile_id"):
             raise ValueError("Compound curves must use the same criteria profile.")
-        if a.get("section_definition") != b.get("section_definition") or any(
-            a.get("inputs", {}).get(key) != b.get("inputs", {}).get(key)
-            for key in ("facility", "lane_width_ft", "lanes_rotated", "normal_crown")
-        ):
-            raise ValueError("Compound curves must use the same cross section and rotation axis.")
+        section_a, section_b = a.get("section_definition") or {}, b.get("section_definition") or {}
+        differences = [f"{key}: {section_a.get(key)!r} vs {section_b.get(key)!r}"
+                       for key in sorted(section_a.keys() | section_b.keys())
+                       if section_a.get(key) != section_b.get(key)]
+        differences.extend(f"{key}: {a.get('inputs', {}).get(key)!r} vs {b.get('inputs', {}).get(key)!r}"
+                           for key in ("facility", "lane_width_ft", "lanes_rotated", "normal_crown")
+                           if a.get("inputs", {}).get(key) != b.get("inputs", {}).get(key))
+        if differences:
+            names = [curves[index].get("meta", {}).get("curve_name") or f"Curve {index + 1}" for index in (i, j)]
+            raise ValueError(f"{names[0]} / {names[1]}: Compound curves must use the same cross section and rotation axis. Differences: {'; '.join(differences)}.")
         direction = curves[i].get("meta", {}).get("curve_direction", "left")
         outside = super_transition.outside_lane(direction)
         if any(super_transition._full_super_slopes(r, direction)[outside] <= 0 for r in (a, b)):
@@ -69,7 +74,9 @@ def coordinate_compound_curve_transitions(curves: Iterable[dict]) -> list[dict]:
         p = controlling.get("runoff_tangent_fraction")
         if p is None:
             if controlling.get("transition_method") == "aashto_fixed_pivot":
-                p = float(controlling["inputs"]["runoff_tangent_percent"]) / 100
+                from aashto_superelevation import circular_runoff_fraction
+                p = circular_runoff_fraction(float(controlling["inputs"]["runoff_tangent_percent"]),
+                    controlling["inputs"].get("circular_placement_basis", "runoff"), float(controlling["Lr"]), float(controlling["Lt"]))
             elif controlling.get("transition_method") == "tdot_simple_curve_half_total":
                 p = (runoff - float(controlling["Lt"])) / (2 * runoff)
             else:
@@ -155,7 +162,6 @@ def coordinate_compound_curve_transitions(curves: Iterable[dict]) -> list[dict]:
             raise ValueError("Compound transition extends beyond the established alignment.")
         for side, plan in result["compound_curve_transitions"].items():
             result["calculation_metadata"].setdefault("calculation_sources", []).append({"component": f"Compound {side}", "reference": plan["rule"], "mode": "project_input", **plan})
-            result.setdefault("warnings", []).append(f"Project compound {side}: {plan['start_e'] * 100:g}% to {plan['end_e'] * 100:g}% over {plan['length_ft']:.3f} ft; existing runoff rate retained.")
     return curves
 
 
@@ -382,7 +388,7 @@ def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str], *, comp
     }
 
 
-def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, str]) -> list[dict]:
+def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, str], curve_inputs: dict[int, dict] | None = None) -> list[dict]:
     """Coordinate adjoining compound arcs; reverse coordination remains explicit."""
     presets = list(presets)
     adjacency = [{"results": {"pc_ft": Super.parse_station_reference(str(p["pc_station_label"]), p.get("station_equations"), p.get("alignment_station_range")),
@@ -396,8 +402,11 @@ def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, 
     curves=[]
     for index,preset in enumerate(presets):
         try:
-            curves.append(build_curve_from_preset(preset,shared_inputs,compound_sides=tuple(sides.get(index, []))))
+            values = {**shared_inputs, **(curve_inputs or {}).get(preset.get("landxml_curve_index", index), {})}
+            curves.append(build_curve_from_preset(preset,values,compound_sides=tuple(sides.get(index, []))))
         except ValueError as exc:
+            curve_name = preset.get("curve_name") or f"Curve {index+1}"
+            exc.args = (f"{curve_name}: {exc}",)
             for finding in getattr(exc,"findings",[]):
                 finding["curve_indexes"]=[preset.get("landxml_curve_index", index)]
                 finding["message"]=f"{preset.get('curve_name',f'Curve {index+1}')}: {finding['message']}"

@@ -224,6 +224,9 @@ td:last-child, th:last-child { text-align: right; }
 .qa-summary .qa-overall { border-left: 4px solid #6ce0b5; }.qa-summary .qa-overall.review { border-left-color: var(--amber); }.qa-summary .qa-overall.block { border-left-color: var(--red); }
 .qa-summary > button.selected { border-color: var(--teal); background: #143028; }
 .qa-filters { display: flex; gap: 5px; margin: 12px 0 7px; }
+.qa-pending { margin-top: 12px; color: var(--muted); font-size: .75rem; }
+.qa-pending summary { cursor: pointer; padding: 10px 0; }
+.qa-pending > p { margin: 0 0 10px; }
 .qa-filters button { min-height: 30px; padding: 5px 9px; border-radius: 5px; color: var(--muted); font-size: .61rem; text-transform: uppercase; }
 .qa-filters button.active { color: #fff; border-color: #4a6b62; background: #1a2c27; }
 .qa-findings { display: grid; max-height: 350px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }

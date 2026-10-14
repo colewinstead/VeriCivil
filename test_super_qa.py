@@ -20,6 +20,24 @@ SPACING_FIXTURE = Path(__file__).parent / "tests" / "fixtures" / "reverse_spacin
 
 
 class ReverseSpacingTests(unittest.TestCase):
+    def test_single_slope_reverse_pair_checks_initial_section_recovery(self):
+        values = {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "30", "e_manual": "0.06",
+                  "roadway": "one_way", "initial_section": "single_slope", "initial_slope": "0.02",
+                  "lane_widths": "12", "rotation_axis": "left_edge", "runoff_tangent_percent": "50",
+                  "circular_placement_basis": "runoff_runout"}
+        for tangent in (300, 100):
+            with self.subTest(tangent=tangent):
+                xml = self.source(tangent)
+                curves = super_service.build_all_landxml_curves(xml, "spacing.xml", values)
+                report = super_service.corridor_qa(xml, "spacing.xml", curves, shared_inputs=values)
+                codes = {finding["code"] for finding in report["findings"]}
+                self.assertNotIn("MISSING_TRANSITION_DEMAND", codes)
+                if tangent == 300:
+                    self.assertFalse(any(finding["severity"] == "block" for finding in report["findings"]))
+                else:
+                    self.assertIn("TRANSITION_OVERLAP", codes)
+                    self.assertTrue(any(finding["severity"] == "block" for finding in report["findings"]))
+
     def source(self, tangent=20):
         root = ET.fromstring(SPACING_FIXTURE.read_text())
         ns = {"l": "http://www.landxml.org/schema/LandXML-1.2"}

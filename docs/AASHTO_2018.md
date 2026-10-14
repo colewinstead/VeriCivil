@@ -4,6 +4,10 @@ Profile: `aashto-green-book-2018-2019-10`. Application 1.6.9; calculation engine
 
 This is a **limited profile requiring independent engineering review**, not a claim of complete Green Book implementation or PE approval. Continuous Method 5 rate calculation, Table 3-13, and Tables 3-17 through 3-20 are excluded. The limits below are enforced rather than filled with MDOT/TDOT assumptions.
 
+## Curve-specific browser inputs
+
+For imported XML, the browser's **Input edits apply to** selector makes the editing scope explicit. Initial setup uses **Selected XML curves**; changes update only those fields on checked curves. Selecting an individual curve switches to **Curve N only** and restores that curve's draft or calculated inputs. Drafts are retained even when calculation is blocked and are saved with the project. **Add selected LandXML curves** uses common defaults plus each curve's inputs, so fixing one curve's speed or placement does not overwrite its neighbors. Real compound-section compatibility checks still apply.
+
 ## Sources and rights
 
 - AASHTO, *A Policy on Geometric Design of Highways and Streets*, seventh edition, 2018: Tables 3-8 through 3-12; §§3.3.5, 3.3.5.1, 3.3.8.2.1–3.3.8.2.3, 3.3.8.4.6, and 3.3.8.6; Table 3-15; Table 3-16a; Equations 3-23, 3-24, and 3-25; Figure 3-8. Publication information: [AASHTO bookstore](https://store.transportation.org/).
@@ -51,7 +55,7 @@ The current conservative one-way gradient policy remains unchanged: no Table 3-1
 
 ## Placement
 
-For circular curves, AASHTO requires an explicit runoff-on-tangent percentage. Entry runoff runs from PC − pLr to PC + (1 − p)Lr; exit placement is mirrored about PT. Runout is adjacent to the outer runoff ends. Percentages do not change runoff length or geometry. Entirely-on-tangent/curve selections trigger review; Equation 3-25 or overlapping runoffs may block them. Imported tangent availability and alignment limits are checked.
+For circular curves, an explicit project placement percentage is required. The default **Runoff only (Lr)** basis places entry runoff from PC − pLr to PC + (1 − p)Lr, with runout adjacent to the tangent end. The optional **Runoff + runout (Lr + Lt)** basis places the entire entry transition from PC − p(Lr + Lt) to PC + (1 − p)(Lr + Lt). Exit placement is mirrored about PT. This total-length basis is a project placement choice, not an automatic change of agency criteria. Percentages do not change calculated runoff/runout lengths or geometry. With zero runout, both bases give the same placement. Saved projects and PDF/source labels retain the basis. Entirely-on-tangent/curve selections trigger review; Equation 3-25 uses the actual attained bank, and overlapping transitions may block calculation. Imported tangent availability and alignment limits are checked.
 
 Existing MDOT 70/30 **runoff** placement and TDOT 50/50 **total runout + runoff** placement remain their defaults. Their optional project override uses a runoff percentage and records the departure. A TDOT default is never relabeled as 50/50 runoff. MDOT reverse-pair coordination cannot silently overwrite a custom placement or an AASHTO transition.
 

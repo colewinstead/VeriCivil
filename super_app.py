@@ -129,7 +129,7 @@ class ModernSuperElevationUI(tk.Tk):
         self.criteria_profile_display = tk.StringVar(value=CRITERIA_PROFILE_LABELS[MDOT_PROFILE_ID])
         for key,value in {"max_superelevation":"8","roadway":"two_way","initial_section":"crowned","rotation_axis":"centerline",
                           "lane_widths":"12,12","crown_from_left":"","left_normal_slope":"0.02","right_normal_slope":"0.02","initial_slope":"-0.02",
-                          "alignment_type":"circular","ts":"","st":"","runout_placement":"on_tangent","runoff_tangent_percent":"",
+                          "alignment_type":"circular","ts":"","st":"","runout_placement":"on_tangent","runoff_tangent_percent":"","circular_placement_basis":"runoff",
                           "override_standard_placement":"false","acknowledge_spiral_override":"false","aashto_tables":"","linear_unit":""}.items():
             self.vars[key]=tk.StringVar(value=value)
         self.computed_vars = {
@@ -1354,14 +1354,14 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
     def _show_aashto_settings(self) -> None:
         dialog=tk.Toplevel(self)
         dialog.title("AASHTO / transition placement")
-        dialog.geometry("620x780")
+        dialog.geometry("620x820")
         fields={"max_superelevation":["4","6","8","10","12"],"roadway":["two_way","one_way"],
                 "initial_section":["crowned","single_slope"],"rotation_axis":["centerline","left_edge","right_edge"],
-                "alignment_type":["circular","spiral"],"runout_placement":["on_tangent","in_spiral"],
+                "alignment_type":["circular","spiral"],"runout_placement":["on_tangent","in_spiral"],"circular_placement_basis":["runoff","runoff_runout"],
                 "override_standard_placement":["false","true"],"acknowledge_spiral_override":["false","true"]}
         keys=["max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left",
               "left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement",
-              "runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override"]
+              "circular_placement_basis","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override"]
         local={key:tk.StringVar(value=self.vars[key].get()) for key in keys}
         lane_count = tk.StringVar(value=str(len(local["lane_widths"].get().split(","))))
         saved_widths = local["lane_widths"].get().split(",")
@@ -1769,6 +1769,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
     def _apply_project(self, data: dict) -> None:
         self._suspend_auto = True
         vars_data = data.get("vars", {}) or {}
+        self.vars["circular_placement_basis"].set(vars_data.get("circular_placement_basis", "runoff"))
         self._diagnostic_findings=vars_data.get("diagnostic_findings",[]) or []
         for key, var in self.vars.items():
             if key not in vars_data:
@@ -1899,6 +1900,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             return
         inputs = results.get("inputs", {}) or {}
         self._suspend_auto = True
+        self.vars["circular_placement_basis"].set(inputs.get("circular_placement_basis", "runoff"))
         for key in ("max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override","aashto_tables","linear_unit"):
             if key in inputs:self.vars[key].set(json.dumps(inputs[key]) if key=="aashto_tables" and inputs[key] else str(inputs[key]) if inputs[key] is not None else "")
         self.vars["alignment_name"].set(meta.get("alignment_name", ""))

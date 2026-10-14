@@ -1583,7 +1583,7 @@ def calculate_superelevation(
         result = calculate_superelevation(pc_input, pt_input, speed_input, radius_input, facility, area_type,
             lane_width_input, lanes_rotated_input, e_manual_input, friction_input, rel_grad_input,
             normal_crown_input, L_manual_input, Lt_manual_input, station_equations, alignment_station_range, profile_id)
-        return override_circular_placement(result, profile_options.get("runoff_tangent_percent", ""), compound_sides=compound_sides)
+        return override_circular_placement(result, profile_options.get("runoff_tangent_percent", ""), basis=profile_options.get("circular_placement_basis", "runoff"), compound_sides=compound_sides)
     if profile_id == tdot_criteria.TDOT_PROFILE_ID:
         return _calculate_tdot_superelevation(
             pc_input,

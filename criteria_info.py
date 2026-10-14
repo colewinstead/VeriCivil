@@ -282,7 +282,8 @@ def calculation_sources(results: dict[str, Any]) -> list[dict[str, str]]:
         original=deepcopy(results)
         original.pop("runoff_tangent_fraction")
         sources=calculation_sources(original)
-        return [s for s in sources if s.get("component")!="Transition placement"]+[_source("Transition placement",f"USER OVERRIDE: {results['runoff_tangent_fraction']*100:g}% runoff on tangent","user_override")]
+        basis = "runoff + runout" if inputs.get("circular_placement_basis") == "runoff_runout" else "runoff"
+        return [s for s in sources if s.get("component")!="Transition placement"]+[_source("Transition placement",f"USER OVERRIDE: {inputs['runoff_tangent_percent']:g}% {basis} on tangent","user_override")]
     profile_id = _result_profile_id(results)
     metadata = results.get("calculation_metadata", {}) or {}
     overrides = metadata.get("manual_overrides", {}) or {}
