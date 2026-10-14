@@ -1,64 +1,30 @@
 ---
 name: ship-main
-description: Verify a merged Superelevation Calculator release and publish that exact main commit to the existing ChatGPT Site. Use when the user says "Ship main", asks to rebuild or republish the website after merging to main, or invokes $ship-main from this repository.
+description: Publish the released main commit to VeriCivil's existing ChatGPT Site. Use for "Ship main" or requests to republish after merging.
 ---
 
 # Ship Main
 
-Publish the exact released `main` source to the existing ChatGPT Site. Explicit invocation authorizes a new production deployment at the site's current access level; it does not authorize changing access, slug, domain, or project identity.
+Publish the released `main` source to the existing Site. Invocation authorizes deployment at its current access level, without changing the Site identity, slug, domain, or audience.
 
-Use `scripts/prepare_site_version.ps1` for the fragile Sites history and packaging steps on Windows. Do not reconstruct those commands manually unless the script is unavailable.
+## Verify the release
 
-## Preconditions
+1. Read `AGENTS.md`, `app_info.py`, and `web/.openai/hosting.json`. Use the GitHub repository identified by `origin` and the existing Site's `project_id`.
+2. Fetch `origin/main` and tags without discarding local work. Read `APP_VERSION` from that commit.
+3. Confirm `vAPP_VERSION` is a published, non-prerelease release at that commit, the Full Release workflow succeeded, and its browser archive and checksum are present. Manual-only desktop builds are not required.
+4. Reuse successful Python, TypeScript, lint, browser tests, and Pyodide parity checks for that exact commit. Run only missing checks; stop on failures or release mismatches. Do not modify source or repair releases as part of shipping.
 
-1. Read the repository `AGENTS.md`, `app_info.py`, and `web/.openai/hosting.json`.
-2. Confirm GitHub CLI authentication and access to `colewinstead/Super_Elevation_Calculator`.
-3. Fetch `origin/main` and tags without discarding local work. If the current worktree is dirty, preserve it and use a clean temporary worktree at `origin/main`.
-4. Read `APP_VERSION`, then verify all of the following:
-   - Release tag `vAPP_VERSION` exists, is a full non-draft/non-prerelease release, and targets `origin/main`.
-   - The Full Release workflow for `origin/main` succeeded.
-   - Release assets include the versioned browser archive and its checksum.
-   - Require Windows or macOS assets only when their workflows are enabled for automatic `main` releases. Manual-only desktop workflows mean those assets are intentionally deferred.
-5. Stop with a plain-language blocker if the version, commit, workflow, or assets do not match. Do not repair the release or modify source as part of this skill.
+## Build and publish
 
-## Validate the exact source
+1. Follow the currently available Sites skill and its supported source, build, and packaging helper. Reuse a clean checkout at the released commit; create a temporary checkout only when needed to preserve local work.
+2. Build the Sites production output from that source. Install declared dependencies only when missing. Do not substitute the GitHub browser archive unless it meets the current Sites archive requirements.
+3. Inspect the existing Site and hosted environment-variable names. Preserve its configuration and secrets; do not upload local environment files or credentials.
+4. Obtain a short-lived source credential when the helper needs it, keeping it out of output, files, command history, and Git configuration. Follow the helper's credential input protocol.
+5. Synchronize the released source and package its build using the Sites helper. Save the verified pushed source commit and matching archive, then deploy that saved version at the existing access level. Never create a replacement Site.
+6. If deployment is pending, poll its returned ID until terminal. On failure, report the reason; do not repeatedly deploy the same failed version.
 
-1. Work from the clean `origin/main` checkout.
-2. Install declared dependencies only when absent.
-3. Run the Python unit tests.
-4. From `web`, stage the shared Python runtime, type-check, lint, build the Sites production output, run the rendered-shell tests, and run Pyodide parity.
-5. Do not alter calculations or weaken tests to obtain a passing build.
+## Finish
 
-## Publish the existing site
-
-1. Use the available `sites-building` and `sites-hosting` skills and follow their current instructions.
-2. Reuse the exact `project_id` in `web/.openai/hosting.json`. Never call create-site when it is present.
-3. Inspect the Site and hosted environment-variable names. Never copy `.dev.vars`, tokens, signing secrets, or billing credentials into Sites without separate explicit authorization.
-4. Obtain a fresh short-lived source credential. Keep it out of output, remotes, files, command history, and Git configuration.
-5. In one shell process, place the credential's complete HTTP authorization header in the task-specific `SHIP_MAIN_SITE_AUTH_HEADER` environment variable and run:
-
-   ```powershell
-   .\.agents\skills\ship-main\scripts\prepare_site_version.ps1 `
-     -RepositoryRoot <clean-worktree> `
-     -ReleaseCommit <origin-main-sha> `
-     -SiteRemoteUrl <credential-remote-url> `
-     -ArchivePath <unique-temp-archive>
-   ```
-
-   The script verifies a clean exact checkout and deployable build, preserves the Sites source parent, pushes an exact-tree source commit, creates the archive, and verifies the remote head. It prints only sanitized JSON. Do not print the environment variable or full command when it contains the credential.
-6. Pass the script's `source_commit` and `archive` to `save_site_version`. Deploy that saved version at the existing access level.
-7. Poll until deployment succeeds or fails. Verify the custom domain and `/calculator` return HTTP 200 and expose the released app version.
-8. Remove only the exact temporary worktree and archive after resolving and confirming that both are inside the operating-system temporary directory.
-
-## Efficiency rules
-
-- Run release checks and exact-source validation once. Reuse their results during the same invocation.
-- Fetch the existing Sites branch before creating its exact-tree child; never attempt a blind push first.
-- Request the short-lived Sites credential only after validation and the production build pass, so it does not expire during tests.
-- Use the bundled PowerShell helper on Windows instead of the Bash packaging helper.
-- Saving a Site version is not deployment. Save once, deploy once, and poll the returned deployment ID.
-
-## Cross-computer requirements
-
-- Use the same GitHub account access and the same ChatGPT account or workspace that owns the existing Site.
-- If the Sites connector or project access is unavailable, stop and ask the user to enable or authenticate it. Do not create another site as a fallback.
+- Confirm deployment succeeded, and verify the custom domain and `/calculator` return HTTP 200 and expose the released app version.
+- Remove only temporary files created for this run after verifying their exact paths. If cleanup is blocked, report what remains without retrying through another execution path.
+- Report the live URL and app/engine versions. If GitHub or Site access is unavailable, report the blocker rather than using another repository or Site.
