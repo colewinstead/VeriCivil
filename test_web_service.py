@@ -16,6 +16,20 @@ FIXTURE = Path(__file__).parent / "tests" / "fixtures" / "sr82_synthetic.xml"
 
 
 class WebServiceTests(unittest.TestCase):
+    def test_compound_presets_identify_neighbors_for_browser_preview(self):
+        fixture = FIXTURE.parent / "compound_synthetic.xml"
+        parsed = super_service.parse_landxml(fixture.read_text(), fixture.name)
+        presets = parsed["curve_presets"]
+        self.assertIn(1, presets[0]["compound_neighbor_indexes"])
+        self.assertIn(0, presets[1]["compound_neighbor_indexes"])
+
+    def test_method_notes_are_not_warnings_but_real_warnings_survive(self):
+        response = super_service.present_results({**super_service.calculate_curve(self.inputs())["results"],
+            "warnings": ["One-way carriageway uses unadjusted relative gradient; no multilane runoff reduction is assumed for ramps.",
+                         "Project compound exit: 2% to 2% over 0.000 ft; existing runoff rate retained.",
+                         "Manual rate: published radius/rate applicability must be independently verified."]})
+        self.assertEqual(response["results"]["warnings"], ["Manual rate: published radius/rate applicability must be independently verified."])
+
     def pro_payload(self, payload: dict) -> dict:
         return {
             **payload,

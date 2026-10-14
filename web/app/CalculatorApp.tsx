@@ -1,5 +1,8 @@
 "use client";
 
+import { requiresCompoundCalculation } from "../lib/qa-findings";
+import { curveInputValues, editLandxmlInputs, type LandxmlInputs } from "../lib/curve-inputs";
+
 /* Browser worker responses mirror dynamically typed Python dictionaries. */
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-html-link-for-pages */
 
@@ -37,7 +40,7 @@ const INITIAL_INPUTS: Dict = {
   max_superelevation: "8", roadway: "two_way", initial_section: "crowned", rotation_axis: "centerline",
   lane_widths: "12,12", crown_from_left: "", left_normal_slope: "0.02", right_normal_slope: "0.02",
   initial_slope: "-0.02", alignment_type: "circular", ts: "", st: "", runout_placement: "on_tangent",
-  runoff_tangent_percent: "", override_standard_placement: false, acknowledge_spiral_override: false,
+  runoff_tangent_percent: "", circular_placement_basis: "runoff", override_standard_placement: false, acknowledge_spiral_override: false,
   aashto_tables: null,
   manual_spiral_length_check: false,
   project_name: "",
@@ -110,7 +113,7 @@ function cleanName(value: string, fallback: string) {
 
 function calculationInputKey(inputs: Dict) {
   return JSON.stringify({
-    aashto: Object.fromEntries(["max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override","aashto_tables","manual_spiral_length_check"].map(key => [key, inputs[key]])),
+    aashto: Object.fromEntries(["max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","circular_placement_basis","override_standard_placement","acknowledge_spiral_override","aashto_tables","manual_spiral_length_check"].map(key => [key, inputs[key]])),
     criteria_profile: inputs.criteria_profile,
     curve_direction: inputs.curve_direction,
     pc: inputs.pc,
@@ -174,6 +177,8 @@ export default function CalculatorApp() {
     try { localStorage.setItem("vericivil_landxml_retention_v1", allowed ? "on" : "off"); } catch { /* Session preference still works. */ }
   };
   const [excludedCurveIndexes, setExcludedCurveIndexes] = useState<number[]>([]);
+  const [landxmlInputs, setLandxmlInputs] = useState<LandxmlInputs>({ shared: {}, curves: {} });
+  const [inputScope, setInputScope] = useState("selected");
   const [reverseCurvePairs, setReverseCurvePairs] = useState<number[][]>([]);
   const [calculationRequest, setCalculationRequest] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -189,11 +194,18 @@ export default function CalculatorApp() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [dirty, setDirty] = useState(false);
+  const compoundPreviewPending = !lengthCheckMode && inputs.geometry_provenance?.source === "LandXML"
+    && requiresCompoundCalculation(landxml?.curve_presets?.[landxmlPreset]?.compound_neighbor_indexes, excludedCurveIndexes, selectedCurve >= 0);
+  const selectedInputsMode = !!landxml && landxmlPreset >= 0 && inputScope === "selected";
+  const calculateSelectedCurves = compoundPreviewPending || selectedInputsMode;
   useEffect(() => trackCalculatorEvent("superelevation", "calculator_opened"), []);
   const startWorker = useCallback(() => {
     workerRef.current?.terminate();
     pendingRef.current.forEach(({ reject }) => reject(new Error("Browser workspace restarted.")));
     pendingRef.current.clear();
+    loadedCurveCalculation.current = null;
+    setError("");
+    setBlockedFindings([]);
     setRuntime("loading");
     setProgress(4);
     const worker = new Worker("/pyodide-worker.js");
@@ -207,11 +219,11 @@ export default function CalculatorApp() {
         setRuntime("ready");
         setManifest(message.manifest);
         if (message.manifest?.commercial) {
-          const provider = isLocalEntitlementDevelopment()
+          const provider = entitlementProviderRef.current ?? (isLocalEntitlementDevelopment()
             ? new LocalDevelopmentEntitlementProvider(message.manifest.commercial)
-            : new RemoteEntitlementProvider(message.manifest.commercial);
+            : new RemoteEntitlementProvider(message.manifest.commercial));
           entitlementProviderRef.current = provider;
-          provider.getSnapshot().then(setEntitlement);
+          provider.refresh().then(setEntitlement);
           setLocalDevelopment(isLocalEntitlementDevelopment());
         }
       } else if (message.type === "fatal") {
@@ -276,34 +288,37 @@ export default function CalculatorApp() {
     setNotice(`Local development entitlement changed to ${plan.toUpperCase()}.`);
   };
 
-  const update = (key: string, value: any) => {
-    setInputs((current) => ({ ...current, [key]: value }));
+  const updateInputs = (changes: Dict) => {
+    setInputs((current) => ({ ...current, ...changes }));
+    if (landxml && landxmlPreset >= 0 && inputs.geometry_provenance?.source === "LandXML" && !Object.keys(changes).every(key => ["project_name", "route_name"].includes(key))) {
+      const selected = landxml.curve_presets.map((_: Dict, index: number) => index).filter((index: number) => !excludedCurveIndexes.includes(index));
+      setLandxmlInputs(state => editLandxmlInputs(state, changes, landxmlPreset, inputScope, selected));
+    }
     setDirty(true);
   };
+  const update = (key: string, value: any) => updateInputs({ [key]: value });
 
   const sectionWidths = String(inputs.lane_widths ?? "12,12").split(",");
   const equalSectionWidths = sectionWidths.every(width => Number(width) === Number(sectionWidths[0]));
   const setSectionLanes = (count: number, width: string) => update("lane_widths", Array(count).fill(width).join(","));
   const changeRoadway = (roadway: string) => {
-    setInputs(current => ({ ...current, roadway,
+    updateInputs({ roadway,
       initial_section: roadway === "one_way" ? "single_slope" : "crowned",
-      rotation_axis: roadway === "one_way" && current.rotation_axis === "centerline" ? "" : current.rotation_axis,
-    }));
-    setDirty(true);
+      rotation_axis: roadway === "one_way" && inputs.rotation_axis === "centerline" ? "" : inputs.rotation_axis,
+    });
   };
 
   const updateCriteriaProfile = (profileId: string) => {
     if (!profileId.startsWith("mdot") && !requestCapability(CAPABILITIES.allDotProfiles)) return;
     const tdot = profileId.startsWith("tdot");
-    setInputs((current) => ({
-      ...current,
+    updateInputs({
       criteria_profile: profileId,
       manual_spiral_length_check: false,
       facility: tdot ? "undivided" : "centerline",
-      area: tdot && current.area === "local" ? "rural" : current.area,
+      area: tdot && inputs.area === "local" ? "rural" : inputs.area,
       ...(profileId.startsWith("aashto") ? {area:"rural"} : {}),
       speed: "",
-    }));
+    });
     setCalculation(null);
     setLookupResult(null);
     setDirty(true);
@@ -335,8 +350,9 @@ export default function CalculatorApp() {
   };
 
   const calculate = async () => {
+    if (compoundPreviewPending) return;
     const sequence = ++calculationSequence.current;
-    const result = await run("Calculating", () => call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs }));
+    const result = await run("Calculating", () => call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs, curves, curve_index: selectedCurve }));
     if (result && sequence === calculationSequence.current) {
       setBlockedFindings([]);
       setCalculation(lengthCheckMode ? null : result);
@@ -379,7 +395,8 @@ export default function CalculatorApp() {
         && (!aashto || (String(inputs.pt ?? "").trim()
           && (inputs.alignment_type !== "spiral" || (String(inputs.ts ?? "").trim() && String(inputs.st ?? "").trim()))))));
     const sequence = ++calculationSequence.current;
-    if (!readyToCalculate) {
+    if (!readyToCalculate || calculateSelectedCurves) {
+      if (calculateSelectedCurves) setError("");
       setBlockedFindings([]);
       setCalculation(null);
       setSpiralLengthCheck(null);
@@ -392,7 +409,7 @@ export default function CalculatorApp() {
       setNotice("");
       setBusy("Calculating");
       try {
-        const result = await call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs });
+        const result = await call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs, curves, curve_index: selectedCurve });
         if (sequence !== calculationSequence.current) return;
         setCalculation(lengthCheckMode ? null : result);
         setSpiralLengthCheck(lengthCheckMode ? { ...result, inputKey: calculationKey } : null);
@@ -421,7 +438,7 @@ export default function CalculatorApp() {
     return () => window.clearTimeout(timer);
     // calculationKey intentionally captures only values that affect calculation output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode]);
+  }, [calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode, compoundPreviewPending, selectedInputsMode]);
 
   const diagramCurves = useMemo(() => {
     if (!curves.length) return calculation?.results ? [{ results: calculation.results, meta }] : [];
@@ -472,12 +489,22 @@ export default function CalculatorApp() {
     return () => { active = false; };
   }, [landxml, diagramCurves, runtime, call, entitlement]);
 
-  const applyPreset = (index: number, parsed = landxml) => {
+  const applyPreset = (index: number, parsed = landxml, drafts = landxmlInputs) => {
     const preset = parsed?.curve_presets?.[index];
     if (!preset) return;
+    const calculatedIndex = parsed === landxml ? curves.findIndex(curve =>
+      curve.meta?.landxml_curve_id === preset.landxml_curve_id && curve.meta?.alignment_name === preset.alignment_name) : -1;
+    if (calculatedIndex >= 0) {
+      void loadCurveFrom(curves[calculatedIndex], calculatedIndex, inputs.station_format, drafts.curves[index]);
+      return;
+    }
+    setSelectedCurve(-1);
     setLandxmlPreset(index);
     setInputs((current) => ({
       ...current,
+      ...drafts.shared,
+      ...drafts.curves[index],
+      project_name: current.project_name,
       alignment_name: preset.alignment_name || "",
       manual_spiral_length_check: false,
       linear_unit: preset.linear_unit,
@@ -513,9 +540,12 @@ export default function CalculatorApp() {
     const result = await run("Reading LandXML", () => call("parse_landxml", { content, filename: file.name }));
     if (result) {
       setLandxml(result);
+      const drafts = { shared: { ...inputs }, curves: {} };
+      setLandxmlInputs(drafts);
+      setInputScope("selected");
       setExcludedCurveIndexes([]);
       setNotice(`${file.name} is embedded in working project state. Save the project to persist it.`);
-      applyPreset(0, result);
+      applyPreset(0, result, drafts);
       const retained = await retainLandxml(content, retainAtSelection && retentionAllowed.current);
       setRetentionNotice(retained === "stored"
         ? "A copy was retained for product improvement. Turning retention off affects future selections."
@@ -534,6 +564,9 @@ export default function CalculatorApp() {
     }));
     if (!result) return;
     setLandxml(result);
+    const drafts = { shared: { ...inputs }, curves: {} };
+    setLandxmlInputs(drafts);
+    setInputScope("selected");
     setCurves([]);
     setReverseCurvePairs([]);
     setExcludedCurveIndexes([]);
@@ -541,7 +574,7 @@ export default function CalculatorApp() {
     setSelectedCurve(-1);
     setDiagramInspector(null);
     setLookupResult(null);
-    if (result.curve_presets.length) applyPreset(0, result);
+    if (result.curve_presets.length) applyPreset(0, result, drafts);
     else {
       setLandxmlPreset(-1);
       setCalculation(null);
@@ -614,6 +647,15 @@ export default function CalculatorApp() {
   const updateCurve = async () => {
     if (!requestCapability(CAPABILITIES.multiCurve)) return;
     const curve = curveObject();
+    if (landxml && landxmlPreset >= 0 && (!curve || selectedCurve < 0)) {
+      setLandxmlInputs(state => ({ ...state, curves: { ...state.curves, [landxmlPreset]: {
+        ...state.curves[landxmlPreset], ...Object.fromEntries(Object.entries(inputs).filter(([key]) => !["project_name", "route_name"].includes(key))),
+      } } }));
+      setError("");
+      setDirty(true);
+      setNotice(`${inputs.curve_name || `Curve ${landxmlPreset + 1}`} inputs kept in the working project. Calculate selected curves when ready.`);
+      return;
+    }
     if (!curve || selectedCurve < 0) return setError("Select a curve and run a calculation before updating it.");
     const nextCurves = await coordinateCurveSet(curves.map((item, index) => index === selectedCurve ? curve : item));
     if (!nextCurves) return;
@@ -664,26 +706,17 @@ export default function CalculatorApp() {
       : `Removed the calculated curve and excluded source Curve ${Number(sourceIndex) + 1} from corridor QA.`);
   };
 
-  const loadCurveFrom = async (curve: Dict, index: number, stationFormat = inputs.station_format) => {
+  const loadCurveFrom = async (curve: Dict, index: number, stationFormat = inputs.station_format, draft = landxmlInputs.curves[curve?.meta?.landxml_curve_index]) => {
     setSelectedCurve(index);
+    setInputScope("curve");
+    setBlockedFindings([]);
     if (!curve?.results) return;
     if (curve.meta?.landxml_curve_index != null) setLandxmlPreset(Number(curve.meta.landxml_curve_index));
-    const values = curve.results.inputs || {};
     setInputs((current) => {
-      const nextInputs = {
-        ...current,
-        ...values,
-        ...curve.meta,
-        manual_spiral_length_check: false,
-        criteria_profile: values.criteria_profile ?? curve.results?.calculation_metadata?.criteria?.profile_id ?? "mdot-rdsd-2026-04-22",
-        pc: values.pc ?? "", pt: values.pt ?? "", speed: String(values.speed_mph ?? ""), radius: String(values.radius_ft ?? ""),
-        facility: values.facility ?? "centerline", area: values.area_type ?? "rural", lane_width: String(values.lane_width_ft ?? "12"),
-        lanes_rotated: String(values.lanes_rotated ?? "2"), e_manual: values.e_manual == null ? "" : String(values.e_manual),
-        friction: values.friction_input ?? "", rel_grad: values.relative_gradient_input ?? "", normal_crown: String(values.normal_crown ?? "0.02"),
-        Lr_manual: values.Lr_manual == null ? "" : String(values.Lr_manual), Lt_manual: values.Lt_manual == null ? "" : String(values.Lt_manual),
-        curve_notes: curve.notes || "",
-      };
-      loadedCurveCalculation.current = { key: calculationInputKey(nextInputs), request: calculationRequest };
+      const recordedInputs = { ...current, ...curveInputValues(curve) };
+      const nextInputs = { ...recordedInputs, ...draft, project_name: current.project_name, route_name: current.route_name };
+      loadedCurveCalculation.current = calculationInputKey(nextInputs) === calculationInputKey(recordedInputs)
+        ? { key: calculationInputKey(nextInputs), request: calculationRequest } : null;
       return nextInputs;
     });
     const presented = await run("Opening curve", () => call("present_results", { results: curve.results, direction: curve.meta?.curve_direction || "left", station_format: stationFormat }));
@@ -701,12 +734,15 @@ export default function CalculatorApp() {
       content: landxml.source.content,
       filename: landxml.source.filename,
       alignment_index: landxml.source.alignment_index,
-      shared_inputs: inputs,
+      shared_inputs: { ...landxmlInputs.shared, project_name: inputs.project_name, route_name: inputs.route_name },
+      curve_inputs: Object.fromEntries(Object.entries(landxmlInputs.curves).map(([index, values]) => [index,
+        { ...values, project_name: inputs.project_name, route_name: inputs.route_name }])),
       excluded_curve_indexes: excludedCurveIndexes,
     }));
     if (result) {
       setBlockedFindings([]);
       setCurves(result);
+      setLandxmlInputs(state => ({ ...state, curves: { ...Object.fromEntries(result.map((curve: Dict) => [curve.meta.landxml_curve_index, curveInputValues(curve)])), ...state.curves } }));
       setReverseCurvePairs([]);
       setSelectedCurve(result.length ? 0 : -1);
       if (result.length) await loadCurveFrom(result[0], 0);
@@ -733,7 +769,7 @@ export default function CalculatorApp() {
       application_version: manifest?.application_version,
       calculation_engine_version: manifest?.calculation_engine_version,
       criteria: calculation?.results?.calculation_metadata?.criteria || manifest?.criteria,
-      vars: {...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== "coordinate_reverse_curves")),diagnostic_findings:blockedFindings},
+      vars: {...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== "coordinate_reverse_curves")),diagnostic_findings:blockedFindings,landxml_shared_inputs:landxmlInputs.shared,landxml_curve_inputs:landxmlInputs.curves},
       curves,
       excluded_landxml_curve_indexes: excludedCurveIndexes,
       reverse_curve_pairs: reverseCurvePairs,
@@ -776,6 +812,12 @@ export default function CalculatorApp() {
     if (!loaded) return;
     const restoredInputs = { ...INITIAL_INPUTS, ...(loaded.project.vars || {}) };
     const restoredCurves = loaded.project.curves || [];
+    const drafts = { shared: restoredInputs.landxml_shared_inputs || { ...restoredInputs }, curves: {
+      ...Object.fromEntries(restoredCurves.filter((curve: Dict) => curve.meta?.landxml_curve_index != null).map((curve: Dict) => [curve.meta.landxml_curve_index, curveInputValues(curve)])),
+      ...(restoredInputs.landxml_curve_inputs || {}),
+    } };
+    setLandxmlInputs(drafts);
+    setInputScope("curve");
     setInputs(restoredInputs);
     setBlockedFindings(restoredInputs.diagnostic_findings || []);
     setCurves(restoredCurves);
@@ -791,9 +833,9 @@ export default function CalculatorApp() {
       : -1;
 
     if (firstLandxmlCurve >= 0) {
-      await loadCurveFrom(restoredCurves[firstLandxmlCurve], firstLandxmlCurve, restoredInputs.station_format);
+      await loadCurveFrom(restoredCurves[firstLandxmlCurve], firstLandxmlCurve, restoredInputs.station_format, drafts.curves[restoredCurves[firstLandxmlCurve].meta.landxml_curve_index]);
     } else if (firstIncludedPreset >= 0) {
-      applyPreset(firstIncludedPreset, loaded.landxml);
+      applyPreset(firstIncludedPreset, loaded.landxml, drafts);
       setSelectedCurve(-1);
     } else if (hasLandxmlCurves) {
       setCalculation(null);
@@ -846,6 +888,7 @@ export default function CalculatorApp() {
 
   const newProject = () => {
     if (dirty && !window.confirm("Discard the unsaved working project?")) return;
+    setLandxmlInputs({ shared: {}, curves: {} }); setInputScope("selected");
     setInputs(INITIAL_INPUTS); setCalculation(null); setCurves([]); setReverseCurvePairs([]); setLandxml(null); setLandxmlPreset(0); setSelectedCurve(-1); setExcludedCurveIndexes([]);
     setLookupResult(null); setError(""); setNotice(""); setDirty(false);
   };
@@ -944,7 +987,7 @@ export default function CalculatorApp() {
     ? applicableDrawings.join(" / ")
     : "No mapped standard drawing";
   const diagnosticFindings=blockedFindings.map((finding:Dict)=>({...finding,start_ft:finding.station_start_ft,end_ft:finding.station_end_ft,curve_indexes:finding.curve_indexes || (selectedCurve>=0?[selectedCurve]:[]),details:typeof finding.details==="object"?JSON.stringify(finding.details):finding.details}));
-  const reviewFindings=[...(corridorQa?.findings || []),...diagnosticFindings];
+  const reviewFindings=[...diagnosticFindings,...(corridorQa?.findings || [])];
   const reviewQa=reviewFindings.length ? {...(corridorQa || {}),criteria_profile:activeProfileId,calculation_engine_version:manifest?.calculation_engine_version,curve_count:curves.length,status:reviewFindings.some(f=>f.severity==="block")?"block":"review",counts:Object.fromEntries(["pass","review","block"].map(severity=>[severity,reviewFindings.filter(f=>f.severity===severity).length])),findings:reviewFindings} : corridorQa;
   const qaHighlights = (reviewQa?.findings || []).filter((finding: Dict) =>
     finding.start_ft != null && finding.end_ft != null
@@ -1001,6 +1044,7 @@ export default function CalculatorApp() {
         <a className="workspace-home" href="/">Product home</a><a className="workspace-home" href="/account" target="_blank" rel="noreferrer">{entitlement.plan === "free" ? "Account" : `${entitlement.plan.toUpperCase()} account`}</a>
         {localDevelopment && <label className="development-entitlement"><span>Local test plan</span><select value={entitlement.plan} onChange={(event) => changeDevelopmentEntitlement(event.target.value as CommercialPlan)}><option value="free">Free</option><option value="pro">Pro</option><option value="team">Team</option></select></label>}
         <div className={`runtime ${runtime}`}><span></span>{runtime === "ready" ? "Private browser engine ready" : runtimeMessage}</div>
+        {runtime === "ready" && <button onClick={startWorker} disabled={!!busy} title="Load the latest Python engine while keeping your project and curve inputs">Reload engine</button>}
       </header>
 
       {upgradeFeature && <UpgradeNotice feature={upgradeFeature} onClose={() => setUpgradeFeature("")} />}
@@ -1063,16 +1107,23 @@ export default function CalculatorApp() {
               </div>}
             </div>)}
           </div>
-          <div className="button-grid"><button onClick={addCurve} disabled={lengthCheckMode}>Add {proChip(CAPABILITIES.multiCurve)}</button><button onClick={updateCurve} disabled={lengthCheckMode}>Update {proChip(CAPABILITIES.multiCurve)}</button><button onClick={removeCurve}>Remove</button></div>
+          <div className="button-grid"><button onClick={addCurve} disabled={lengthCheckMode || compoundPreviewPending}>Add {proChip(CAPABILITIES.multiCurve)}</button><button onClick={updateCurve} disabled={lengthCheckMode}>{landxml && landxmlPreset >= 0 && !calculation ? "Save curve inputs" : "Update"} {proChip(CAPABILITIES.multiCurve)}</button><button onClick={removeCurve}>Remove</button></div>
         </aside>
 
         <section className="panel inputs-panel">
           <div className="panel-heading"><div><p className="step">02</p><h2>Curve inputs</h2></div><span className="required-note">* Required</span></div>
           {(landxml?.curve_presets?.length || 0) > 0 && <label className="field full"><span>LandXML curve</span><select value={landxmlPreset} onChange={(e) => {
             const index = Number(e.target.value);
-            if (index >= 0) applyPreset(index);
+            if (index >= 0) { setInputScope("curve"); applyPreset(index); }
             else { setLandxmlPreset(-1); setCalculation(null); setDiagramInspector(null); }
           }}><option value={-1}>No LandXML curve selected</option>{landxml?.curve_presets?.map((preset: Dict, index: number) => <option value={index} key={index}>{preset.curve_name} · {preset.curve_direction} · R {preset.radius_ft}{excludedCurveIndexes.includes(index) ? " · excluded from QA" : ""}</option>)}</select></label>}
+          {landxml && landxmlPreset >= 0 && <label className="field full"><span>Input edits apply to</span><select value={inputScope} onChange={e => {
+            const scope = e.target.value;
+            setInputScope(scope);
+            if (scope === "curve") applyPreset(landxmlPreset);
+            else setInputs(current => ({ ...current, ...Object.fromEntries(Object.entries(landxmlInputs.shared).filter(([key]) =>
+              !["pc", "pt", "radius", "curve_direction", "curve_name", "alignment_name", "alignment_type", "ts", "st", "linear_unit", "geometry_provenance", "station_equations", "alignment_station_range", "project_name", "route_name"].includes(key))) }));
+          }}><option value="curve">{landxml.curve_presets[landxmlPreset]?.curve_name || `Curve ${landxmlPreset + 1}`} only</option><option value="selected">Selected XML curves</option></select><small>{inputScope === "curve" ? "Edits stay with this curve, even if calculation is blocked. Add selected uses each curve's saved inputs." : "Each input you change updates the checked curves. Other curve-specific settings are retained."}</small></label>}
           <div className="form-grid">{input("alignment_name", "Alignment name")}{input("curve_name", "Curve name")}
             <label className="field full"><span>Governing standard</span><select value={activeProfileId} onChange={(e) => updateCriteriaProfile(e.target.value)}>{manifest?.criteria_profiles?.map((profile: Dict) => <option value={profile.profile_id} key={profile.profile_id}>{profile.governing_authority} · {profile.revision}{!profile.profile_id.startsWith("mdot") && !allows(entitlement, CAPABILITIES.allDotProfiles) ? " · Pro" : ""}</option>)}</select><small>{activeProfile?.profile_name}</small></label>
             <label className="field"><span>Curve direction</span><select value={inputs.curve_direction} onChange={(e) => update("curve_direction", e.target.value)}><option value="left">Left</option><option value="right">Right</option></select></label>
@@ -1084,7 +1135,7 @@ export default function CalculatorApp() {
             <label className="field"><span>Design speed <b>*</b></span><select value={inputs.speed} onChange={(e) => update("speed", e.target.value)}><option value="">Select mph</option>{speedOptions.map((speed: string) => <option key={speed}>{speed}</option>)}</select></label>
             {input("radius", "Curve radius (ft)", true, "number")}
             {!isAashto && <label className="field"><span>{isTdot ? "Roadway layout" : "Facility / rotation"}</span><select value={inputs.facility} disabled={!isTdot && inputs.area === "local"} onChange={(e) => update("facility", e.target.value)}>{(profileOptions.facility || manifest?.options?.facility || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>}
-            <label className="field"><span>Area type</span><select value={inputs.area} onChange={(e) => { const area = e.target.value; setInputs((current) => ({ ...current, area, speed: isTdot && area === "urban" && Number(current.speed) > 60 ? "" : current.speed })); setDirty(true); }}>{(profileOptions.area || manifest?.options?.area || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>
+            <label className="field"><span>Area type</span><select value={inputs.area} onChange={(e) => { const area = e.target.value; updateInputs({ area, speed: isTdot && area === "urban" && Number(inputs.speed) > 60 ? "" : inputs.speed }); }}>{(profileOptions.area || manifest?.options?.area || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>
             {!activeProfileId.startsWith("aashto") && <>{input("lane_width", "Lane width (ft)", false, "number")}{input("lanes_rotated", "Lanes rotated", false, "number")}</>}
             {activeProfileId.startsWith("aashto") && <>
               <label className="field"><span>Maximum superelevation</span><select value={inputs.max_superelevation} onChange={e=>update("max_superelevation",e.target.value)}>{profileOptions.max_superelevation?.map((v:number)=><option value={v} key={v}>{v}%</option>)}</select></label>
@@ -1100,12 +1151,16 @@ export default function CalculatorApp() {
               {!lengthCheckMode && inputs.alignment_type === "spiral" && <><label className="field"><span>Tangent runout placement</span><select value={inputs.runout_placement} onChange={e=>update("runout_placement",e.target.value)}><option value="on_tangent">On tangent</option><option value="in_spiral">In spiral</option></select></label><label className="check full"><input type="checkbox" checked={inputs.acknowledge_spiral_override} onChange={e=>update("acknowledge_spiral_override",e.target.checked)}/>Acknowledge project-specific minimum-length placement and zero-crown drainage review.</label></>}
             </>}
             {!activeProfileId.startsWith("aashto") && <label className="check full"><input type="checkbox" checked={inputs.override_standard_placement} onChange={e=>update("override_standard_placement",e.target.checked)}/>Override standard circular transition placement</label>}
-            {(!lengthCheckMode && activeProfileId.startsWith("aashto") && inputs.alignment_type !== "spiral" || !activeProfileId.startsWith("aashto") && inputs.override_standard_placement) && <label className="field full"><span>Runoff on tangent (%) <b>*</b></span><input type="number" min="0" max="100" value={inputs.runoff_tangent_percent} onChange={e=>update("runoff_tangent_percent",e.target.value)}/><small>{inputs.runoff_tangent_percent !== "" ? `${100-Number(inputs.runoff_tangent_percent)}% on curve` : "Explicit project input required"}. TDOT standard default splits total runout + runoff; this input splits runoff only.</small></label>}
+            {(!lengthCheckMode && activeProfileId.startsWith("aashto") && inputs.alignment_type !== "spiral" || !activeProfileId.startsWith("aashto") && inputs.override_standard_placement) && <>
+              <label className="field"><span>Circular placement basis</span><select value={inputs.circular_placement_basis} onChange={e=>update("circular_placement_basis",e.target.value)}><option value="runoff">Runoff only (Lr)</option><option value="runoff_runout">Runoff + runout (Lr + Lt)</option></select><small>{inputs.circular_placement_basis === "runoff_runout" ? "Split the entire transition around PC/PT." : "Split runoff around PC/PT; runout sits beyond its tangent end."} With zero runout, both choices give the same placement.</small></label>
+              <label className="field"><span>{inputs.circular_placement_basis === "runoff_runout" ? "Total transition" : "Runoff"} on tangent (%) <b>*</b></span><input type="number" min="0" max="100" value={inputs.runoff_tangent_percent} onChange={e=>update("runoff_tangent_percent",e.target.value)}/><small>{inputs.runoff_tangent_percent !== "" ? `${100-Number(inputs.runoff_tangent_percent)}% on curve` : "Explicit project input required"}. Bank and available-length checks still apply.</small></label>
+            </>}
           </div>
           <button className="advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><span>Advanced settings</span><small>Optional criteria overrides and stationing</small><b>{advancedOpen ? "−" : "+"}</b></button>
           {advancedOpen && <div className="advanced-grid">{input("e_manual", "Manual e")}{!isAashto && <>{input("friction", "Side friction")}{input("rel_grad", "Relative gradient")}{input("normal_crown", "Normal crown")}</>}{input("Lr_manual", "Runoff Lr (ft)")}{input("Lt_manual", "Runout Lt (ft)")}{input("station_equations", "Station equations")}{input("alignment_station_range", "Internal station range")}<small>Repeated station labels require a region suffix, for example 10+00R2, or a narrower internal range.</small></div>}
           <label className="field full"><span>Curve notes</span><textarea value={inputs.curve_notes} onChange={(e) => update("curve_notes", e.target.value)} rows={3} /></label>
-          <div className="compute-bar"><label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station format</label><span className="auto-status">Calculates automatically</span><button onClick={() => { setInputs((current) => ({ ...INITIAL_INPUTS, project_name: current.project_name, route_name: current.route_name })); setCalculation(null); }}>Clear curve</button><button className="primary" onClick={calculate} disabled={runtime !== "ready" || !!busy}>{busy || (lengthCheckMode ? "Check lengths" : calculation ? "Recompute now" : "Compute now")}</button></div>
+          {compoundPreviewPending && <p className="field-note">Input edits are kept without computing. This curve joins an adjoining curve directly; Calculate selected curves uses the individual inputs to build their shared transition.</p>}
+          <div className="compute-bar"><label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station format</label><span className="auto-status">{calculateSelectedCurves ? "Inputs kept · calculate selected curves" : "Calculates automatically"}</span><button onClick={() => { setInputs((current) => ({ ...INITIAL_INPUTS, project_name: current.project_name, route_name: current.route_name })); setCalculation(null); }}>Clear curve</button><button className="primary" onClick={calculateSelectedCurves ? addAll : calculate} disabled={runtime !== "ready" || !!busy}>{busy || (calculateSelectedCurves ? "Calculate selected curves" : lengthCheckMode ? "Check lengths" : calculation ? "Recompute now" : "Compute now")}</button></div>
         </section>
 
         <section className="panel results-panel">

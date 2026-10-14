@@ -62,31 +62,23 @@ Open [vericivil.com](https://vericivil.com) to use the calculator in your browse
 
 To run the browser app from source, install Python 3.11+ and Node.js 22.13+. Python stages the shared engine files; the browser installs its own calculation packages through Pyodide. Installing `requirements-lock.txt` is only needed for native Python calculations and tests.
 
-Clone the repository once if you do not already have it:
+Clone the repository once if you do not already have it, then enter its root directory:
 
 ```bash
 git clone https://github.com/colewinstead/VeriCivil.git
+cd VeriCivil
 ```
 
-**macOS/Linux (Terminal, zsh or bash):**
+Run these commands from the repository root on macOS/Linux or Windows (PowerShell):
 
 ```bash
-cd VeriCivil/web
-npm ci --ignore-scripts
-npm run dev
+npm --prefix web ci --ignore-scripts
+npm --prefix web run dev
 ```
 
-**Windows (PowerShell):**
+If your terminal is already in the repository root, skip the clone and `cd VeriCivil` commands. The `--prefix web` option targets the browser app's `package.json` and `package-lock.json` while keeping your terminal in the repository root. Keep the terminal running and open the local URL printed by the development server.
 
-```powershell
-Set-Location .\VeriCivil\web
-npm ci --ignore-scripts
-npm run dev
-```
-
-If your terminal is already in the repository root, use `cd web` on macOS/Linux or `Set-Location .\web` in PowerShell. Run npm commands from `web`, where `package.json` and `package-lock.json` live. Keep the terminal running and open the local URL printed by the development server.
-
-Startup uses `python3` on macOS/Linux and `python` on Windows; the selected executable must be on PATH. A shell alias alone is not sufficient for npm. `Set-Location` and Windows backslash paths are PowerShell syntax and will fail in macOS Terminal.
+Startup uses `python3` on macOS/Linux and `python` on Windows; the selected executable must be on PATH. A shell alias alone is not sufficient for npm.
 
 ## Browser app
 
@@ -94,7 +86,7 @@ The browser app runs the shared Python calculation and export modules locally th
 
 Local development defaults to Pro without an account or URL parameter. The calculator's Local test plan selector can switch to Free or Team for testing; explicit `?entitlement=free` overrides remain supported. The hosted website continues to use account entitlements.
 
-Create a production build with `npm run build` from `web`. The output is written to `web/dist`, including browser assets and a Cloudflare Workers-compatible server runtime for the hosted account and billing routes. The build stages the authoritative shared Python modules from the repository; do not edit the staged copies.
+Create a production build with `npm --prefix web run build` from the repository root. The output is written to `web/dist`, including browser assets and a Cloudflare Workers-compatible server runtime for the hosted account and billing routes. The build stages the authoritative shared Python modules from the repository; do not edit the staged copies.
 
 The first browser visit downloads the Python runtime and scientific/export packages. After that initial load, calculations and file exports occur on the user's device. Save and reopen `.superelevation.json` project files locally through the browser interface.
 
@@ -208,9 +200,9 @@ Schema v4 introduced embedded LandXML text, original filename, and SHA-256 integ
 
 ## Troubleshooting
 
-For local startup, `ENOENT ... package.json` or an `npm ci` missing-lockfile error usually means the terminal is outside `web`. On macOS, `Set-Location` is not a zsh command; use the macOS quick-start commands above.
+For local startup, `ENOENT ... package.json` or an `npm ci` missing-lockfile error usually means npm is targeting the wrong directory. From the repository root, use `npm --prefix web ci --ignore-scripts` and `npm --prefix web run dev` as shown above.
 
-If a macOS native-binding error includes “different Team IDs,” check `command -v node`. A Node executable embedded in another signed application can reject the bundler's native module. Use a standard Node installation. On Apple Silicon Macs with Node already installed by Homebrew, run `PATH="/opt/homebrew/bin:$PATH" npm run dev` from `web` to select it for that command.
+If a macOS native-binding error includes “different Team IDs,” check `command -v node`. A Node executable embedded in another signed application can reject the bundler's native module. Use a standard Node installation. On Apple Silicon Macs with Node already installed by Homebrew, run `PATH="/opt/homebrew/bin:$PATH" npm --prefix web run dev` from the repository root to select it for that command.
 
 When reporting a problem, include the browser and operating system, application and engine versions, selected criteria profile, expected behavior, and a minimal reproduction using non-sensitive data. Browser developer-console messages can help diagnose loading and export errors. Review any console output before sharing it.
 
@@ -230,11 +222,10 @@ python -m unittest -v
 The browser parity suite builds the production app, renders its shell, runs the shared Python engine in Pyodide, checks an approved numeric vector, and generates CSV, PDF, and DXF outputs:
 
 ```bash
-cd web
-npm ci --ignore-scripts
-npm exec tsc -- --noEmit
-npm run lint
-npm test
+npm --prefix web ci --ignore-scripts
+npm --prefix web exec -- tsc --noEmit -p web/tsconfig.json
+npm --prefix web run lint
+npm --prefix web test
 ```
 
 The test suite covers calculation sharing, station formatting, lane signs, LandXML parsing, coordinate transforms, project persistence, ORD CSV mapping, and DXF generation.

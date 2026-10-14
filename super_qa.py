@@ -14,6 +14,13 @@ from super_lane import lane_profile_points, slope_at_station
 SEVERITY_RANK = {"pass": 0, "review": 1, "block": 2}
 
 
+def calculation_warnings(results: dict) -> list[str]:
+    """Keep routine method notes from older saved curves out of warning flags."""
+    return [warning for warning in results.get("warnings", []) or []
+            if not warning.startswith(("One-way carriageway uses unadjusted relative gradient;",
+                                       "Project compound entry:", "Project compound exit:"))]
+
+
 def _within(value: float, start: float, end: float, tolerance: float = 1e-7) -> bool:
     return min(start, end) - tolerance <= value <= max(start, end) + tolerance
 
@@ -126,6 +133,10 @@ def _source_map(results: dict) -> dict[str, dict]:
 
 
 def _criterion_for_segment(results: dict, start: dict, end: dict) -> dict:
+    station = (float(start["station_ft"]) + float(end["station_ft"])) / 2
+    for plan in results.get("compound_curve_transitions", {}).values():
+        if plan["start_ft"] <= station <= plan["end_ft"]:
+            return {"component": "Compound transition", "reference": plan["rule"], "mode": "project_input", "phase": "Compound runoff"}
     sources = _source_map(results)
     if results.get("transition_method")=="aashto_fixed_pivot":
         station=(float(start["station_ft"])+float(end["station_ft"]))/2
@@ -750,6 +761,19 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
         ))
 
     alignment_start, alignment_end = data.station_range()
+    compound_sides = {}
+    compound_valid = True
+    if any(c.get("results", {}).get("compound_curve_transitions") for c in curves):
+        import aashto_superelevation
+        try:
+            aashto_superelevation.validate_export_curves(curves)
+        except ValueError as exc:
+            compound_valid = False
+            findings.append(_finding("INVALID_COMPOUND_TRANSITION", "block", str(exc)))
+    for i, j in super_batch.compound_pairs([c or {} for c in matched]):
+        if compound_valid and matched[i]["results"].get("compound_curve_transitions", {}).get("exit"):
+            compound_sides.setdefault(i, []).append("exit")
+            compound_sides.setdefault(j, []).append("entry")
     for index, curve in enumerate(matched):
         if curve is None:
             continue
@@ -772,7 +796,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 values={**results["inputs"],"linear_unit":data.linear_unit,
                         "geometry_provenance":{"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}}}
                 try:
-                    aashto_superelevation.calculate(values,data.station_equations,data.station_range())
+                    aashto_superelevation.calculate(values,data.station_equations,data.station_range(), compound_sides=tuple(compound_sides.get(index, [])))
                 except ValueError as exc:
                     for item in getattr(exc,"findings",[]) or [{"code":"INVALID_IMPORTED_TRANSITION","severity":"block","message":str(exc)}]:
                         if item["severity"]=="block":
@@ -782,7 +806,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                                      item.get("station_start_ft"),item.get("station_end_ft"),str(item.get("details",""))))
         bounds = _transition_bounds(curve)
         if _normal_crown_only(curve):
-            for warning in results.get("warnings", []) or []:
+            for warning in calculation_warnings(results):
                 findings.append(_finding(
                     "CALCULATION_WARNING", "review", f"Curve {index + 1}: {warning}", [index],
                     bounds[0] if bounds else None, bounds[1] if bounds else None,
@@ -796,7 +820,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 "OUT_OF_ALIGNMENT", "block", f"Curve {index + 1} has transition events outside the alignment limits.", [index],
                 bounds[0], bounds[1], "Revise transition placement or confirm the alignment station range.",
             ))
-        for warning in results.get("warnings", []) or []:
+        for warning in calculation_warnings(results):
             findings.append(_finding("CALCULATION_WARNING", "review", f"Curve {index + 1}: {warning}", [index], bounds[0], bounds[1]))
 
     previews: dict[int, dict | None] = {}
@@ -833,6 +857,8 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                         findings.append(candidate)
             continue
         if _normal_crown_only(prior) or _normal_crown_only(following):
+            continue
+        if compound_valid and "exit" in compound_sides.get(prior_index, []) and "entry" in compound_sides.get(next_index, []):
             continue
         prior_coordination = (prior.get("results", {}) or {}).get("reverse_curve_coordination", {}) or {}
         pair_check = next(
@@ -934,9 +960,18 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 [prior_index, next_index], next_bounds[0], prior_bounds[1], "Coordinate the adjacent lane-slope transitions.",
             ))
         if prior_direction != next_direction:
-            demand_end = _zero_event(prior, entering=False)
-            demand_start = _zero_event(following, entering=True)
-            demand_name = "zero-slope reverse-curve recovery"
+            prior_section = prior.get("results", {}).get("section_definition") or {}
+            next_section = following.get("results", {}).get("section_definition") or {}
+            if (prior_section.get("initial_section") == next_section.get("initial_section") == "single_slope"
+                    and all(prior_section.get(key) == next_section.get(key) for key in prior_section.keys() | next_section.keys())):
+                # A favorable single-slope transition returns to its initial slope without crossing zero.
+                demand_end = prior_bounds[1] if prior_bounds else None
+                demand_start = next_bounds[0] if next_bounds else None
+                demand_name = "initial-section reverse-curve recovery"
+            else:
+                demand_end = _zero_event(prior, entering=False)
+                demand_start = _zero_event(following, entering=True)
+                demand_name = "zero-slope reverse-curve recovery"
         else:
             demand_end = prior_bounds[1] if prior_bounds else None
             demand_start = next_bounds[0] if next_bounds else None
@@ -963,7 +998,8 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
     if len(profiles) > 1:
         findings.append(_finding("MIXED_CRITERIA", "review", "Calculated curves use mixed criteria profiles.", list(range(len(presets))), details=", ".join(sorted(profiles))))
     override_signatures = {
-        tuple(sorted(key for key, enabled in (curve.get("results", {}).get("calculation_metadata", {}).get("manual_overrides", {}) or {}).items() if enabled))
+        tuple(sorted(key for key, enabled in (curve.get("results", {}).get("calculation_metadata", {}).get("manual_overrides", {}) or {}).items()
+                     if enabled and (key != "placement" or curve.get("results", {}).get("transition_method") != "aashto_fixed_pivot")))
         for curve in calculated
     }
     if len(override_signatures) > 1:

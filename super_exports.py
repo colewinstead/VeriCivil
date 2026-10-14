@@ -400,6 +400,7 @@ def _station_region(station: float, equations: list[dict] | None) -> int:
 def build_normalized_rows(curves: Iterable[dict], station_format: bool = True) -> list[dict]:
     rows: list[dict] = []
     emitted_reverse_events: set[tuple[str, str, str, float, float]] = set()
+    emitted_compound_events = set()
     for curve_index, curve in enumerate(curves):
         results = curve.get("results") or {}
         meta = curve.get("meta", {}) or {}
@@ -424,6 +425,11 @@ def build_normalized_rows(curves: Iterable[dict], station_format: bool = True) -
                 station_ft = row.get("station_ft")
                 if station_ft is None:
                     continue
+                if row.get("compound_pair_id"):
+                    key = (row["compound_pair_id"], lane_name, row["event_type"], float(station_ft), float(row["slope_pct"]))
+                    if key in emitted_compound_events:
+                        continue
+                    emitted_compound_events.add(key)
                 reverse_pair_id = str(row.get("reverse_pair_id") or "")
                 reverse_critical = bool(row.get("reverse_pair_critical") and reverse_pair_id)
                 if reverse_critical:

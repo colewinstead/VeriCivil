@@ -44,6 +44,10 @@ def _linear_value(station: float, start_station: float, start_value: float, end_
 
 
 def _full_super_slopes(results: dict, direction: str) -> dict[str, float]:
+    section = results.get("section_transition")
+    if section:
+        bank_pct = float(section["target_signed_slope"]) * 100
+        return {"left": bank_pct, "right": -bank_pct}
     nc_pct = abs(float(results.get("inputs", {}).get("normal_crown", 0.02) or 0.02) * 100.0)
     e_pct = abs(float(results.get("e", 0.0) or 0.0) * 100.0)
     reverse_crown = str(results.get("crown_state", "")).lower().startswith("reverse")
@@ -399,7 +403,9 @@ def _append_entry(
         rows.append(_event("BEGIN ROTATION", rotation_start, -nc_pct, "MDOT SE-3A X1 = Lr(NC/e)", "Inside-lane rotation"))
         pc_slope = _linear_value(pc, rotation_start, -nc_pct, full, target_slope)
     fraction = results.get("runoff_tangent_fraction",0.7)
-    rows.append(_event("PC", pc, pc_slope, f"{fraction*100:g}% of runoff occurs before PC", "PC 70% runoff" if fraction==0.7 else "PC project placement"))
+    total_basis = results.get("inputs", {}).get("circular_placement_basis") == "runoff_runout"
+    reference = f"{results['inputs']['runoff_tangent_percent']:g}% of total transition occurs before PC" if total_basis else f"{fraction*100:g}% of runoff occurs before PC"
+    rows.append(_event("PC", pc, pc_slope, reference, "PC 70% runoff" if fraction==0.7 and not total_basis else "PC project placement"))
     rows.append(_event("FULL SUPER", full, target_slope, "PC + 0.3Lr" if fraction==0.7 else f"PC + {(1-fraction):g}Lr", "Full super"))
 
 
@@ -459,7 +465,9 @@ def _append_exit(
         end_slope = -nc_pct
     pt_slope = _linear_value(pt, full, target_slope, rotation_end, end_slope)
     fraction = results.get("runoff_tangent_fraction",0.7)
-    rows.append(_event("PT", pt, pt_slope, f"{fraction*100:g}% of runoff occurs after PT", "PT 70% runoff" if fraction==0.7 else "PT project placement"))
+    total_basis = results.get("inputs", {}).get("circular_placement_basis") == "runoff_runout"
+    reference = f"{results['inputs']['runoff_tangent_percent']:g}% of total transition occurs after PT" if total_basis else f"{fraction*100:g}% of runoff occurs after PT"
+    rows.append(_event("PT", pt, pt_slope, reference, "PT 70% runoff" if fraction==0.7 and not total_basis else "PT project placement"))
     if side == outside:
         rows.append(_event("0%", zero, 0.0, "End of runoff; start of tangent runout", "End runoff"))
     else:

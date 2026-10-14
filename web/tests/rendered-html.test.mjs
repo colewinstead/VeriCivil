@@ -358,14 +358,14 @@ test("recalculates after reapplying an identical LandXML preset", async () => {
   const source = await readFile(new URL("../app/CalculatorApp.tsx", import.meta.url), "utf8");
   assert.match(source, /const \[calculationRequest, setCalculationRequest\] = useState\(0\)/);
   assert.match(source, /setCalculationRequest\(\(request\) => request \+ 1\)/);
-  assert.match(source, /\[calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode\]/);
+  assert.match(source, /\[calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode, compoundPreviewPending, selectedInputsMode\]/);
 });
 
 test("preserves coordinated reverse-curve results when a saved curve is selected", async () => {
   const source = await readFile(new URL("../app/CalculatorApp.tsx", import.meta.url), "utf8");
   assert.match(source, /loadedCurveCalculation = useRef/);
   assert.match(source, /loadedCurve\?\.key === calculationKey && loadedCurve\.request === calculationRequest/);
-  assert.match(source, /loadedCurveCalculation\.current = \{ key: calculationInputKey\(nextInputs\), request: calculationRequest \}/);
+  assert.match(source, /loadedCurveCalculation\.current = calculationInputKey\(nextInputs\) === calculationInputKey\(recordedInputs\)/);
   assert.match(source, /A saved corridor curve may include reverse-curve coordination metadata/);
   assert.doesNotMatch(source, /return curves\.map\(\(curve, index\) => index === selectedCurve/);
 });
@@ -407,7 +407,7 @@ test("reopens embedded LandXML projects on saved or included curves", async () =
   assert.match(source, /landxml_curve_index != null/);
   assert.match(source, /loadCurveFrom\(restoredCurves\[firstLandxmlCurve\], firstLandxmlCurve/);
   assert.match(source, /excluded_landxml_curve_indexes \|\| \[\]/);
-  assert.match(source, /applyPreset\(firstIncludedPreset, loaded\.landxml\)/);
+  assert.match(source, /applyPreset\(firstIncludedPreset, loaded\.landxml, drafts\)/);
 });
 
 test("ships interactive diagram zoom and corridor QA controls", async () => {

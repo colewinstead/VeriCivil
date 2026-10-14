@@ -18,6 +18,18 @@ class TransitionError(ValueError):
         self.findings = findings
 
 
+def circular_runoff_fraction(percent: float, basis: str, runoff: float, runout: float) -> float:
+    """Convert the selected placement length to the fraction of runoff before PC."""
+    if basis not in {"runoff", "runoff_runout"}:
+        raise ValueError("Circular placement basis must be runoff or runoff_runout.")
+    if not math.isfinite(percent) or not 0 <= percent <= 100:
+        raise ValueError("Transition on tangent must be 0–100 percent.")
+    fraction = percent / 100
+    if basis == "runoff":
+        return fraction
+    return (fraction * (runoff + runout) - runout) / runoff if runoff else 0.0
+
+
 def _number(values, key, default=None):
     raw = values.get(key, default)
     if raw in (None, ""):
@@ -52,7 +64,7 @@ def _station(values, key, label, equations, alignment_range):
     return station
 
 
-def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False) -> dict:
+def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False, compound_sides=()) -> dict:
     import Super
     from app_info import CALCULATION_ENGINE_VERSION
     from criteria_info import criteria_metadata
@@ -560,10 +572,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             }
         )
     else:
-        p = 0.0 if section_unchanged else _number(values, "runoff_tangent_percent") / 100
-        if not 0 <= p <= 1:
-            raise ValueError("Runoff on tangent must be 0–100 percent.")
-        if p in {0, 1} and e and not no_transition:
+        placement_basis = values.get("circular_placement_basis", "runoff")
+        placement_percent = 0.0 if section_unchanged else _number(values, "runoff_tangent_percent")
+        p = circular_runoff_fraction(placement_percent, placement_basis, Lr, Lt)
+        if placement_percent in {0, 100} and e and not no_transition:
             finding(
                 "EXTREME_RUNOFF_PLACEMENT",
                 "review",
@@ -583,15 +595,20 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         sources.append(
             {
                 "component": "Transition placement",
-                "reference": "§3.3.8.2.3; explicit project runoff percentage",
+                "reference": "§3.3.8.2.3; explicit project runoff percentage" if placement_basis == "runoff" else "Project placement: percentage of total runoff + runout length around PC/PT; §3.3.8.2.3 bank check retained",
                 "mode": "project_input",
+                "placement_basis": placement_basis,
+                "percent_on_tangent": placement_percent,
             }
         )
         if e and not no_transition:
-            pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
+            if p >= 0:
+                pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
+            else:
+                pc_bank = bank_sign * (initial_bank + (pc - start) / Lt * (zero_bank - initial_bank))
             attained = pc_bank / e
-            limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius)
-            if pc_bank >= limit:
+            limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius) if pc_bank > 0 else math.inf
+            if pc_bank >= limit and len(compound_sides) < 2:
                 finding(
                     "PC_BANK_LIMIT",
                     "block",
@@ -607,7 +624,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 }
             )
     full_start, full_end = (pc, pt) if spiral else (pc_full, pt_full)
-    if full_start > full_end + 1e-7:
+    if full_start > full_end + 1e-7 and not compound_sides:
         finding(
             "TRANSITION_OVERLAP",
             "block",
@@ -616,7 +633,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             full_start,
         )
     if alignment_range and (
-        start < alignment_range[0] - 1e-7 or end > alignment_range[1] + 1e-7
+        ("entry" not in compound_sides and start < alignment_range[0] - 1e-7)
+        or ("exit" not in compound_sides and end > alignment_range[1] + 1e-7)
     ):
         finding(
             "INSUFFICIENT_TANGENT",
@@ -641,7 +659,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 raise ValueError(
                     "Available tangent length must be finite and nonnegative."
                 )
-            if available is not None and tangent_demand > float(available) + 1e-7:
+            if side not in compound_sides and available is not None and tangent_demand > float(available) + 1e-7:
                 finding(
                     "INSUFFICIENT_TANGENT",
                     "block",
@@ -775,10 +793,6 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         warnings.append(
             "Manual rate: published radius/rate applicability must be independently verified."
         )
-    if roadway == "one_way":
-        warnings.append(
-            "One-way carriageway uses unadjusted relative gradient; no multilane runoff reduction is assumed for ramps."
-        )
     if not geometry:
         warnings.append(
             "Manual station-only geometry: verify actual tangent availability and curve stations independently. Coordinate overlays require matching LandXML geometry."
@@ -803,6 +817,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "right_normal_slope": right_nc,
             "initial_slope": initial,
             "alignment_type": "spiral" if spiral else "circular",
+            "circular_placement_basis": values.get("circular_placement_basis", "runoff"),
             "runout_placement": (
                 placement if spiral else values.get("runout_placement") or "on_tangent"
             ),
@@ -917,18 +932,45 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
 
 def validate_export_curves(curves: list[dict]) -> None:
     """Recheck saved engineering results and overlaps before affected exports."""
+    import copy
+    import super_batch
+    pairs = super_batch.compound_pairs(curves)
+    sides = {}
+    for i, j in pairs:
+        sides.setdefault(i, []).append("exit")
+        sides.setdefault(j, []).append("entry")
+    expected_curves = copy.deepcopy(curves)
+    for index, curve in enumerate(expected_curves):
+        result = curve.get("results", {})
+        if result.get("transition_method") == "aashto_fixed_pivot":
+            curve["results"] = calculate(result.get("inputs", {}), result.get("station_equations"),
+                                         result.get("alignment_station_range"), compound_sides=tuple(sides.get(index, [])))
+        elif index in sides or result.get("compound_curve_transitions"):
+            import Super
+            values = result["inputs"]
+            arguments = [str(values[key]) if values.get(key) is not None else "" for key in
+                         ("pc", "pt", "speed_mph", "radius_ft", "facility", "area_type", "lane_width_ft", "lanes_rotated",
+                          "e_manual", "friction_input", "relative_gradient_input", "normal_crown", "Lr_manual", "Lt_manual")]
+            curve["results"] = Super.calculate_superelevation(*arguments, result.get("station_equations"),
+                result.get("alignment_station_range"), values["criteria_profile"], profile_options=values,
+                compound_sides=tuple(sides.get(index, [])))
+    if pairs or any(c.get("results", {}).get("compound_curve_transitions") for c in curves):
+        reverse_pairs = sorted({tuple(check["paired_curve_indexes"]) for curve in curves
+                                for check in curve.get("results", {}).get("reverse_curve_coordination", {}).get("checks", [])})
+        expected_curves = super_batch.coordinate_reverse_curve_transitions(expected_curves, pairs=reverse_pairs)
+        for actual, expected in zip(curves, expected_curves):
+            if actual.get("results", {}).get("compound_curve_transitions") or expected.get("results", {}).get("compound_curve_transitions"):
+                for key in ("e", "Lr", "Lt", "compound_curve_transitions", "lane_events", "section_lanes", "full_super_ft", "full_super_out_ft", "pnc_ft", "pnc_out_ft"):
+                    if actual["results"].get(key) != expected["results"].get(key):
+                        raise ValueError("Saved compound results differ from the current curve set/engine; recalculate all adjoining curves before exporting.")
     intervals = []
-    for curve in curves:
+    for index, curve in enumerate(curves):
         result = curve.get("results", {})
         if result.get("result_type") == "spiral_length_check":
             raise ValueError("A spiral length check has no established transition stations and cannot be exported as a calculated curve.")
         is_aashto = result.get("transition_method") == "aashto_fixed_pivot"
         if is_aashto:
-            expected = calculate(
-                result.get("inputs", {}),
-                result.get("station_equations"),
-                result.get("alignment_station_range"),
-            )
+            expected = expected_curves[index]["results"]
             for key in (
                 "e",
                 "Lr",
@@ -949,26 +991,24 @@ def validate_export_curves(curves: list[dict]) -> None:
             and result.get("pnc_out_ft") is not None
         ):
             intervals.append(
-                (float(result["pnc_ft"]), float(result["pnc_out_ft"]), is_aashto)
+                (float(result["pnc_ft"]), float(result["pnc_out_ft"]), is_aashto, index)
             )
     intervals.sort()
     for a, b in zip(intervals, intervals[1:]):
-        if (a[2] or b[2]) and a[1] > b[0] + 1e-7:
+        if (a[2] or b[2]) and a[1] > b[0] + 1e-7 and (a[3], b[3]) not in pairs:
             raise ValueError(
                 "AASHTO export blocked: adjacent transition intervals overlap; resolve Corridor QA findings."
             )
 
 
-def override_circular_placement(result: dict, percent: float) -> dict:
+def override_circular_placement(result: dict, percent: float, *, basis: str = "runoff", compound_sides=()) -> dict:
     """Only station placement changes; existing DOT rate and lane model survive."""
     percent = float(percent)
-    if not math.isfinite(percent) or not 0 <= percent <= 100:
-        raise ValueError("Runoff on tangent must be 0–100 percent.")
     if result.get("normal_crown_only"):
         raise ValueError("Normal-crown-only curves do not have runoff placement.")
-    p = percent / 100
     L = result["Lr"]
     Lt = result["Lt"]
+    p = circular_runoff_fraction(percent, basis, L, Lt)
     pc = result["pc_ft"]
     pt = result.get("pt_ft")
     result.update(
@@ -984,17 +1024,18 @@ def override_circular_placement(result: dict, percent: float) -> dict:
             pnc_out_ft=pt + p * L + Lt,
             full_super_out_ft=pt - (1 - p) * L,
         )
-        if result["full_super_ft"] > result["full_super_out_ft"]:
+        if result["full_super_ft"] > result["full_super_out_ft"] and not compound_sides:
             raise ValueError("Circular transition placement overlaps on the curve.")
     if result.get("reverse_section_ft") is not None:
         result["reverse_section_ft"] = result["zero_crown_ft"] + Lt
         if pt is not None:
             result["reverse_section_out_ft"] = result["zero_crown_out_ft"] - Lt
     result["inputs"]["runoff_tangent_percent"] = percent
+    result["inputs"]["circular_placement_basis"] = basis
     result["inputs"]["override_standard_placement"] = True
     result["calculation_metadata"]["manual_overrides"]["placement"] = True
     result.setdefault("warnings", []).append(
-        f"Project placement override: {percent:g}% of runoff on tangent; governing DOT placement replaced."
+        f"Project placement override: {percent:g}% of {'runoff + runout' if basis == 'runoff_runout' else 'runoff'} on tangent; governing DOT placement replaced."
     )
     result["runoff_tangent_fraction"] = p
     return result

@@ -129,7 +129,7 @@ class ModernSuperElevationUI(tk.Tk):
         self.criteria_profile_display = tk.StringVar(value=CRITERIA_PROFILE_LABELS[MDOT_PROFILE_ID])
         for key,value in {"max_superelevation":"8","roadway":"two_way","initial_section":"crowned","rotation_axis":"centerline",
                           "lane_widths":"12,12","crown_from_left":"","left_normal_slope":"0.02","right_normal_slope":"0.02","initial_slope":"-0.02",
-                          "alignment_type":"circular","ts":"","st":"","runout_placement":"on_tangent","runoff_tangent_percent":"",
+                          "alignment_type":"circular","ts":"","st":"","runout_placement":"on_tangent","runoff_tangent_percent":"","circular_placement_basis":"runoff",
                           "override_standard_placement":"false","acknowledge_spiral_override":"false","aashto_tables":"","linear_unit":""}.items():
             self.vars[key]=tk.StringVar(value=value)
         self.computed_vars = {
@@ -1339,41 +1339,29 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             and self.vars["area"].get().strip().lower().startswith("local")
         ):
             self.vars["facility"].set("centerline")
-        return Super.calculate_superelevation(
-            self.vars["pc"].get(),
-            self.vars["pt"].get(),
-            self.vars["speed"].get(),
-            self.vars["radius"].get(),
-            self.vars["facility"].get(),
-            self.vars["area"].get(),
-            self.vars["lane_width"].get(),
-            self.vars["lanes_rotated"].get(),
-            e_manual,
-            friction,
-            rel_grad,
-            normal_crown,
-            Lr_manual,
-            Lt_manual,
-            self._station_equations(),
-            self._alignment_station_range(),
-            self.vars["criteria_profile"].get(),
-            profile_options={**{key:var.get() for key,var in self.vars.items()},"e_manual":e_manual,"Lr_manual":Lr_manual,"Lt_manual":Lt_manual,"rel_grad":rel_grad,"friction":friction,
-                             "linear_unit":self._landxml_data.linear_unit if self._landxml_data else self.vars["linear_unit"].get(),
-                             "geometry_provenance":geometry,
-                             "aashto_tables":json.loads(self.vars["aashto_tables"].get()) if self.vars["aashto_tables"].get() else None},
-        )
+        from super_service import calculate_curve
+        selection = list(self.curve_listbox.curselection())
+        return calculate_curve({**{key: var.get() for key, var in self.vars.items()},
+                                "e_manual": e_manual, "Lr_manual": Lr_manual, "Lt_manual": Lt_manual,
+                                "rel_grad": rel_grad, "friction": friction, "normal_crown": normal_crown,
+                                "station_equations": self._station_equations(),
+                                "alignment_station_range": self._alignment_station_range(),
+                                "linear_unit": self._landxml_data.linear_unit if self._landxml_data else self.vars["linear_unit"].get(),
+                                "geometry_provenance": geometry,
+                                "aashto_tables": json.loads(self.vars["aashto_tables"].get()) if self.vars["aashto_tables"].get() else None},
+                               self.curves, selection[0] if selection else -1)["results"]
 
     def _show_aashto_settings(self) -> None:
         dialog=tk.Toplevel(self)
         dialog.title("AASHTO / transition placement")
-        dialog.geometry("620x780")
+        dialog.geometry("620x820")
         fields={"max_superelevation":["4","6","8","10","12"],"roadway":["two_way","one_way"],
                 "initial_section":["crowned","single_slope"],"rotation_axis":["centerline","left_edge","right_edge"],
-                "alignment_type":["circular","spiral"],"runout_placement":["on_tangent","in_spiral"],
+                "alignment_type":["circular","spiral"],"runout_placement":["on_tangent","in_spiral"],"circular_placement_basis":["runoff","runoff_runout"],
                 "override_standard_placement":["false","true"],"acknowledge_spiral_override":["false","true"]}
         keys=["max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left",
               "left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement",
-              "runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override"]
+              "circular_placement_basis","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override"]
         local={key:tk.StringVar(value=self.vars[key].get()) for key in keys}
         lane_count = tk.StringVar(value=str(len(local["lane_widths"].get().split(","))))
         saved_widths = local["lane_widths"].get().split(",")
@@ -1781,6 +1769,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
     def _apply_project(self, data: dict) -> None:
         self._suspend_auto = True
         vars_data = data.get("vars", {}) or {}
+        self.vars["circular_placement_basis"].set(vars_data.get("circular_placement_basis", "runoff"))
         self._diagnostic_findings=vars_data.get("diagnostic_findings",[]) or []
         for key, var in self.vars.items():
             if key not in vars_data:
@@ -1827,7 +1816,11 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             "meta": self._current_meta(),
             "notes": self.vars["curve_notes"].get().strip(),
         }
-        self.curves.append(curve)
+        try:
+            self.curves = super_batch.coordinate_compound_curve_transitions([*self.curves, curve])
+        except ValueError as exc:
+            messagebox.showerror("Add Curve", str(exc))
+            return
         self.curve_listbox.insert("end", super_project.curve_label(curve["meta"], curve["results"]))
         self.curve_listbox.selection_clear(0, "end")
         self.curve_listbox.selection_set(self.curve_listbox.size() - 1)
@@ -1875,7 +1868,11 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             "meta": self._current_meta(),
             "notes": self.vars["curve_notes"].get().strip(),
         }
-        self.curves[idx] = curve
+        try:
+            self.curves = super_batch.coordinate_compound_curve_transitions([curve if i == idx else item for i, item in enumerate(self.curves)])
+        except ValueError as exc:
+            messagebox.showerror("Update Curve", str(exc))
+            return
         self.curve_listbox.delete(idx)
         self.curve_listbox.insert(idx, super_project.curve_label(curve["meta"], curve["results"]))
         self.curve_listbox.selection_set(idx)
@@ -1886,6 +1883,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             self.curve_listbox.delete(idx)
             if idx < len(self.curves):
                 self.curves.pop(idx)
+        self.curves = super_batch.coordinate_compound_curve_transitions(self.curves)
         self._update_overlay_button()
 
     def _load_selected_curve(self, _event: tk.Event) -> None:
@@ -1902,6 +1900,7 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             return
         inputs = results.get("inputs", {}) or {}
         self._suspend_auto = True
+        self.vars["circular_placement_basis"].set(inputs.get("circular_placement_basis", "runoff"))
         for key in ("max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","override_standard_placement","acknowledge_spiral_override","aashto_tables","linear_unit"):
             if key in inputs:self.vars[key].set(json.dumps(inputs[key]) if key=="aashto_tables" and inputs[key] else str(inputs[key]) if inputs[key] is not None else "")
         self.vars["alignment_name"].set(meta.get("alignment_name", ""))

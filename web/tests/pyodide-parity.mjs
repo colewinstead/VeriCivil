@@ -51,6 +51,14 @@ const selectedCurves = browser("build_all_landxml_curves", selectionRequest);
 assert.deepEqual(selectedCurves, native("build_all_landxml_curves", selectionRequest));
 assert.equal(selectedCurves.length, 1);
 assert.equal(selectedCurves[0].meta.landxml_curve_index, 1);
+const individualRequest = { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs,
+  curve_inputs: { "1": { speed: "35", override_standard_placement: true,
+    circular_placement_basis: "runoff_runout", runoff_tangent_percent: "40" } } };
+const individualCurves = browser("build_all_landxml_curves", individualRequest);
+assert.deepEqual(individualCurves, native("build_all_landxml_curves", individualRequest));
+assert.equal(individualCurves[0].results.inputs.speed_mph, 30);
+assert.equal(individualCurves[1].results.inputs.speed_mph, 35);
+assert.equal(individualCurves[1].results.inputs.runoff_tangent_percent, 40);
 const multiXml = spacingXml.replace(/(<Alignment\b[\s\S]*?<\/Alignment>)/, "$1$1");
 const multiRequest = { ...selectionRequest, content: multiXml, alignment_index: 1 };
 assert.deepEqual(browser("parse_landxml", multiRequest), native("parse_landxml", multiRequest));
@@ -78,6 +86,41 @@ assert selection_checks.wasSuccessful(), repr(selection_checks.errors + selectio
 assert selection_checks.testsRun > 0
 `);
 console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
+
+pyodide.FS.mkdirTree("/app/tests/fixtures");
+pyodide.FS.writeFile("/app/tests/fixtures/compound_synthetic.xml", await readFile(new URL("../../tests/fixtures/compound_synthetic.xml", import.meta.url), "utf8"));
+pyodide.FS.writeFile("/app/test_compound_transitions.py", await readFile(new URL("../../test_compound_transitions.py", import.meta.url), "utf8"));
+pyodide.FS.writeFile("/app/tests/fixtures/reverse_spacing_synthetic.xml", spacingXml);
+pyodide.FS.writeFile("/app/test_super_qa.py", await readFile(new URL("../../test_super_qa.py", import.meta.url), "utf8"));
+pyodide.runPython(`
+from test_compound_transitions import CompoundTransitionTests
+compound_checks = unittest.TestResult()
+unittest.defaultTestLoader.loadTestsFromTestCase(CompoundTransitionTests).run(compound_checks)
+assert compound_checks.wasSuccessful(), repr(compound_checks.errors + compound_checks.failures)
+from test_super_qa import ReverseSpacingTests
+reverse_checks = unittest.TestResult()
+ReverseSpacingTests('test_single_slope_reverse_pair_checks_initial_section_recovery').run(reverse_checks)
+assert reverse_checks.wasSuccessful(), repr(reverse_checks.errors + reverse_checks.failures)
+assert compound_checks.testsRun > 0
+`);
+const compoundXml = await readFile(new URL("../../tests/fixtures/compound_synthetic.xml", import.meta.url), "utf8");
+const compoundRequest = { entitlement: proEntitlement, content: compoundXml, shared_inputs: {
+  ...aashtoInputs, speed: "45", e_manual: "0.05", Lr_manual: "200", Lt_manual: "100",
+} };
+let compoundCurves = browser("build_all_landxml_curves", compoundRequest);
+assert.deepEqual(compoundCurves, native("build_all_landxml_curves", compoundRequest));
+const compoundEdit = { entitlement: proEntitlement, curves: compoundCurves, curve_index: 0,
+  inputs: { ...compoundCurves[0].results.inputs, speed: "45", radius: "1000", e_manual: "0.03" } };
+const editedCompound = browser("calculate", compoundEdit);
+assert.deepEqual(editedCompound, native("calculate", compoundEdit));
+compoundCurves[0].results = editedCompound.results;
+const compoundCoordination = { entitlement: proEntitlement, curves: compoundCurves, pairs: [] };
+compoundCurves = browser("coordinate_reverse_curves", compoundCoordination);
+assert.deepEqual(compoundCurves, native("coordinate_reverse_curves", compoundCoordination));
+assert.ok(Math.abs(compoundCurves[0].results.compound_curve_transitions.exit.length_ft - 80) < 1e-7);
+const compoundQa = { ...compoundRequest, curves: compoundCurves };
+assert.deepEqual(browser("corridor_qa", compoundQa), native("corridor_qa", compoundQa));
+console.log("Compound runoff regression checks and native/Pyodide batch, edit, coordination, and QA parity passed.");
 
 for (const maximum of [4, 6, 8, 10, 12]) {
   const request = { entitlement: proEntitlement, inputs: {
@@ -168,7 +211,7 @@ console.log("16-ft ramp PDF values and criteria labels passed native/Pyodide che
 // Independently compare the embedded data with the private reviewed source when available.
 let localWorkbook;
 try {
-  localWorkbook = await readFile(new URL("../../docs/AASHTO Super Tables.xlsx", import.meta.url));
+  localWorkbook = await readFile(new URL("../../local/references/AASHTO Super Tables.xlsx", import.meta.url));
 } catch (error) {
   if (error.code !== "ENOENT") throw error;
   console.log("Licensed AASHTO workbook absent: private table parity skipped; synthetic selection cases passed.");
@@ -191,6 +234,7 @@ if (localWorkbook) {
 const aashtoCases = [
   ...[4, 6, 8, 10, 12].map(maximum => ({ max_superelevation: maximum, e_manual: String(maximum/100), area: maximum===4 ? "urban_freeway" : "rural" })),
   ...[0, 25, 50, 100].map(percent => ({ runoff_tangent_percent: percent })),
+  ...[0, 25, 50, 100].map(percent => ({ circular_placement_basis: "runoff_runout", runoff_tangent_percent: percent })),
   ...["left", "right"].flatMap(direction => ["centerline", "left_edge", "right_edge"].map(pivot => ({ curve_direction: direction, rotation_axis: pivot }))),
   ...["on_tangent", "in_spiral"].map(placement => ({ alignment_type: "spiral", ts: "700", st: "2250", runout_placement: placement, acknowledge_spiral_override: true })),
   ...["-0.02", "0.02"].map(slope => ({ roadway: "one_way", initial_section: "single_slope", lane_widths: "12", rotation_axis: "left_edge", initial_slope: slope })),
@@ -198,6 +242,12 @@ const aashtoCases = [
 for (const changes of aashtoCases) {
   const request = { entitlement: proEntitlement, inputs: { ...aashtoInputs, ...changes } };
   assert.deepEqual(browser("calculate", request), native("calculate", request), `AASHTO native/Pyodide parity: ${JSON.stringify(changes)}`);
+}
+for (const profile of ["mdot", "tdot"]) {
+  const request = { entitlement: proEntitlement, inputs: { ...aashtoInputs,
+    criteria_profile: profile, speed: "45", radius: "1000", e_manual: "",
+    override_standard_placement: true, circular_placement_basis: "runoff_runout", runoff_tangent_percent: "50" } };
+  assert.deepEqual(browser("calculate", request), native("calculate", request), `${profile} total-transition placement parity`);
 }
 const ramp = browser("calculate", { entitlement: proEntitlement, inputs: { ...aashtoInputs, roadway: "one_way", initial_section: "single_slope", lane_widths: "12", rotation_axis: "left_edge" } });
 const rampCurve = { results: ramp.results, meta: { curve_direction: "left" } };
