@@ -14,6 +14,7 @@ Use Related to #<number> for partial work. Explain if no issue applies. -->
 ## Release-ready checklist
 
 - [ ] Relevant issues are linked, or the absence of an issue is explained.
+- [ ] This PR targets `main` from a separate branch for the issue or feature.
 - [ ] `APP_VERSION` is newer than the latest GitHub Release, or this PR changes only documentation/license files.
 - [ ] The change is ready for users; non-documentation changes create a full release on merge.
 - [ ] Calculation behavior is unchanged, or the proven engineering defect and its verification are documented.

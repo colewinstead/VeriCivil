@@ -11,18 +11,18 @@
 - Documentation-only changes (`.md`, `.rst`, and license files) do not require a version bump and do not create a GitHub Release. The `validate-version` job still runs and passes for these changes.
 - Increase `APP_VERSION` in `app_info.py` beyond the latest release for changes to application code, calculation data, tests, dependencies, builds, or workflows. Mixed documentation and code changes require a version bump.
 - Do not merge when `validate-version` or any other required check is red.
-- Keep `dev` as the permanent working branch and open release PRs from `dev` into `main`. Create additional branches only when the user asks.
-- Keep `dev` after PRs merge; leave automatic deletion of merged branches disabled on GitHub.
+- Create a short-lived branch for each issue from the latest `origin/main`, such as `fix/123-export-error`, `feat/123-new-calculator`, or `docs/123-workflow`. Open PRs from that branch into `main`; do not use `dev` as a permanent integration branch.
+- Enable automatic deletion of merged head branches on GitHub. After merging, start the next issue from updated `main`; remove local issue branches only after confirming their work is merged and the working tree is clean. Do not reuse merged issue branches.
 - Use regular merge commits for PRs into `main`, preserving the individual commits; do not squash or rebase merge.
 - Keep only merge commits enabled in GitHub's PR merge settings. Do not require linear history on `main`, because it blocks merge commits; preserve all other branch protections and required checks.
-- Merge `main` back into `dev` only when changes were made directly on `main`, such as a hotfix. Regular `dev`-to-`main` merges do not require syncing back.
+- If `main` advances while a PR is open and GitHub requires an update, merge the latest `origin/main` into the issue branch and let required checks rerun.
 
 ## Issues and pull requests
 
 - Start planned fixes and features with a GitHub issue describing the problem, expected behavior, and acceptance criteria. Reuse an existing issue when it covers the work.
-- Keep implementation on `dev` and link the relevant issue in the PR description. Use `Closes #<number>` for each issue fully resolved by the PR; use `Related to #<number>` for partial work so the issue remains open.
+- Create the issue branch through the issue's Development section on GitHub or `gh issue develop` so the branch is linked to the issue. Keep implementation on that branch and link the issue in the PR description. Use `Closes #<number>` for each issue fully resolved by the PR; use `Related to #<number>` for partial work so the issue remains open.
 - State what changed and what validation actually passed in the PR. Leave checklist items unchecked until verified, and explain when a PR has no related issue.
-- Issues linked with closing keywords close automatically when the PR merges into `main`; creating the PR or pushing to `dev` does not close them.
+- Issues linked with closing keywords close automatically when the PR merges into `main`; creating the PR or pushing to the issue branch does not close them.
 
 ## Validation
 
