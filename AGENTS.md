@@ -17,6 +17,13 @@
 - Keep only merge commits enabled in GitHub's PR merge settings. Do not require linear history on `main`, because it blocks merge commits; preserve all other branch protections and required checks.
 - Merge `main` back into `dev` only when changes were made directly on `main`, such as a hotfix. Regular `dev`-to-`main` merges do not require syncing back.
 
+## Issues and pull requests
+
+- Start planned fixes and features with a GitHub issue describing the problem, expected behavior, and acceptance criteria. Reuse an existing issue when it covers the work.
+- Keep implementation on `dev` and link the relevant issue in the PR description. Use `Closes #<number>` for each issue fully resolved by the PR; use `Related to #<number>` for partial work so the issue remains open.
+- State what changed and what validation actually passed in the PR. Leave checklist items unchecked until verified, and explain when a PR has no related issue.
+- Issues linked with closing keywords close automatically when the PR merges into `main`; creating the PR or pushing to `dev` does not close them.
+
 ## Validation
 
 - Run `python3 -m unittest -v` on macOS/Linux or `python -m unittest -v` on Windows.
