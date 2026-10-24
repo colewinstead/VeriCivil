@@ -12,7 +12,9 @@
 - Increase `APP_VERSION` in `app_info.py` beyond the latest release for changes to application code, calculation data, tests, dependencies, builds, or workflows. Mixed documentation and code changes require a version bump.
 - Do not merge when `validate-version` or any other required check is red.
 - Keep `dev` as the permanent working branch and open release PRs from `dev` into `main`. Create additional branches only when the user asks.
+- Keep `dev` after PRs merge; leave automatic deletion of merged branches disabled on GitHub.
 - Use regular merge commits for PRs into `main`, preserving the individual commits; do not squash or rebase merge.
+- Keep only merge commits enabled in GitHub's PR merge settings. Do not require linear history on `main`, because it blocks merge commits; preserve all other branch protections and required checks.
 - Merge `main` back into `dev` only when changes were made directly on `main`, such as a hotfix. Regular `dev`-to-`main` merges do not require syncing back.
 
 ## Validation
