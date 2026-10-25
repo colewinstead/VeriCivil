@@ -4,6 +4,8 @@ This interface runs the repository's shared Python calculation, LandXML, project
 
 Engineering analytics use the existing D1 binding and migration `0005_strong_polaris.sql`. Successful calculations contribute daily aggregate input combinations (90-day expiry, up to 10,000 rows). Successfully parsed LandXML up to 1 MiB can be retained (30-day expiry, up to 100 files). Limits or storage failures never prevent local import/calculation. Expired records are purged on the next engineering collection or admin report/download request; no scheduled purge is configured. Downloads and deletion require the existing configured product-admin authorization. Raw XML is served only as an attachment with `nosniff`; metadata from the raw file is never rendered as HTML. No account/session token, original filename, or IP address is stored with these records. Raw XML itself may still identify projects or people; removing account linkage does not anonymize it.
 
+Both analytics endpoints exclude signed-in administrators using the existing `ADMIN_WORKOS_USER_IDS` allowlist. Analytics requests carry same-origin cookies for this check; identity is never stored with analytics. Skipped LandXML retention returns 204 and is shown as skipped in the calculator. Signed-out activity still counts. Earlier anonymous records cannot be selectively removed by account. Authentication failures skip storage and return 503 without affecting local calculations.
+
 ## Development
 
 Requires Python 3.11+ and Node.js 22.13+.

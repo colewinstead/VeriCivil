@@ -30,6 +30,8 @@ The complimentary-Pro admin page is `/admin`. It uses the same branded WorkOS si
 
 The allowlist is never sent to the browser. An unlisted account cannot call the admin API even if it guesses the URL. A customer must sign in once before the admin can locate that account by email. Every grant and revocation is retained in the D1 audit history; customer engineering files remain inaccessible.
 
+Signed-in allowlisted administrators are also excluded from calculator usage analytics, engineering input statistics, and LandXML retention. Both analytics routes run through AuthKit and inspect the authenticated account before storage; no account identifiers are stored with analytics. Use the same signed-in browser for personal testing. Signed-out activity still counts, and earlier anonymous records cannot be selectively excluded.
+
 ## Account and billing linkage
 
 The WorkOS user subject is hashed into the application's internal billing-user ID. Email changes therefore do not detach an account from its subscription. Stripe receives that internal ID in customer and subscription metadata. Only a verified Stripe webhook changes the subscription ledger or grants Pro.

@@ -28,7 +28,7 @@ export function trackEngineeringCalculation(inputs: Record<string, unknown>) {
   };
   void fetch("/api/analytics/engineering", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sample), credentials: "omit", keepalive: true,
+    body: JSON.stringify(sample), credentials: "same-origin", keepalive: true,
   }).catch(() => undefined);
 }
 
@@ -38,8 +38,9 @@ export async function retainLandxml(content: string, allowed: boolean): Promise<
   try {
     const response = await fetch("/api/analytics/engineering", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "landxml", retain: true, content }), credentials: "omit",
+      body: JSON.stringify({ kind: "landxml", retain: true, content }), credentials: "same-origin",
     });
+    if (response.status === 204) return "skipped";
     return response.status === 202 ? "stored" : "unavailable";
   } catch { return "unavailable"; }
 }
