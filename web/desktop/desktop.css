@@ -60,6 +60,7 @@ button:disabled { opacity: .55; }
 .desktop-workspace .curve-list-item > button strong, .desktop-workspace .curve-list-item > button span { font-size: 12px; }
 .desktop-workspace :is(.empty, .analysis-empty, .inspector-empty, .chart-tools span, .chart-tools label) { color: var(--muted); font-size: 12px; }
 .desktop-workspace .empty { border-color: var(--line); }
+.desktop-workspace .plan-issues, .desktop-workspace .qa-summary .qa-overall { border: 1px solid var(--line); }
 .desktop-workspace .metric-grid { order: 1; gap: 16px; margin-bottom: 16px; }
 .desktop-workspace .metric-grid article { background: transparent; border: 0; padding: 0; border-radius: 0; }
 .desktop-workspace .metric-grid span { font-size: 12px; color: var(--muted); }
