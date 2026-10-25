@@ -80,6 +80,22 @@ If your terminal is already in the repository root, skip the clone and `cd VeriC
 
 Startup uses `python3` on macOS/Linux and `python` on Windows; the selected executable must be on PATH. A shell alias alone is not sufficient for npm.
 
+## Electron desktop preview
+
+The desktop preview shares the React interface and Python engine with the browser calculator, and bundles its runtime for offline processing. It enables the existing Pro tools for evaluation without account login or production licensing. Packages are unsigned previews; signing, notarization, and automatic in-app updates are not configured.
+
+From the repository root, install and package the app:
+
+```sh
+npm --prefix web ci --ignore-scripts
+node web/node_modules/electron/install.js
+npm --prefix web run desktop:package
+```
+
+This builds the host platform (Apple Silicon or Intel on Mac, x64 on Windows). On a Mac, `npm --prefix web run desktop:package:windows` also packages Windows x64. App folders are written to `desktop/releases/`. See [desktop build, archive, and validation instructions](desktop/README.md) for DMG/portable ZIP creation and runtime details.
+
+Version-bumped PRs build all three targets automatically and expose downloads under the **Full Release** Actions run. PR runs do not publish a GitHub Release. After merge to `main`, successful release builds attach both Mac DMGs, the Windows portable ZIP, and SHA-256 checksums to the versioned GitHub Release alongside the browser build.
+
 ## Browser app
 
 The browser app runs the shared Python calculation and export modules locally through Pyodide. Calculation inputs, project data, and LandXML content are processed in the browser tab and are not automatically uploaded. The hosted site also provides server-side sign-in, plan entitlements, billing, and anonymous usage analytics.
@@ -206,9 +222,9 @@ If a macOS native-binding error includes “different Team IDs,” check `comman
 
 When reporting a problem, include the browser and operating system, application and engine versions, selected criteria profile, expected behavior, and a minimal reproduction using non-sensitive data. Browser developer-console messages can help diagnose loading and export errors. Review any console output before sharing it.
 
-## Browser releases
+## Browser and desktop releases
 
-Documentation-only changes (`.md`, `.rst`, and license files) pass the version check without a version bump and do not create a release. Changes to application code, calculation data, tests, dependencies, builds, or workflows must increase `APP_VERSION` in `app_info.py` beyond the latest GitHub release, including when combined with documentation edits. After those changes merge and all release jobs pass, GitHub publishes a release tagged `vMAJOR.MINOR.PATCH` with the browser build archive.
+Documentation-only changes (`.md`, `.rst`, and license files) pass the version check without a version bump and do not create a release or desktop packages. Changes to application code, calculation data, tests, dependencies, builds, or workflows must increase `APP_VERSION` in `app_info.py` beyond the latest GitHub release, including when combined with documentation edits. A valid version-bumped PR builds unsigned Electron previews on native Apple Silicon, Intel Mac, and Windows runners. After those changes merge and all release jobs pass, GitHub publishes a release tagged `vMAJOR.MINOR.PATCH` with the browser build archive and desktop preview downloads.
 
 Before a browser release, run the Python tests, TypeScript check, lint, production build tests, and Pyodide parity checks. GitHub publishes the browser archive after the release workflow succeeds. Publishing that release to the existing live Site is a separate `Ship main` step; reuse the Site identified by `web/.openai/hosting.json`.
 

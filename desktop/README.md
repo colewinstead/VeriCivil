@@ -2,25 +2,44 @@
 
 This desktop entry point reuses `web/app/CalculatorApp.tsx` and the same Python modules as the browser and Tkinter editions. It bundles Pyodide, its nine required packages, and the pinned ReportLab/ezdxf wheels. Engineering processing runs locally without an internet connection. Formulas, criteria, project schemas, and export implementations are unchanged.
 
-The preview enables the existing local Pro workflows for evaluation. It does not sign in, bill, grant a production subscription, collect analytics, retain LandXML remotely, or install updates. Signed distribution and production desktop licensing remain separate work. Do not publish this preview as a commercial release.
+The preview enables the existing local Pro workflows for evaluation. It does not sign in, bill, grant a production subscription, collect analytics, retain LandXML remotely, or install updates. GitHub distributes it explicitly as an unsigned evaluation preview. Signed distribution and production desktop licensing remain separate work.
 
 ## Build and run
 
 Use the repository's supported Node/Python versions. Install the native Python requirements if running the parity checks. Dependency installation and the first desktop build require internet access; the resulting app does not.
 
 ```sh
-npm --prefix web ci
+npm --prefix web ci --ignore-scripts
+node web/node_modules/electron/install.js
 npm --prefix web run desktop:dev
 ```
 
-`desktop:dev` builds and launches the packaged application source. If npm's script policy skipped the Electron binary download, run `node web/node_modules/electron/install.js` once. On this Mac, use a standard Node installation (for example the existing Homebrew Node), rather than the Node executable embedded in a signed application; the latter can reject native build bindings with a different-Team-ID error.
+`desktop:dev` builds and launches the packaged application source. The explicit Electron install step downloads the pinned runtime after npm installs dependencies without running package scripts. On this Mac, use a standard Node installation (for example the existing Homebrew Node), rather than the Node executable embedded in a signed application; the latter can reject native build bindings with a different-Team-ID error.
 
 ```sh
 npm --prefix web run desktop:package
 npm --prefix web run desktop:package:windows
 ```
 
-The first command packages the host Mac architecture; the second creates the Windows x64 preview. Outputs are under `desktop/releases/`. Runtime downloads and generated application assets are ignored by Git. The runtime cache records dependency URLs and verified SHA-256 values in `desktop/runtime/checksums.json`. Repeated builds verify cached bytes before use.
+The first command packages the host platform: the current Mac architecture, or Windows x64 when run on Windows. The second packages Windows x64, including from a Mac. Outputs are under `desktop/releases/`. Runtime downloads and generated application assets are ignored by Git. The runtime cache records dependency URLs and verified SHA-256 values in `desktop/runtime/checksums.json`. Repeated builds verify cached bytes before use.
+
+To create a downloadable archive after packaging, run the matching command from the repository root:
+
+```sh
+python3 scripts/package_electron_release.py --platform darwin --arch arm64
+# Intel Mac: use --arch x64 instead.
+python scripts/package_electron_release.py --platform win32 --arch x64
+```
+
+Mac DMG creation requires macOS. Windows ZIP creation can also run on a Mac using `python3`. Archives and matching SHA-256 files are written to `desktop/release-assets/`; filenames include the app version and target platform. The helper refuses missing packages and stale staged versions. A Windows ZIP contains the full portable application folder; extract it before launching the EXE.
+
+## Automated builds and GitHub Releases
+
+The **Full Release** workflow validates `APP_VERSION` before building Electron previews for macOS arm64 (`macos-15`), macOS x64 (`macos-15-intel`), and Windows x64 (`windows-latest`). Opening, updating, reopening, or marking a version-bumped PR ready for review runs the builds, including on draft PRs. Documentation-only changes skip packaging, and invalid/reused versions stop before desktop jobs run.
+
+Each native runner installs the pinned Electron runtime, checks the save/security boundaries, packages the app, exercises the offline runtime against native Python, and creates its DMG or portable ZIP plus checksum. PR runs have read-only repository permissions and upload `desktop-release-<version>-<target>` Actions artifacts retained for 30 days. They do not publish a GitHub Release or use signing secrets.
+
+After merge to `main`, desktop and browser builds run against the merged source. The public versioned GitHub Release is published only after all release build jobs succeed, and includes both Mac DMGs, the Windows ZIP, per-target checksums, and the browser archive. The **Legacy Tkinter macOS Build** and **Legacy Tkinter Windows Build** jobs remain manual rollback builds; they do not produce the Electron release files. Website publishing remains a separate `Ship main` operation.
 
 ## Interface and file handling
 
@@ -46,4 +65,4 @@ The Windows x64 package was built and copied to the LAN test PC in an isolated t
 
 ## Rollback and scope
 
-The browser build remains its own entry point. `python3 super_app.py`, the PyInstaller specifications, and the manual native build workflows remain available. The earlier Tkinter redesign is an unmerged checkpoint on `codex/58-desktop-workspace`; this Electron work starts from `origin/main` on the linked issue branch. No automatic desktop release job, website deployment, production licensing, signing, or updater was added.
+The browser build remains its own entry point. `python3 super_app.py`, the PyInstaller specifications, and the manual legacy build workflows remain available. The earlier Tkinter redesign is an unmerged checkpoint on `codex/58-desktop-workspace`; the Electron implementation is on its linked issue branch. Automatic Electron preview packaging and release assets are enabled in the release workflow; no website deployment, production licensing, signing, or updater is configured by that workflow.

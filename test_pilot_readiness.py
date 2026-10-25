@@ -159,11 +159,10 @@ class PilotReadinessTests(unittest.TestCase):
         self.assertLess(installer_sign, checksum)
         self.assertIn('Where-Object { $_.Name -ne "SHA256SUMS.txt" }', script)
 
-    def test_desktop_release_builds_remain_available_manually(self):
+    def test_legacy_desktop_release_builds_remain_available_manually(self):
         root = Path(__file__).parent
         script = (root / "scripts" / "build_macos.sh").read_text(encoding="utf-8")
         spec = (root / "SuperElevationMac.spec").read_text(encoding="utf-8")
-        release_workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         macos_workflow = (root / ".github" / "workflows" / "macos-build.yml").read_text(encoding="utf-8")
         windows_workflow = (root / ".github" / "workflows" / "windows-build.yml").read_text(encoding="utf-8")
         self.assertIn('release_arch="Apple-Silicon"', script)
@@ -177,9 +176,21 @@ class PilotReadinessTests(unittest.TestCase):
         self.assertNotIn("pull_request:", macos_workflow)
         self.assertIn("workflow_dispatch:", windows_workflow)
         self.assertNotIn("pull_request:", windows_workflow)
-        self.assertNotIn("build-windows:", release_workflow)
-        self.assertNotIn("build-macos:", release_workflow)
-        self.assertIn("needs: [validate-version, build-browser]", release_workflow)
+
+    def test_electron_release_requires_version_validation_and_never_publishes_from_prs(self):
+        workflow = (Path(__file__).parent / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        desktop = workflow.split("  build-desktop:\n", 1)[1].split("  publish-release:\n", 1)[0]
+        publish = workflow.split("  publish-release:\n", 1)[1]
+        self.assertIn("if: needs.validate-version.outputs.release-required == 'true'", desktop)
+        self.assertIn("needs: validate-version", desktop)
+        self.assertNotIn("github.event_name == 'push'", desktop)
+        for runner in ("macos-15", "macos-15-intel", "windows-latest"):
+            self.assertIn(f"runner: {runner}\n", desktop)
+        self.assertIn("desktop:test:offline", desktop)
+        self.assertIn("package_electron_release.py", desktop)
+        self.assertIn("if: github.event_name == 'push'", publish)
+        self.assertIn("needs: [validate-version, build-browser, build-desktop]", publish)
+        self.assertNotIn("pull_request_target:", workflow)
 
     def test_pilot_certificate_release_contains_no_private_key_export(self):
         root = Path(__file__).parent
