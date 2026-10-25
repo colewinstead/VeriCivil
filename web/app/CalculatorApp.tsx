@@ -549,7 +549,7 @@ export default function CalculatorApp() {
       const retained = await retainLandxml(content, retainAtSelection && retentionAllowed.current);
       setRetentionNotice(retained === "stored"
         ? "A copy was retained for product improvement. Turning retention off affects future selections."
-        : retained === "skipped" ? "This LandXML was processed locally and was not sent for retention."
+        : retained === "skipped" ? "This LandXML was processed locally. Retention was skipped."
         : "Import succeeded locally. No retention was confirmed (file limit 1 MiB, storage capacity, or connection unavailable).");
     }
   };

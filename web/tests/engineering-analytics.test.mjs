@@ -77,7 +77,7 @@ test("bounded request reader rejects oversized streaming bodies without Content-
   assert.equal(cancelled, true);
   assert.deepEqual(await readEngineeringBody(new Request("https://example.test", { method: "POST", body: JSON.stringify(calculation) })), calculation);
 });
-test("opted-out imports and Do Not Track transmit no file contents; permitted uploads omit credentials", async () => {
+test("opted-out imports and Do Not Track transmit no file contents; permitted uploads carry same-origin sign-in", async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
@@ -95,10 +95,17 @@ test("opted-out imports and Do Not Track transmit no file contents; permitted up
     assert.equal(requests.length, 0);
     globalThis.navigator.doNotTrack = "0";
     assert.equal(await retainLandxml(content, true), "stored");
-    assert.equal(requests[0].options.credentials, "omit");
+    assert.equal(requests[0].options.credentials, "same-origin");
     assert.deepEqual(JSON.parse(requests[0].options.body), { kind: "landxml", retain: true, content });
     assert.equal(await retainLandxml("x".repeat(MAX_LANDXML_BYTES + 1), true), "unavailable");
     assert.equal(requests.length, 1);
+    trackEngineeringCalculation({ criteria_profile: "mdot", speed: 55, radius: 1000, pc: "100+00" });
+    assert.equal(requests[1].options.credentials, "same-origin");
+    assert.deepEqual(JSON.parse(requests[1].options.body), { kind: "calculation", standard: "mdot", speed: 55, radius: 1000, pc: "100+00", pt: "" });
+    globalThis.fetch = async () => new Response(null, { status: 204 });
+    assert.equal(await retainLandxml(content, true), "skipped");
+    globalThis.fetch = async () => new Response(null, { status: 503 });
+    assert.equal(await retainLandxml(content, true), "unavailable");
     globalThis.fetch = async () => { throw new Error("offline"); };
     assert.equal(await retainLandxml(content, true), "unavailable");
   } finally {

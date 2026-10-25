@@ -22,6 +22,7 @@ export const config = {
     "/login",
     "/auth/:path*",
     "/api/entitlement",
+    "/api/analytics/:path*",
     "/api/admin/:path*",
     "/api/billing/:path*",
   ],

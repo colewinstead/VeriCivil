@@ -50,6 +50,7 @@ export default function AdminAnalyticsClient({ initialReport }: { initialReport:
   return (
     <section className="admin-card admin-analytics admin-history-wide">
       <div className="admin-card-heading"><div><h2>Calculator usage</h2><p>Activity from the last {report.days} days. Engineering statistics and retained files have no account or session linkage.</p></div><button type="button" disabled={busy} onClick={refresh}>{busy ? "Refreshing…" : "Refresh"}</button></div>
+      <p className="admin-analytics-privacy">Your activity is excluded while signed in to an administrator account: usage counts, calculation inputs, and LandXML retention are skipped. Signed-out activity still counts. Earlier records have no account linkage and cannot be selectively excluded.</p>
       {!report.available && <p className="admin-empty">Usage analytics are temporarily unavailable. Complimentary access controls remain available.</p>}
       {report.available && <><div className="admin-analytics-metrics">
         <Metric label="Opened sessions" value={report.summary.openedSessions} note="Browser sessions opening a calculator" />

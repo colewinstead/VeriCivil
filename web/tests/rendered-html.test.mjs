@@ -282,6 +282,10 @@ test("records bounded anonymous calculator usage for the protected admin dashboa
   assert.match(adminRoute, /isProductAdmin/);
   assert.match(adminClient, /Calculator usage/);
   assert.match(adminClient, /Engineering statistics exclude names, account identifiers/);
+  assert.match(adminClient, /Your activity is excluded while signed in to an administrator account/);
+  assert.match(adminClient, /Earlier records have no account linkage and cannot be selectively excluded/);
+  const proxy = await readFile(new URL("../proxy.ts", import.meta.url), "utf8");
+  assert.match(proxy, /"\/api\/analytics\/:path\*"/);
   assert.match(privacy, /Privacy-preserving product analytics/);
 });
 
