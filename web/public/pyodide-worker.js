@@ -1,5 +1,6 @@
 const PYODIDE_VERSION = "0.29.4";
-const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const desktop = self.location.protocol === "vericivil:";
+const PYODIDE_BASE = desktop ? "/pyodide/" : `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 let runtimePromise;
 let activeCalculator;
 
@@ -14,7 +15,7 @@ async function initialize(calculator = "superelevation") {
   if (runtimePromise) return runtimePromise;
   activeCalculator = calculator;
   runtimePromise = (async () => {
-    status("Loading private browser workspace…", 12);
+    status(desktop ? "Loading local desktop workspace…" : "Loading private browser workspace…", 12);
     importScripts(`${PYODIDE_BASE}pyodide.js`);
     const pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
     const runtimeManifest = await (await fetch("/python/manifest.json", { cache: "no-cache" })).json();
@@ -27,12 +28,14 @@ async function initialize(calculator = "superelevation") {
     }
     if (bundle.micropip_packages.length) {
       pyodide.globals.set("_micropip_packages_json", JSON.stringify(bundle.micropip_packages));
+      pyodide.globals.set("_offline_bundle", !!bundle.offline);
       await pyodide.runPythonAsync(`
 import json
 import micropip
-await micropip.install(json.loads(_micropip_packages_json))
+await micropip.install(json.loads(_micropip_packages_json), deps=not _offline_bundle)
 `);
       pyodide.globals.delete("_micropip_packages_json");
+      pyodide.globals.delete("_offline_bundle");
     }
 
     status("Loading shared calculation engine…", 70);
@@ -53,7 +56,7 @@ import vericivil_service
     const manifestProxy = pyodide.runPython("vericivil_service.application_manifest(_web_calculator)");
     const appManifest = manifestProxy.toJs({ dict_converter: Object.fromEntries });
     manifestProxy.destroy();
-    status("Ready — files never leave this browser", 100);
+    status(desktop ? "Local desktop engine ready" : "Ready — files never leave this browser", 100);
     self.postMessage({ type: "ready", manifest: appManifest });
     return pyodide;
   })();

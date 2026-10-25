@@ -7,7 +7,7 @@
 
 ## Versioned merges
 
-- `main` is user-ready. Changes beyond documentation become a browser GitHub Release while the desktop edition is Coming soon.
+- `main` is user-ready. Changes beyond documentation become a GitHub Release containing the browser build and unsigned Electron desktop previews.
 - Documentation-only changes (`.md`, `.rst`, and license files) do not require a version bump and do not create a GitHub Release. The `validate-version` job still runs and passes for these changes.
 - Increase `APP_VERSION` in `app_info.py` beyond the latest release for changes to application code, calculation data, tests, dependencies, builds, or workflows. Mixed documentation and code changes require a version bump.
 - Do not merge when `validate-version` or any other required check is red.
@@ -28,7 +28,8 @@
 
 - Run `python3 -m unittest -v` on macOS/Linux or `python -m unittest -v` on Windows.
 - From `web`, run the TypeScript check, lint, production build tests, and Pyodide parity tests before browser releases.
-- Windows EXE and macOS DMG workflows are manual-only while desktop distribution is paused. Do not make them required PR checks or automatic `main` release jobs until the user resumes desktop releases.
+- Version-bumped PRs automatically build and verify Electron previews for Apple Silicon, Intel Mac, and Windows x64. PR builds upload Actions artifacts; successful `main` release jobs attach the desktop DMGs/portable Windows ZIP and checksums alongside the browser archive. Never publish a public release from a PR run.
+- Legacy Tkinter EXE/DMG workflows remain manual-only rollback tools. The Electron preview has no production licensing or in-app updater; keep that status explicit in release documentation.
 - Preserve signing keys outside the repository. Automated GitHub executables are unsigned; signed pilot releases use the private Windows signing workflow and `scripts/verify_windows_release.ps1`.
 
 ## Website publishing

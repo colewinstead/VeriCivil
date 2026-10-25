@@ -1,5 +1,7 @@
 "use client";
 
+import ControlIcon from "./ControlIcon";
+import type { DesktopHost } from "../lib/desktop";
 import { requiresCompoundCalculation } from "../lib/qa-findings";
 import { curveInputValues, editLandxmlInputs, type LandxmlInputs } from "../lib/curve-inputs";
 
@@ -26,7 +28,7 @@ type Dict = Record<string, any>;
 type RuntimeState = "loading" | "ready" | "error";
 type WritableFile = { write(data: Blob): Promise<void>; close(): Promise<void> };
 type SaveFileHandle = { createWritable(): Promise<WritableFile> };
-type SaveTarget = SaveFileHandle | "download";
+type SaveTarget = SaveFileHandle | "download" | "desktop";
 const AUTO_CALC_DELAY_MS = 450;
 
 const EXPORT_DETAILS: Record<string, { suffix: string; description: string }> = {
@@ -79,6 +81,7 @@ function download(name: string, value: string | Uint8Array, type: string) {
 }
 
 async function chooseSaveTarget(name: string, type: string, extension: string, description: string): Promise<SaveTarget | null> {
+  if (window.vericivilDesktop) return "desktop";
   const picker = (window as Window & {
     showSaveFilePicker?: (options: Dict) => Promise<SaveFileHandle>;
   }).showSaveFilePicker;
@@ -96,10 +99,14 @@ async function chooseSaveTarget(name: string, type: string, extension: string, d
 }
 
 async function saveExport(target: SaveTarget, name: string, value: string | Uint8Array, type: string) {
+  if (target === "desktop" && window.vericivilDesktop) {
+    return window.vericivilDesktop.saveFile(name, typeof value === "string" ? new TextEncoder().encode(value) : value);
+  }
   if (target === "download") {
     download(name, value, type);
     return "downloaded";
   }
+  if (target === "desktop") throw new Error("Desktop save service is unavailable.");
   const writable = await target.createWritable();
   await writable.write(new Blob([value as BlobPart], { type }));
   await writable.close();
@@ -136,7 +143,9 @@ function calculationInputKey(inputs: Dict) {
   });
 }
 
-export default function CalculatorApp() {
+export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {}) {
+  const [inspectorTab, setInspectorTab] = useState("curve");
+  const projectInputRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const entitlementProviderRef = useRef<{ refresh(): Promise<EntitlementSnapshot> } | null>(null);
   const pendingRef = useRef(new Map<number, { resolve: (value: any) => void; reject: (reason: Error) => void }>());
@@ -165,12 +174,13 @@ export default function CalculatorApp() {
   const retentionAllowed = useRef(false);
   const [retentionNotice, setRetentionNotice] = useState("");
   useEffect(() => {
+    if (desktop) { setRetentionReady(true); return; }
     let allowed = navigator.doNotTrack !== "1";
     try { allowed = allowed && localStorage.getItem("vericivil_landxml_retention_v1") !== "off"; } catch { /* Session preference still works. */ }
     retentionAllowed.current = allowed;
     setAllowLandxmlRetention(allowed);
     setRetentionReady(true);
-  }, []);
+  }, [desktop]);
   const changeLandxmlRetention = (allowed: boolean) => {
     retentionAllowed.current = allowed;
     setAllowLandxmlRetention(allowed);
@@ -219,12 +229,14 @@ export default function CalculatorApp() {
         setRuntime("ready");
         setManifest(message.manifest);
         if (message.manifest?.commercial) {
-          const provider = entitlementProviderRef.current ?? (isLocalEntitlementDevelopment()
+          const provider = entitlementProviderRef.current ?? (desktop
+            ? { refresh: async () => ({ ...localSnapshot(message.manifest.commercial, "pro"), source: "desktop-preview" }) }
+            : isLocalEntitlementDevelopment()
             ? new LocalDevelopmentEntitlementProvider(message.manifest.commercial)
             : new RemoteEntitlementProvider(message.manifest.commercial));
           entitlementProviderRef.current = provider;
           provider.refresh().then(setEntitlement);
-          setLocalDevelopment(isLocalEntitlementDevelopment());
+          setLocalDevelopment(!desktop && isLocalEntitlementDevelopment());
         }
       } else if (message.type === "fatal") {
         setRuntime("error");
@@ -241,7 +253,7 @@ export default function CalculatorApp() {
       }
     };
     worker.postMessage({ calculator: "superelevation", operation: "initialize" });
-  }, []);
+  }, [desktop]);
 
   useEffect(() => {
     startWorker();
@@ -779,7 +791,10 @@ export default function CalculatorApp() {
     };
     const content = await run("Preparing project", () => call("project_save", { project }));
     if (content) {
-      const outcome = await saveExport(target, filename, content, "application/json");
+      let outcome;
+      try { outcome = await saveExport(target, filename, content, "application/json"); }
+      catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); return; }
+      if (outcome === "cancelled") return;
       setDirty(false);
       setNotice(`Project ${outcome} with calculation provenance and embedded LandXML.`);
     }
@@ -868,7 +883,7 @@ export default function CalculatorApp() {
       project_name: "Synthetic free sample",
       route_name: "Training example",
       alignment_name: "Manual alignment",
-      curve_name: "45 mph rural curve",
+      curve_name: desktop ? "Synthetic · 45 mph rural curve" : "45 mph rural curve",
       pc: "100+00",
       speed: "45",
       radius: "2000",
@@ -950,7 +965,7 @@ export default function CalculatorApp() {
       const disposition = await saveExport(target, filename, result.content, mime);
       return { ...result, disposition };
     });
-    if (!outcome) return;
+    if (!outcome || outcome.disposition === "cancelled") return;
     trackCalculatorEvent("superelevation", "export_completed", extension);
     const action = outcome.disposition === "saved" ? "Saved" : "Downloaded";
     setNotice(outcome.warnings?.length ? `${action} with ${outcome.warnings.length} warning(s): ${outcome.warnings[0]}` : `${action} ${extension.toUpperCase()} export.`);
@@ -1036,42 +1051,56 @@ export default function CalculatorApp() {
     return `Standard rate · ${available} ft available / ${minimum} ft minimum · L ${laneControl(left)} · R ${laneControl(right)}`;
   };
 
+  useEffect(() => desktop?.onMenu((action) => {
+    if (action === "new") newProject();
+    if (action === "open") projectInputRef.current?.click();
+    if (action === "save") void saveProject();
+  }));
+
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className={`app-shell${desktop ? " desktop-workspace" : ""}`} data-inspector={desktop ? inspectorTab : undefined}>
+      {desktop ? <header className="desktop-toolbar">
+        <div><h1>Superelevation</h1><span>VeriCivil <span className="desktop-preview-label">Desktop preview</span></span></div>
+        <div className={`desktop-runtime ${runtime}`} role="status"><i />{runtime === "ready" ? "Offline engine ready" : runtimeMessage}</div>
+        <button onClick={loadSampleCalculation} disabled={runtime !== "ready" || !!busy}>Load synthetic sample</button>
+        <button onClick={newProject}>New project</button>
+        <button onClick={saveProject} disabled={runtime !== "ready" || !!busy}>Save project…</button>
+      </header> : <header className="topbar">
         <div className="brand-mark">SE</div>
         <div><p className="eyebrow">Civil design workspace</p><h1>Superelevation Calculator</h1></div>
         <a className="workspace-home" href="/">Product home</a><a className="workspace-home" href="/account" target="_blank" rel="noreferrer">{entitlement.plan === "free" ? "Account" : `${entitlement.plan.toUpperCase()} account`}</a>
         {localDevelopment && <label className="development-entitlement"><span>Local test plan</span><select value={entitlement.plan} onChange={(event) => changeDevelopmentEntitlement(event.target.value as CommercialPlan)}><option value="free">Free</option><option value="pro">Pro</option><option value="team">Team</option></select></label>}
         <div className={`runtime ${runtime}`}><span></span>{runtime === "ready" ? "Private browser engine ready" : runtimeMessage}</div>
         {runtime === "ready" && <button onClick={startWorker} disabled={!!busy} title="Load the latest Python engine while keeping your project and curve inputs">Reload engine</button>}
-      </header>
+      </header>}
 
       {upgradeFeature && <UpgradeNotice feature={upgradeFeature} onClose={() => setUpgradeFeature("")} />}
 
       {runtime !== "ready" && <section className="runtime-gate" role="status">
-        <div className="gate-card"><p className="eyebrow">Browser-only processing</p><h2>{runtime === "error" ? "The workspace could not start" : runtimeMessage}</h2>
+        <div className="gate-card"><p className="eyebrow">{desktop ? "Local desktop processing" : "Browser-only processing"}</p><h2>{runtime === "error" ? "The workspace could not start" : runtimeMessage}</h2>
           <div className="progress"><i style={{ width: `${progress}%` }} /></div>
-          <p>{runtime === "error" ? "Check your connection and retry." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
+          <p>{runtime === "error" ? desktop ? "The bundled runtime could not start. Retry or rebuild the desktop preview." : "Check your connection and retry." : desktop ? "Loading the bundled Python engine and engineering libraries. No connection is required." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
           {runtime === "error" && <button className="primary" onClick={startWorker}>Retry</button>}
         </div>
       </section>}
 
-      <div className="privacy-strip"><strong>Local calculations</strong><span>DOT standard, speed, radius, and PC/PT are collected without account linkage. LandXML retention is controlled below. <a href="/privacy">Privacy details</a></span><span className="version">App {manifest?.application_version || "…"} · Engine {manifest?.calculation_engine_version || "…"}</span></div>
+      {desktop ? <div className="desktop-context"><nav aria-label="Input workspace"><button aria-pressed={inspectorTab === "curve"} onClick={() => setInspectorTab("curve")}>Curve inputs</button><button aria-pressed={inspectorTab === "project"} onClick={() => setInspectorTab("project")}>Project & LandXML{dirty ? " · Unsaved" : ""}</button></nav><span>Local files · No uploads · App {manifest?.application_version || "…"}</span></div> : <div className="privacy-strip"><strong>Local calculations</strong><span>DOT standard, speed, radius, and PC/PT are collected without account linkage. LandXML retention is controlled below. <a href="/privacy">Privacy details</a></span><span className="version">App {manifest?.application_version || "…"} · Engine {manifest?.calculation_engine_version || "…"}</span></div>}
 
-      {(error || notice) && <div className={`toast ${error ? "error" : "notice"}`} role="alert"><strong>{error ? "Action needed" : "Complete"}</strong><span>{error || notice}</span><button aria-label="Dismiss message" onClick={() => { setError(""); setNotice(""); }}>×</button></div>}
+      {(error || notice) && <div className={`toast ${error ? "error" : "notice"}`} role="alert"><strong>{error ? "Action needed" : "Complete"}</strong><span>{error || notice}</span><button aria-label="Dismiss message" onClick={() => { setError(""); setNotice(""); }}><ControlIcon name="close" /></button></div>}
 
       <div className="workspace">
         <aside className="panel project-panel">
           <div className="panel-heading"><div><p className="step">01</p><h2>Project</h2></div>{dirty && <span className="dirty">Unsaved</span>}</div>
-          <div className="button-grid"><button onClick={newProject}>New</button>{allows(entitlement, CAPABILITIES.projectFiles) ? <label className="button">Open<input type="file" accept=".json,application/json" onChange={loadProject} /></label> : <button onClick={() => requestCapability(CAPABILITIES.projectFiles)}>Open {proChip(CAPABILITIES.projectFiles)}</button>}<button onClick={saveProject} disabled={runtime !== "ready"}>Save {proChip(CAPABILITIES.projectFiles)}</button></div>
+          <div className="button-grid"><button onClick={newProject}>New</button>{allows(entitlement, CAPABILITIES.projectFiles) ? <label className="button">Open<input ref={projectInputRef} type="file" accept=".json,application/json" onChange={loadProject} /></label> : <button onClick={() => requestCapability(CAPABILITIES.projectFiles)}>Open {proChip(CAPABILITIES.projectFiles)}</button>}<button onClick={saveProject} disabled={runtime !== "ready"}>Save {proChip(CAPABILITIES.projectFiles)}</button></div>
           {entitlement.plan === "free" && <button className="sample-button" onClick={loadSampleCalculation}>Load synthetic sample <span>Free</span></button>}
           {input("project_name", "Project name")}{input("route_name", "Route name")}
           <div className="source-card">
             <div><p className="eyebrow">Alignment source</p><strong>{landxml?.source?.filename || "No LandXML selected"}</strong></div>
+            {!desktop && <>
             <label className="retention-choice"><input type="checkbox" checked={allowLandxmlRetention} disabled={!retentionReady || (typeof navigator !== "undefined" && navigator.doNotTrack === "1")} onChange={event => changeLandxmlRetention(event.target.checked)} /> Allow retention of my LandXML for product improvement</label>
             <p className="retention-details">Enabled by default. Uncheck before selecting a file to keep its contents on this device. Retained copies may contain project names and coordinates, are limited to 1 MiB, and expire after 30 days. Only administrators can access them. Only share files you have permission to provide. This choice affects future selections; calculations and exports work either way.</p>
             {retentionNotice && <p role="status">{retentionNotice}</p>}
+            </>}
             {allows(entitlement, CAPABILITIES.landxml) ? <label className="button accent">{landxml ? "Replace XML" : "Select LandXML"}<input type="file" accept=".xml,text/xml,application/xml" onChange={selectLandxml} /></label> : <button className="button accent" onClick={() => requestCapability(CAPABILITIES.landxml)}>Select LandXML {proChip(CAPABILITIES.landxml)}</button>}
             {landxml && <><p>{landxml.summary.alignment_name || "Unnamed alignment"} · {landxml.summary.linear_unit || "units undeclared"}</p><p>CRS: {landxml.summary.coordinate_system?.display_name || "Not declared in LandXML"}</p><p>{landxml.summary.curve_count} curves · {excludedCurveIndexes.length} excluded from QA · SHA {landxml.source.sha256.slice(0, 10)}…</p>
               {landxml.alignments.length > 1 && <label className="field"><span>Alignment</span><select value={landxml.source.alignment_index} disabled={!!busy} onChange={event => selectAlignment(Number(event.target.value))}>
@@ -1156,7 +1185,7 @@ export default function CalculatorApp() {
               <label className="field"><span>{inputs.circular_placement_basis === "runoff_runout" ? "Total transition" : "Runoff"} on tangent (%) <b>*</b></span><input type="number" min="0" max="100" value={inputs.runoff_tangent_percent} onChange={e=>update("runoff_tangent_percent",e.target.value)}/><small>{inputs.runoff_tangent_percent !== "" ? `${100-Number(inputs.runoff_tangent_percent)}% on curve` : "Explicit project input required"}. Bank and available-length checks still apply.</small></label>
             </>}
           </div>
-          <button className="advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><span>Advanced settings</span><small>Optional criteria overrides and stationing</small><b>{advancedOpen ? "−" : "+"}</b></button>
+          <button className="advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><span>Advanced settings</span><small>Optional criteria overrides and stationing</small><ControlIcon name={advancedOpen ? "minus" : "plus"} /></button>
           {advancedOpen && <div className="advanced-grid">{input("e_manual", "Manual e")}{!isAashto && <>{input("friction", "Side friction")}{input("rel_grad", "Relative gradient")}{input("normal_crown", "Normal crown")}</>}{input("Lr_manual", "Runoff Lr (ft)")}{input("Lt_manual", "Runout Lt (ft)")}{input("station_equations", "Station equations")}{input("alignment_station_range", "Internal station range")}<small>Repeated station labels require a region suffix, for example 10+00R2, or a narrower internal range.</small></div>}
           <label className="field full"><span>Curve notes</span><textarea value={inputs.curve_notes} onChange={(e) => update("curve_notes", e.target.value)} rows={3} /></label>
           {compoundPreviewPending && <p className="field-note">Input edits are kept without computing. This curve joins an adjoining curve directly; Calculate selected curves uses the individual inputs to build their shared transition.</p>}
@@ -1172,7 +1201,7 @@ export default function CalculatorApp() {
             <p className="helper">{lengthCheckResult.scope_note}</p>
             <div className="criteria-reference"><p>Calculation sources</p><ul>{criteriaSources.map((source:Dict,index:number)=><li key={index}><span>{source.component}</span><b>{source.reference}</b><em>{String(source.mode).replaceAll("_"," ")}</em></li>)}</ul>{lengthCheckResult.e_note && <p className="helper">{lengthCheckResult.e_note}</p>}</div>
             {lengthCheckResult.warnings.length > 0 && <div className="result-warning"><strong>Engineering review</strong><ul>{lengthCheckResult.warnings.map((warning:string,index:number)=><li key={index}>{warning}</li>)}</ul></div>}
-          </> : <div className="results-empty"><h3>Ready to check spiral lengths</h3><p>Select speed and enter radius. The check uses your selected maximum superelevation and roadway section; TS/ST are not required.</p></div> : !result ? <><div className="results-empty"><div className="road-crown"><i></i><i></i></div><h3>{blockedFindings.length ? "Calculation blocked" : "Ready for curve inputs"}</h3><p>{blockedFindings.length ? "Review the findings below. Diagnostics can be saved in the project and PDF." : "Enter PC, speed, and radius to calculate transition stations and signed lane slopes."}</p></div>{(landxml || reviewQa) && <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />}</> : <>
+          </> : <div className="results-empty"><h3>Ready to check spiral lengths</h3><p>Select speed and enter radius. The check uses your selected maximum superelevation and roadway section; TS/ST are not required.</p></div> : !result ? <><div className="results-empty"><div className="road-crown"><i></i><i></i></div><h3>{blockedFindings.length ? "Calculation blocked" : "Ready for curve inputs"}</h3><p>{blockedFindings.length ? "Review the findings below. Diagnostics can be saved in the project and PDF." : "Enter PC, speed, and radius to calculate transition stations and signed lane slopes."}</p></div>{(desktop || landxml || reviewQa) && <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />}</> : <>
             <div className="metric-grid"><article><span>{result.section_transition ? "Curve cross slope" : "Rate e"}</span><strong>{result.section_transition?.target_slope_label || Number(result.e || 0).toFixed(4)}</strong><small>{result.e_source || "automatic"}</small></article><article><span>Runoff Lr</span><strong>{Number(result.Lr || 0).toFixed(2)}′</strong><small>{inputs.Lr_manual ? "override" : "automatic"}</small></article><article><span>Runout Lt</span><strong>{Number(result.Lt || 0).toFixed(2)}′</strong><small>{inputs.Lt_manual ? "override" : "automatic"}</small></article></div>
             {result.section_transition && <p className="helper">{result.section_transition.note}</p>}
             <div className="criteria-reference">
@@ -1193,9 +1222,9 @@ export default function CalculatorApp() {
         </section>
       </div>
 
-      <section className="exports panel"><div><p className="step">04</p><h2>Review & export {proChip(CAPABILITIES.pdfReports)}</h2><p>Exports use the same recorded calculation results shown above. Supported browsers open a Save dialog; others use Downloads.</p></div><div className="crs-status"><span>Overlay coordinates</span><strong>{landxml?.summary?.coordinate_system?.display_name || "Select LandXML to detect"}</strong><small>DXF preserves the LandXML XY coordinates without reprojection.</small></div><div className="export-buttons"><button onClick={() => performExport("export_pdf", "pdf", "application/pdf")}>PDF report {proChip(CAPABILITIES.pdfReports)}</button><button onClick={() => performExport("export_ord_csv", "csv", "text/csv")}>ORD CSV {proChip(CAPABILITIES.ordCsv)}</button><button className="primary" onClick={() => performExport("export_overlay_dxf", "dxf", "application/dxf")}>Overlay DXF {proChip(CAPABILITIES.overlayDxf)}</button></div></section>
+      <section className="exports panel"><div><p className="step">04</p><h2>Review & export {proChip(CAPABILITIES.pdfReports)}</h2><p>{desktop ? "Save the recorded results through a native file dialog." : "Exports use the same recorded calculation results shown above. Supported browsers open a Save dialog; others use Downloads."}</p></div><div className="crs-status"><span>Overlay coordinates</span><strong>{landxml?.summary?.coordinate_system?.display_name || "Select LandXML to detect"}</strong><small>DXF preserves the LandXML XY coordinates without reprojection.</small></div><div className="export-buttons"><button onClick={() => performExport("export_pdf", "pdf", "application/pdf")}>PDF report {proChip(CAPABILITIES.pdfReports)}</button><button onClick={() => performExport("export_ord_csv", "csv", "text/csv")}>ORD CSV {proChip(CAPABILITIES.ordCsv)}</button><button className="primary" onClick={() => performExport("export_overlay_dxf", "dxf", "application/dxf")}>Overlay DXF {proChip(CAPABILITIES.overlayDxf)}</button></div></section>
 
-      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
+      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Evaluation preview · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
     </main>
   );
 }

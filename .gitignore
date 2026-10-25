@@ -78,3 +78,8 @@ SuperElevation_legacy_*.exe
 **/.impeccable/live/deferred-svelte-component-accepts.json
 **/.impeccable/live/*.png
 # impeccable-ignore-end
+# Local Electron preview artifacts and offline dependency cache
+/desktop/app/
+/desktop/runtime/
+/desktop/releases/
+/desktop/release-assets/

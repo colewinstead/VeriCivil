@@ -1,5 +1,7 @@
 "use client";
 
+import ControlIcon from "./ControlIcon";
+
 /* Pyodide service responses are JSON dictionaries. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -136,7 +138,7 @@ function PlanCanvas({ plan }: { plan: Dict }) {
 
   return <div className="plan-layout">
     <div className="plan-frame">
-      <div className="plan-tools"><span>{plan.alignment_name} · {(plan.entities || []).length} CAD entities</span><button title="Zoom out" aria-label="Plan zoom out" onClick={() => zoom(1.28)}>−</button><button title="Zoom in" aria-label="Plan zoom in" onClick={() => zoom(0.78)}>+</button><button title="Fit drawing" onClick={() => setView(fitted)}>Fit</button></div>
+      <div className="plan-tools"><span>{plan.alignment_name} · {(plan.entities || []).length} CAD entities</span><button title="Zoom out" aria-label="Plan zoom out" onClick={() => zoom(1.28)}><ControlIcon name="minus" /></button><button title="Zoom in" aria-label="Plan zoom in" onClick={() => zoom(0.78)}><ControlIcon name="plus" /></button><button title="Fit drawing" onClick={() => setView(fitted)}>Fit</button></div>
       <div className={`plan-canvas${dragging ? " dragging" : ""}`} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}>
         <svg ref={svgRef} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`} role="img" aria-label="CAD model-space preview of the overlay DXF">
           {(plan.entities || []).map((entity: Dict) => {

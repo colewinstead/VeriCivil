@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 
 type UpgradeNoticeProps = {
   feature: string;
@@ -31,7 +30,7 @@ export default function UpgradeNotice({ feature, onClose }: UpgradeNoticeProps) 
         <p className="upgrade-privacy">Upgrading will verify account access only. Engineering files and calculations stay on this device.</p>
         <div className="upgrade-actions">
           <button ref={closeRef} onClick={onClose}>Keep calculating</button>
-          <Link className="primary" href="/account" target="_blank" rel="noreferrer">View Pro options</Link>
+          <a className="primary" href="/account" target="_blank" rel="noreferrer">View Pro options</a>
         </div>
       </section>
     </div>

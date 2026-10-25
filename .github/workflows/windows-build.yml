@@ -1,4 +1,4 @@
-name: Windows Build
+name: Legacy Tkinter Windows Build
 
 on:
   workflow_dispatch:

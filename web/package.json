@@ -14,7 +14,13 @@
     "test": "npm run build && npm run test:billing && node --experimental-strip-types --test tests/qa-findings.test.mjs tests/curve-inputs.test.mjs && node --test tests/runtime-staging.test.mjs tests/rendered-html.test.mjs && node tests/pyodide-parity.mjs",
     "test:billing": "node --experimental-strip-types --test tests/billing-entitlement.test.mjs tests/analytics-policy.test.mjs tests/engineering-analytics.test.mjs tests/pro-price.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-pages --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "desktop:build": "node desktop/build.mjs",
+    "desktop:dev": "npm run desktop:build && electron ../desktop/app",
+    "desktop:package": "npm run desktop:build && node desktop/package.mjs",
+    "desktop:test": "node --test ../desktop/tests/security.test.cjs",
+    "desktop:package:windows": "npm run desktop:build && node desktop/package.mjs win32",
+    "desktop:test:offline": "node ../desktop/tests/run-offline.cjs"
   },
   "dependencies": {
     "@workos-inc/authkit-nextjs": "^4.2.0",
@@ -29,6 +35,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "^4.20260515.1",
+    "@electron/packager": "20.3.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
@@ -36,6 +43,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "45.0.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "pyodide": "0.29.4",

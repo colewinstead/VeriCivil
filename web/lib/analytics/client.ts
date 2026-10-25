@@ -20,7 +20,7 @@ function sessionToken() {
 }
 
 export function trackEngineeringCalculation(inputs: Record<string, unknown>) {
-  if (typeof window === "undefined" || navigator.doNotTrack === "1") return;
+  if (typeof window === "undefined" || navigator.doNotTrack === "1" || window.vericivilDesktop) return;
   const sample: EngineeringSample = {
     kind: "calculation", standard: String(inputs.criteria_profile || ""),
     speed: Number(inputs.speed), radius: Number(inputs.radius),
@@ -33,7 +33,7 @@ export function trackEngineeringCalculation(inputs: Record<string, unknown>) {
 }
 
 export async function retainLandxml(content: string, allowed: boolean): Promise<"stored" | "skipped" | "unavailable"> {
-  if (!allowed || typeof window === "undefined" || navigator.doNotTrack === "1") return "skipped";
+  if (!allowed || typeof window === "undefined" || navigator.doNotTrack === "1" || window.vericivilDesktop) return "skipped";
   if (new TextEncoder().encode(content).byteLength > 1024 * 1024) return "unavailable";
   try {
     const response = await fetch("/api/analytics/engineering", {
@@ -50,7 +50,7 @@ export function trackCalculatorEvent(
   event: AnalyticsEventName,
   detail = "",
 ) {
-  if (typeof window === "undefined" || navigator.doNotTrack === "1") return;
+  if (typeof window === "undefined" || navigator.doNotTrack === "1" || window.vericivilDesktop) return;
   const body = JSON.stringify({ session_token: sessionToken(), calculator, event, detail });
   void fetch("/api/analytics", {
     method: "POST",
