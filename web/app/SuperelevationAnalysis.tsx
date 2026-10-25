@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import SuperelevationPlanView from "./SuperelevationPlanView";
+import ControlIcon from "./ControlIcon";
 import { groupQaFindings } from "../lib/qa-findings";
 
 type Dict = Record<string, any>;
@@ -67,7 +68,7 @@ function chartRows(corridor: Dict | null, visibleDomain: [number, number]) {
   });
 }
 
-const CURVE_COLORS = ["#49c6b3", "#efbd5c", "#78a9ff", "#ee806f", "#a7cf72", "#d49be8", "#76c7df", "#f19a55"];
+const CURVE_COLORS = ["var(--series-teal, #49c6b3)", "var(--series-amber, #efbd5c)", "#78a9ff", "#ee806f", "#a7cf72", "#d49be8", "#76c7df", "#f19a55"];
 
 function stationTick(value: number) {
   const hundreds = Math.floor(value / 100);
@@ -107,7 +108,7 @@ export default function SuperelevationAnalysis({
   const findingButton = (finding: Dict, index: number) => <button key={`${finding.code}-${index}`} onClick={() => { setView("diagram"); onFinding(finding); }}>
     <span className={`severity ${finding.severity}`}>{finding.severity}</span>
     <div><strong>{finding.message}</strong><small>{finding.code.replaceAll("_", " ")}{finding.start ? ` · ${finding.start}${finding.end && finding.end !== finding.start ? ` to ${finding.end}` : ""}` : ""}</small>{finding.details && <p>{finding.details}</p>}</div>
-    <b aria-hidden="true">›</b>
+    <ControlIcon name="chevron" />
   </button>;
   const selectedCurveIndex = diagrams.some((item) => item.curve_index === activeCurveIndex)
     ? activeCurveIndex : Number(diagrams[0]?.curve_index ?? 0);
@@ -236,7 +237,7 @@ export default function SuperelevationAnalysis({
     {view === "diagram" && <div className="diagram-layout">
       {!diagrams.length ? <div className="analysis-empty">Calculate curves to view the corridor lane profiles.</div> : <>
         <div ref={chartFrameRef} className="chart-frame" aria-label="Left and right lane slope by station">
-          <div className="chart-tools"><span>{diagrams.length} curve{diagrams.length === 1 ? "" : "s"} · {stationTick(activeDomain[0])} to {stationTick(activeDomain[1])}</span><label title="Snap selections to nearby lane events"><input type="checkbox" checked={snapEvents} onChange={(event) => setSnapEvents(event.target.checked)} /> Snap events</label><button title="Pan toward corridor start" aria-label="Pan left" onClick={() => panBy(-0.72)}>←</button><button title="Pan toward corridor end" aria-label="Pan right" onClick={() => panBy(0.72)}>→</button><button title="Zoom out" aria-label="Zoom out" onClick={() => zoom(1.28)}>−</button><button title="Zoom in" aria-label="Zoom in" onClick={() => zoom(0.78)}>+</button><button title="Reset zoom" aria-label="Reset zoom" onClick={() => setZoomState(null)}>Reset</button></div>
+          <div className="chart-tools"><span>{diagrams.length} curve{diagrams.length === 1 ? "" : "s"} · {stationTick(activeDomain[0])} to {stationTick(activeDomain[1])}</span><label title="Snap selections to nearby lane events"><input type="checkbox" checked={snapEvents} onChange={(event) => setSnapEvents(event.target.checked)} /> Snap events</label><button title="Pan toward corridor start" aria-label="Pan left" onClick={() => panBy(-0.72)}><ControlIcon name="left" /></button><button title="Pan toward corridor end" aria-label="Pan right" onClick={() => panBy(0.72)}><ControlIcon name="right" /></button><button title="Zoom out" aria-label="Zoom out" onClick={() => zoom(1.28)}><ControlIcon name="minus" /></button><button title="Zoom in" aria-label="Zoom in" onClick={() => zoom(0.78)}><ControlIcon name="plus" /></button><button title="Reset zoom" aria-label="Reset zoom" onClick={() => setZoomState(null)}>Reset</button></div>
           <div className={`chart-canvas${dragging ? " dragging" : ""}`} onClick={selectPoint} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 26, right: 18, bottom: 12, left: 0 }}>
@@ -248,12 +249,12 @@ export default function SuperelevationAnalysis({
                 <ReferenceLine y={0} stroke="#8a9995" strokeWidth={1.2} />
                 {highlights.map((item, index) => <ReferenceArea key={`${item.code}-${index}`} x1={item.start_ft} x2={item.end_ft} fill={item.severity === "block" ? "#ef6a5b" : "#efbd5c"} fillOpacity={0.16} />)}
                 {visibleMarkers.map((marker: Dict, index: number) => <ReferenceLine key={`${marker.curve_index}-${marker.label}-${marker.station_ft}-${index}`} x={marker.station_ft} stroke={marker.kind === "STATION EQUATION" ? "#efbd5c" : "#57736b"} strokeDasharray="3 4" label={marker.curve_index === selectedCurveIndex ? { value: marker.kind === "STATION EQUATION" ? marker.label : `${marker.curve_name} ${marker.kind}`, position: "insideTop", fill: "#aebbb7", fontSize: 9 } : undefined} />)}
-                {inspector && <ReferenceLine x={inspector.station_ft} stroke="#ffffff" strokeWidth={1.4} />}
+                {inspector && <ReferenceLine x={inspector.station_ft} stroke="var(--station-cursor, #ffffff)" strokeWidth={1.4} />}
                 {diagrams.flatMap((diagram, index) => {
                   const color = CURVE_COLORS[index % CURVE_COLORS.length];
                   const active = Number(diagram.curve_index) === selectedCurveIndex;
                   const key = `curve${diagram.curve_index}`;
-                  return chartProfiles(diagram).map(profile=><Line key={`${key}-${profile.key}`} type="linear" dataKey={`${key}${profile.key}`} name={`${diagram.curve_name} · ${profile.name}`} stroke={color} strokeWidth={active ? 2.8 : 1.7} strokeOpacity={active ? 1 : 0.72} strokeDasharray={profile.side==="right"?"7 4":undefined} dot={false} activeDot={{r:4}} isAnimationActive={false} connectNulls={false}/>);
+                  return chartProfiles(diagram).map(profile=><Line key={`${key}-${profile.key}`} type="linear" dataKey={`${key}${profile.key}`} name={`${diagram.curve_name} · ${profile.name}`} stroke={diagrams.length === 1 && profile.side === "right" ? `var(--series-right, ${color})` : color} strokeWidth={active ? 2.8 : 1.7} strokeOpacity={active ? 1 : 0.72} strokeDasharray={profile.side==="right"?"7 4":undefined} dot={false} activeDot={{r:4}} isAnimationActive={false} connectNulls={false}/>);
                 })}
               </LineChart>
             </ResponsiveContainer>

@@ -1,0 +1,443 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T17:39:19.613584+00:00",
+  "title": "Design System: VeriCivil Electron Superelevation Preview",
+  "extensions": {
+    "colorMeta": {
+      "teal-light": {
+        "role": "primary",
+        "displayName": "Teal Light",
+        "tonalRamp": [
+          "oklch(15% 0.0845 177.31)",
+          "oklch(26% 0.0845 177.31)",
+          "oklch(38% 0.0845 177.31)",
+          "oklch(49% 0.0845 177.31)",
+          "oklch(61% 0.0845 177.31)",
+          "oklch(72% 0.0845 177.31)",
+          "oklch(84% 0.0845 177.31)",
+          "oklch(95% 0.0845 177.31)"
+        ]
+      },
+      "teal-dark": {
+        "role": "primary",
+        "displayName": "Teal Dark",
+        "tonalRamp": [
+          "oklch(15% 0.1154 171.09)",
+          "oklch(26% 0.1154 171.09)",
+          "oklch(38% 0.1154 171.09)",
+          "oklch(49% 0.1154 171.09)",
+          "oklch(61% 0.1154 171.09)",
+          "oklch(72% 0.1154 171.09)",
+          "oklch(84% 0.1154 171.09)",
+          "oklch(95% 0.1154 171.09)"
+        ]
+      },
+      "lane-teal-light": {
+        "role": "secondary",
+        "displayName": "Lane Teal Light",
+        "tonalRamp": [
+          "oklch(15% 0.0891 179.53)",
+          "oklch(26% 0.0891 179.53)",
+          "oklch(38% 0.0891 179.53)",
+          "oklch(49% 0.0891 179.53)",
+          "oklch(61% 0.0891 179.53)",
+          "oklch(72% 0.0891 179.53)",
+          "oklch(84% 0.0891 179.53)",
+          "oklch(95% 0.0891 179.53)"
+        ]
+      },
+      "lane-amber-light": {
+        "role": "secondary",
+        "displayName": "Lane Amber Light",
+        "tonalRamp": [
+          "oklch(15% 0.1078 73.57)",
+          "oklch(26% 0.1078 73.57)",
+          "oklch(38% 0.1078 73.57)",
+          "oklch(49% 0.1078 73.57)",
+          "oklch(61% 0.1078 73.57)",
+          "oklch(72% 0.1078 73.57)",
+          "oklch(84% 0.1078 73.57)",
+          "oklch(95% 0.1078 73.57)"
+        ]
+      },
+      "amber-light": {
+        "role": "secondary",
+        "displayName": "Amber Light",
+        "tonalRamp": [
+          "oklch(15% 0.1055 69.32)",
+          "oklch(26% 0.1055 69.32)",
+          "oklch(38% 0.1055 69.32)",
+          "oklch(49% 0.1055 69.32)",
+          "oklch(61% 0.1055 69.32)",
+          "oklch(72% 0.1055 69.32)",
+          "oklch(84% 0.1055 69.32)",
+          "oklch(95% 0.1055 69.32)"
+        ]
+      },
+      "amber-dark": {
+        "role": "secondary",
+        "displayName": "Amber Dark",
+        "tonalRamp": [
+          "oklch(15% 0.1097 78.56)",
+          "oklch(26% 0.1097 78.56)",
+          "oklch(38% 0.1097 78.56)",
+          "oklch(49% 0.1097 78.56)",
+          "oklch(61% 0.1097 78.56)",
+          "oklch(72% 0.1097 78.56)",
+          "oklch(84% 0.1097 78.56)",
+          "oklch(95% 0.1097 78.56)"
+        ]
+      },
+      "error-light": {
+        "role": "secondary",
+        "displayName": "Error Light",
+        "tonalRamp": [
+          "oklch(15% 0.1623 26.73)",
+          "oklch(26% 0.1623 26.73)",
+          "oklch(38% 0.1623 26.73)",
+          "oklch(49% 0.1623 26.73)",
+          "oklch(61% 0.1623 26.73)",
+          "oklch(72% 0.1623 26.73)",
+          "oklch(84% 0.1623 26.73)",
+          "oklch(95% 0.1623 26.73)"
+        ]
+      },
+      "error-dark": {
+        "role": "secondary",
+        "displayName": "Error Dark",
+        "tonalRamp": [
+          "oklch(15% 0.1272 23.87)",
+          "oklch(26% 0.1272 23.87)",
+          "oklch(38% 0.1272 23.87)",
+          "oklch(49% 0.1272 23.87)",
+          "oklch(61% 0.1272 23.87)",
+          "oklch(72% 0.1272 23.87)",
+          "oklch(84% 0.1272 23.87)",
+          "oklch(95% 0.1272 23.87)"
+        ]
+      },
+      "ink-light": {
+        "role": "neutral",
+        "displayName": "Ink Light",
+        "tonalRamp": [
+          "oklch(15% 0.0236 178.29)",
+          "oklch(26% 0.0236 178.29)",
+          "oklch(38% 0.0236 178.29)",
+          "oklch(49% 0.0236 178.29)",
+          "oklch(61% 0.0236 178.29)",
+          "oklch(72% 0.0236 178.29)",
+          "oklch(84% 0.0236 178.29)",
+          "oklch(95% 0.0236 178.29)"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0094 171.79)",
+          "oklch(26% 0.0094 171.79)",
+          "oklch(38% 0.0094 171.79)",
+          "oklch(49% 0.0094 171.79)",
+          "oklch(61% 0.0094 171.79)",
+          "oklch(72% 0.0094 171.79)",
+          "oklch(84% 0.0094 171.79)",
+          "oklch(95% 0.0094 171.79)"
+        ]
+      },
+      "muted-light": {
+        "role": "neutral",
+        "displayName": "Muted Light",
+        "tonalRamp": [
+          "oklch(15% 0.0299 168.27)",
+          "oklch(26% 0.0299 168.27)",
+          "oklch(38% 0.0299 168.27)",
+          "oklch(49% 0.0299 168.27)",
+          "oklch(61% 0.0299 168.27)",
+          "oklch(72% 0.0299 168.27)",
+          "oklch(84% 0.0299 168.27)",
+          "oklch(95% 0.0299 168.27)"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0255 166.84)",
+          "oklch(26% 0.0255 166.84)",
+          "oklch(38% 0.0255 166.84)",
+          "oklch(49% 0.0255 166.84)",
+          "oklch(61% 0.0255 166.84)",
+          "oklch(72% 0.0255 166.84)",
+          "oklch(84% 0.0255 166.84)",
+          "oklch(95% 0.0255 166.84)"
+        ]
+      },
+      "paper-light": {
+        "role": "neutral",
+        "displayName": "Paper Light",
+        "tonalRamp": [
+          "oklch(15% 0.0059 170.45)",
+          "oklch(26% 0.0059 170.45)",
+          "oklch(38% 0.0059 170.45)",
+          "oklch(49% 0.0059 170.45)",
+          "oklch(61% 0.0059 170.45)",
+          "oklch(72% 0.0059 170.45)",
+          "oklch(84% 0.0059 170.45)",
+          "oklch(95% 0.0059 170.45)"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Paper Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0147 172.15)",
+          "oklch(26% 0.0147 172.15)",
+          "oklch(38% 0.0147 172.15)",
+          "oklch(49% 0.0147 172.15)",
+          "oklch(61% 0.0147 172.15)",
+          "oklch(72% 0.0147 172.15)",
+          "oklch(84% 0.0147 172.15)",
+          "oklch(95% 0.0147 172.15)"
+        ]
+      },
+      "panel-light": {
+        "role": "neutral",
+        "displayName": "Panel Light",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "panel-dark": {
+        "role": "neutral",
+        "displayName": "Panel Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0216 164.33)",
+          "oklch(26% 0.0216 164.33)",
+          "oklch(38% 0.0216 164.33)",
+          "oklch(49% 0.0216 164.33)",
+          "oklch(61% 0.0216 164.33)",
+          "oklch(72% 0.0216 164.33)",
+          "oklch(84% 0.0216 164.33)",
+          "oklch(95% 0.0216 164.33)"
+        ]
+      },
+      "raised-light": {
+        "role": "neutral",
+        "displayName": "Raised Light",
+        "tonalRamp": [
+          "oklch(15% 0.0050 165.01)",
+          "oklch(26% 0.0050 165.01)",
+          "oklch(38% 0.0050 165.01)",
+          "oklch(49% 0.0050 165.01)",
+          "oklch(61% 0.0050 165.01)",
+          "oklch(72% 0.0050 165.01)",
+          "oklch(84% 0.0050 165.01)",
+          "oklch(95% 0.0050 165.01)"
+        ]
+      },
+      "raised-dark": {
+        "role": "neutral",
+        "displayName": "Raised Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0261 162.40)",
+          "oklch(26% 0.0261 162.40)",
+          "oklch(38% 0.0261 162.40)",
+          "oklch(49% 0.0261 162.40)",
+          "oklch(61% 0.0261 162.40)",
+          "oklch(72% 0.0261 162.40)",
+          "oklch(84% 0.0261 162.40)",
+          "oklch(95% 0.0261 162.40)"
+        ]
+      },
+      "line-light": {
+        "role": "neutral",
+        "displayName": "Line Light",
+        "tonalRamp": [
+          "oklch(15% 0.0169 162.70)",
+          "oklch(26% 0.0169 162.70)",
+          "oklch(38% 0.0169 162.70)",
+          "oklch(49% 0.0169 162.70)",
+          "oklch(61% 0.0169 162.70)",
+          "oklch(72% 0.0169 162.70)",
+          "oklch(84% 0.0169 162.70)",
+          "oklch(95% 0.0169 162.70)"
+        ]
+      },
+      "line-dark": {
+        "role": "neutral",
+        "displayName": "Line Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0294 161.66)",
+          "oklch(26% 0.0294 161.66)",
+          "oklch(38% 0.0294 161.66)",
+          "oklch(49% 0.0294 161.66)",
+          "oklch(61% 0.0294 161.66)",
+          "oklch(72% 0.0294 161.66)",
+          "oklch(84% 0.0294 161.66)",
+          "oklch(95% 0.0294 161.66)"
+        ]
+      },
+      "navy-light": {
+        "role": "neutral",
+        "displayName": "Navy Light",
+        "tonalRamp": [
+          "oklch(15% 0.0457 175.84)",
+          "oklch(26% 0.0457 175.84)",
+          "oklch(38% 0.0457 175.84)",
+          "oklch(49% 0.0457 175.84)",
+          "oklch(61% 0.0457 175.84)",
+          "oklch(72% 0.0457 175.84)",
+          "oklch(84% 0.0457 175.84)",
+          "oklch(95% 0.0457 175.84)"
+        ]
+      },
+      "navy-dark": {
+        "role": "neutral",
+        "displayName": "Navy Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0446 168.29)",
+          "oklch(26% 0.0446 168.29)",
+          "oklch(38% 0.0446 168.29)",
+          "oklch(49% 0.0446 168.29)",
+          "oklch(61% 0.0446 168.29)",
+          "oklch(72% 0.0446 168.29)",
+          "oklch(84% 0.0446 168.29)",
+          "oklch(95% 0.0446 168.29)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Application title",
+        "purpose": "Compact desktop identity, not display typography."
+      },
+      "measurement": {
+        "displayName": "Engineering measurement",
+        "purpose": "Primary rates and lengths in mono, with tabular numerals."
+      }
+    },
+    "shadows": [
+      {
+        "name": "transient-message",
+        "value": "0 8px 24px #0002",
+        "purpose": "Floating action or completion message only; panes remain flat."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": ".16s ease",
+        "purpose": "Inherited button state transitions without translation; disabled by reduced-motion preference."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop",
+        "value": "1200px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "description": "Compact primary action using the current appearance teal.",
+      "html": "<button class=\"ds-primary\">Save project\u2026</button>",
+      "css": ".ds-primary{min-height:34px;padding:7px 12px;border:1px solid var(--line,#cedbd4);border-radius:6px;font-size:13px;font-weight:600;transition:.16s ease;font-family:var(--font-manrope,-apple-system),BlinkMacSystemFont,\"Segoe UI\",sans-serif;background:var(--teal,#126e5e);border-color:var(--teal,#126e5e);color:var(--panel,#fff);cursor:pointer}.ds-primary:hover{background:var(--teal-dark,#126e5e)}.ds-primary:focus-visible{outline:2px solid var(--teal,#126e5e);outline-offset:3px;}.ds-primary:disabled{opacity:.55;cursor:not-allowed}",
+      "refersTo": "button-primary-light"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "description": "Quiet bordered local-file or chart action.",
+      "html": "<button class=\"ds-secondary\">New project</button>",
+      "css": ".ds-secondary{min-height:34px;padding:7px 12px;border:1px solid var(--line,#cedbd4);border-radius:6px;font-size:13px;font-weight:600;transition:.16s ease;font-family:var(--font-manrope,-apple-system),BlinkMacSystemFont,\"Segoe UI\",sans-serif;background:var(--raised,#f3f7f5);color:var(--ink,#1f302c);cursor:pointer}.ds-secondary:hover{background:var(--panel,#fff);border-color:var(--teal,#126e5e);color:var(--teal,#126e5e)}.ds-secondary:focus-visible{outline:2px solid var(--teal,#126e5e);outline-offset:3px;}.ds-secondary:disabled{opacity:.55;cursor:not-allowed}",
+      "refersTo": "button-secondary-light"
+    },
+    {
+      "name": "Inspector field",
+      "kind": "input",
+      "description": "Label and raised input retain the engineering unit.",
+      "html": "<label class=\"ds-field\"><span>Radius (ft)</span><input type=\"number\" value=\"2000\" /></label>",
+      "css": ".ds-field{display:grid;gap:6px;color:var(--muted,#536960);font-size:12px;font-weight:600;font-family:var(--font-manrope,-apple-system),BlinkMacSystemFont,\"Segoe UI\",sans-serif;}.ds-field input{min-height:36px;padding:7px 9px;border:1px solid var(--line,#cedbd4);border-radius:5px;background:var(--raised,#f3f7f5);color:var(--ink,#1f302c);font:400 13px -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;caret-color:var(--teal,#126e5e)}.ds-field input:focus-visible{outline:2px solid var(--teal,#126e5e);outline-offset:3px;border-color:var(--teal,#126e5e);box-shadow:0 0 0 3px rgba(8,127,123,.12)}",
+      "refersTo": "field-light"
+    },
+    {
+      "name": "Input workspace selector",
+      "kind": "nav",
+      "description": "Two input contexts share one compact inspector.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Input workspace\"><button aria-pressed=\"true\">Curve inputs</button><button aria-pressed=\"false\">Project &amp; LandXML</button></nav>",
+      "css": ".ds-nav{display:flex;gap:4px}.ds-nav button{min-height:34px;padding:7px 12px;border:1px solid var(--line,#cedbd4);border-radius:6px;font-size:13px;font-weight:600;transition:.16s ease;font-family:var(--font-manrope,-apple-system),BlinkMacSystemFont,\"Segoe UI\",sans-serif;background:transparent;border-color:transparent;color:var(--ink,#1f302c);cursor:pointer}.ds-nav button:hover{color:var(--teal,#126e5e);background:var(--panel,#fff)}.ds-nav button[aria-pressed=\"true\"]{color:var(--teal,#126e5e);background:var(--panel,#fff);border-color:var(--line,#cedbd4)}.ds-nav button:focus-visible{outline:2px solid var(--teal,#126e5e);outline-offset:3px;}"
+    },
+    {
+      "name": "Review panel",
+      "kind": "card",
+      "description": "Flat pane with a restrained divider and compact section heading.",
+      "html": "<section class=\"ds-panel\"><h2>Curve results</h2><p>Review stations, lane slopes, and source criteria.</p></section>",
+      "css": ".ds-panel{padding:18px;border:1px solid var(--line,#cedbd4);border-radius:9px;background:var(--panel,#fff);color:var(--ink,#1f302c);box-shadow:none;font-family:var(--font-manrope,-apple-system),BlinkMacSystemFont,\"Segoe UI\",sans-serif;}.ds-panel h2{margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid var(--line,#cedbd4);font-size:16px}.ds-panel p{font-size:12px;line-height:1.55;color:var(--muted,#536960)}",
+      "refersTo": "panel-light"
+    },
+    {
+      "name": "Desktop preview label",
+      "kind": "chip",
+      "description": "Plain secondary status attached to the app identity.",
+      "html": "<span class=\"ds-identity\">VeriCivil <span>Desktop preview</span></span>",
+      "css": ".ds-identity{color:var(--muted,#536960);font-size:12px;font-family:var(--font-manrope,-apple-system),BlinkMacSystemFont,\"Segoe UI\",sans-serif;}.ds-identity>span{display:inline-block;margin-left:10px;padding-left:10px;border-left:1px solid var(--line,#cedbd4)}"
+    },
+    {
+      "name": "Profile trace and station cursor",
+      "kind": "custom",
+      "description": "Schematic excerpt of the existing line grammar; synthetic illustration only.",
+      "html": "<svg class=\"ds-profile\" viewBox=\"0 0 320 130\" role=\"img\" aria-label=\"Synthetic lane traces and selected station\"><path class=\"ds-left\" d=\"M10 100H75L135 30H225L290 100H310\"/><path class=\"ds-right\" d=\"M10 30H75L135 100H225L290 30H310\"/><path class=\"ds-cursor\" d=\"M170 10V120\"/></svg>",
+      "css": ".ds-profile{display:block;width:100%;max-width:400px;background:var(--raised,#f3f7f5)}.ds-profile path{fill:none;stroke-width:2.8}.ds-profile .ds-left{stroke:var(--series-teal,#137869)}.ds-profile .ds-right{stroke:var(--series-right,#90600d);stroke-dasharray:7 4}.ds-profile .ds-cursor{stroke:var(--station-cursor,var(--ink,#1f302c));stroke-width:1.4}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Alignment review desk",
+    "overview": "This system applies to the Electron Superelevation preview, whose entry point is `web/desktop/renderer.tsx` and whose overrides are in `web/desktop/desktop.css`. It does not replace the public website, browser calculator, or RoadStation visual systems. The renderer shares calculator components while applying its own desktop composition and appearance tokens.\n\nThe desk is compact and calm: inputs sit beside a larger engineering review area, with station-aware profiles as the working graphic. Borders and green-tinted neutral surfaces organize the workspace. Platform control typography keeps attention on measurements, source criteria, and local file actions. The appearance follows the operating system, including the contrast of the station cursor.",
+    "keyCharacteristics": [
+      "Compact inspector beside independently scrolling results.",
+      "System control typography with monospaced, tabular engineering measurements.",
+      "Green-tinted neutral surfaces and restrained borders in light and dark appearances.",
+      "Teal and amber lane profiles, with dashed right-side traces.",
+      "Persistent export actions and explicit preview and synthetic-data labels."
+    ],
+    "rules": [
+      {
+        "name": "The Appearance Pair Rule",
+        "body": "Change light and dark roles together; station cursors use reading ink rather than a fixed white stroke.",
+        "section": "colors"
+      },
+      {
+        "name": "The Measured Value Rule",
+        "body": "Preserve mono and tabular alignment for engineering values; do not promote status copy to the result hierarchy.",
+        "section": "typography"
+      },
+      {
+        "name": "The Review Continuity Rule",
+        "body": "Keep the input inspector and review area independently scrollable while export actions remain outside their scrolling content.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "**Do** pair light and dark tokens and use reading ink for the station cursor.",
+      "**Do** preserve monospaced engineering measurements, units, source criteria, and warnings.",
+      "**Do** keep export actions outside the scrolling input and review panes.",
+      "**Do** use authored inline SVG controls with accessible labels.",
+      "**Do** identify synthetic examples and desktop evaluation access explicitly."
+    ],
+    "donts": [
+      "**Don't** apply these desktop overrides to the public website or RoadStation.",
+      "**Don't** substitute decorative imagery for the engineering diagram or obscure its axes and legend.",
+      "**Don't** use character glyphs as substitutes for the authored control icons.",
+      "**Don't** turn preview access, unsigned packaging, or local processing into claims of production release readiness."
+    ]
+  }
+}
