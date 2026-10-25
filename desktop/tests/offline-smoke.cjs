@@ -2,13 +2,11 @@ const { app, dialog, nativeTheme } = require('electron');
 const { mkdtemp, readFile, readdir, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const assert = require('node:assert/strict');
-const { readFileSync, mkdtempSync, rmSync } = require('node:fs');
+const { readFileSync } = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 
-const profile = mkdtempSync(path.join(tmpdir(), 'vericivil-offline-profile-'));
-app.setPath('userData', profile);
-app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+app.setPath('userData', process.env.VERICIVIL_TEST_PROFILE);
 console.log('Starting actual Electron app and offline worker');
 const root = path.resolve(__dirname, '../..');
 const timer = setTimeout(() => { console.error('Desktop smoke timed out'); app.exit(1); }, 180000);

@@ -20,7 +20,7 @@
     "desktop:package": "npm run desktop:build && node desktop/package.mjs",
     "desktop:test": "node --test ../desktop/tests/security.test.cjs",
     "desktop:package:windows": "npm run desktop:build && node desktop/package.mjs win32",
-    "desktop:test:offline": "electron ../desktop/tests/offline-smoke.cjs"
+    "desktop:test:offline": "node ../desktop/tests/run-offline.cjs"
   },
   "dependencies": {
     "@workos-inc/authkit-nextjs": "^4.2.0",

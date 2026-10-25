@@ -59,7 +59,7 @@ npm --prefix web run desktop:build
 npm --prefix web run desktop:test:offline
 ```
 
-On Windows use `python` instead of `python3`. The offline Electron test launches the real application and worker with outbound requests blocked in a disposable app profile, compares a calculation against native Python, exercises LandXML, PDF/ORD CSV/overlay DXF, and round-trips a project. It also verifies isolated renderer globals, the native save bridge (including cancellation), laptop/wide layout bounds, and both system appearance palettes. Dialog destinations are stubbed inside the test. The Mac native Save dialog and its cancellation, plus the unsaved-close confirmation, were also checked interactively.
+On Windows use `python` instead of `python3`. The offline Electron test launches the real application and worker with outbound requests blocked in a disposable app profile, compares a calculation against native Python, exercises LandXML, PDF/ORD CSV/overlay DXF, and round-trips a project. The parent test runner enforces an exit timeout and cleans up the profile after Electron releases it. It also verifies isolated renderer globals, the native save bridge (including cancellation), laptop/wide layout bounds, and both system appearance palettes. Dialog destinations are stubbed inside the test. The Mac native Save dialog and its cancellation, plus the unsaved-close confirmation, were also checked interactively.
 
 The Windows x64 package was built and copied to the LAN test PC in an isolated temporary directory. Its Electron executable and local Python runtime loaded; the remote test did not confirm a visible window. Windows visual and interactive acceptance remain unverified.
 

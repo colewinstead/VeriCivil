@@ -8,6 +8,7 @@ import json
 import plistlib
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -33,7 +34,18 @@ def package_release(root: Path, platform: str, arch: str, version: str) -> tuple
     basename = f"Superelevation-Desktop-Preview-{version}-{target}"
     if platform == "darwin":
         archive = output / f"{basename}.dmg"
-        subprocess.run(["hdiutil", "create", "-volname", "VeriCivil Desktop Preview", "-srcfolder", str(folder), "-ov", "-format", "UDZO", str(archive)], check=True)
+        command = ["hdiutil", "create", "-volname", "VeriCivil Desktop Preview", "-srcfolder", str(folder), "-ov", "-format", "UDZO", str(archive)]
+        for attempt in range(3):
+            try:
+                subprocess.run(command, check=True, stderr=subprocess.PIPE, text=True)
+                break
+            except subprocess.CalledProcessError as error:
+                print(error.stderr)
+                if "Resource busy" not in (error.stderr or "") or attempt == 2:
+                    raise
+                # Hosted Mac image creation can briefly return Resource busy.
+                time.sleep(2 * (attempt + 1))
+        subprocess.run(["hdiutil", "verify", str(archive)], check=True)
     else:
         archive = Path(shutil.make_archive(str(output / basename), "zip", root_dir=folder.parent, base_dir=folder.name))
     with archive.open("rb") as source:

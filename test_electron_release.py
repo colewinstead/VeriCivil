@@ -1,6 +1,7 @@
 import hashlib
 import json
 import plistlib
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -49,11 +50,29 @@ class ElectronReleaseTests(unittest.TestCase):
             run.assert_not_called()
             info["CFBundleShortVersionString"] = "1.2.3"
             (app / "Info.plist").write_bytes(plistlib.dumps(info))
-            run.side_effect = lambda command, **_kwargs: Path(command[-1]).write_bytes(b"synthetic disk image")
-            archive, checksum = package_release(self.root, "darwin", "arm64", "1.2.3")
+            attempts = []
+            def create(command, **_kwargs):
+                if command[1] == "verify":
+                    return
+                attempts.append(command)
+                if len(attempts) == 1:
+                    raise subprocess.CalledProcessError(1, command, stderr="hdiutil: create failed - Resource busy")
+                Path(command[-1]).write_bytes(b"synthetic disk image")
+            run.side_effect = create
+            with patch("scripts.package_electron_release.time.sleep") as sleep:
+                archive, checksum = package_release(self.root, "darwin", "arm64", "1.2.3")
+                sleep.assert_called_once_with(2)
             self.assertEqual(archive.suffix, ".dmg")
             self.assertTrue(checksum.is_file())
-            self.assertEqual(run.call_args.args[0][:2], ["hdiutil", "create"])
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(run.call_args.args[0][:2], ["hdiutil", "verify"])
+            run.reset_mock()
+            run.side_effect = subprocess.CalledProcessError(1, ["hdiutil"], stderr="Permission denied")
+            with patch("scripts.package_electron_release.time.sleep") as sleep:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    package_release(self.root, "darwin", "arm64", "1.2.3")
+                sleep.assert_not_called()
+            self.assertEqual(run.call_count, 1)
 
 
 if __name__ == "__main__":
