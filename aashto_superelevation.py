@@ -829,7 +829,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 "superelevation_rate": manual,
                 "runoff_length": values.get("Lr_manual") not in (None, ""),
                 "tangent_runout": values.get("Lt_manual") not in (None, ""),
-                "placement": bool(e) and not no_transition and (not standard if spiral else True),
+                "placement": bool(e) and not no_transition and spiral and not standard,
             },
             "calculation_sources": sources,
             "criteria_workbook": (
