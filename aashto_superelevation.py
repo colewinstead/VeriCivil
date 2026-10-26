@@ -229,15 +229,15 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "curve_relative_slope": target_bank * bank_sign,
             "initial_drainage_direction": "left" if initial_bank < 0 else "right",
             "target_drainage_direction": target_drainage,
-            "target_slope_label": f"{target_bank * 100:+g}%",
             "no_transition_required": no_transition,
             "basis": "AASHTO §§3.3.5.1 and 10.9.6.2.14",
             "note": (
                 "Initial single slope is retained; no superelevation runoff or runout is required. This does not establish a zero minimum for horizontal spiral design."
                 if no_transition else
                 "Uniform section rotates from the entered initial slope to the curve bank."
-            ) + " Cross-slope sign: + rises toward left; - rises toward right, looking ahead along increasing alignment station.",
+            ),
         }
+        section_transition = Super.section_transition_presentation(section_transition)
     pivot_x = {"centerline": 0.0, "left_edge": width / 2, "right_edge": -width / 2}[
         pivot
     ]

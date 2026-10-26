@@ -227,7 +227,11 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             self.drawRightString(page_width - 0.58 * inch, 0.3 * inch, f"Page {self._pageNumber} of {page_count}")
             self.restoreState()
 
-    curve_list = list(curves)
+    curve_list = [
+        {**curve, "results": {**curve["results"], "section_transition":
+            Super.section_transition_presentation(curve["results"].get("section_transition"))}}
+        for curve in curves
+    ]
     from aashto_superelevation import validate_export_curves
     validate_export_curves(curve_list)
     diagram_b64, _ = _asset_constants()
@@ -738,7 +742,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                 if section_transition:
                     input_rows.extend([("Curve cross slope",_text(section_transition["target_slope_label"])),
                                        ("Initial drainage",_text(section_transition["initial_drainage_direction"])),
-                                       ("Left / right convention", "Looking ahead along increasing alignment station; signed slope is positive when rising toward the left"),
+                                       ("Left / right convention", "Looking ahead along increasing alignment station; ramp cross slope is positive when draining toward the left"),
                                        ("Section basis",_text(section_transition["basis"]))])
                 lane_width = float(inputs["lane_width_ft"])
                 input_rows.extend([("Actual lanes",_text(len(results["section_lanes"]))),

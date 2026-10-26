@@ -1795,7 +1795,17 @@ def calculate_superelevation(
     return result
 
 
+def section_transition_presentation(section: dict | None) -> dict | None:
+    """Present ramp drainage slopes without changing the internal signed bank."""
+    if not section:
+        return section
+    note = str(section.get("note", "")).split(" Cross-slope sign:", 1)[0]
+    return {**section, "target_slope_label": f"{-float(section['target_signed_slope']) * 100:+g}%",
+            "note": note + " Cross-slope sign: + drains toward left; - drains toward right, looking ahead along increasing alignment station."}
+
+
 def format_results(results: dict, station_format: bool) -> list[str]:
+    results = {**results, "section_transition": section_transition_presentation(results.get("section_transition"))}
     if results.get("compound_curve_transitions"):
         bank_label = results["section_transition"]["target_slope_label"] if results.get("section_transition") else f"{results['e'] * 100:g}%"
         lines = [f"Criteria: {results.get('calculation_metadata', {}).get('criteria', {}).get('profile_name', '')}",
