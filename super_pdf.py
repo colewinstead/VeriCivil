@@ -420,6 +420,8 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]
+    if not curve_list:
+        index_style.append(("SPAN", (0, 1), (-1, 1)))
     for row_index in range(1, len(index_data)):
         index_style.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.white if row_index % 2 else HexColor(LIGHT_GRAY)))
     curve_index.setStyle(TableStyle(index_style))
@@ -871,14 +873,10 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             reference_elements.extend([Spacer(1, 0.12 * inch), Paragraph("TDOT criteria pages intentionally omit MDOT reference artwork.", styles["SmallMuted"])])
         if notes_in_reference:
             reference_elements.extend([
-                Spacer(1, 0.12 * inch),
                 Paragraph("Notes and provenance", styles["Section"]),
-                Spacer(1, 0.04 * inch),
-                Paragraph(f"<b>Calculation:</b> {_text(calculation_notes)}", styles["Tiny"]),
-                Spacer(1, 0.03 * inch),
-                Paragraph(f"<b>Curve:</b> {_text(curve_notes)}", styles["Tiny"]),
-                Spacer(1, 0.03 * inch),
-                Paragraph(f"<b>Design standard:</b> {_text(profile_name)}", styles["Tiny"]),
+                Paragraph(f"<b>Design standard:</b> {_text(profile_name)}<br/>"
+                          f"<b>Calculation:</b> {_text(calculation_notes)}<br/>"
+                          f"<b>Curve:</b> {_text(curve_notes)}", styles["Tiny"]),
             ])
 
         story.extend([Paragraph("Inputs", styles["Section"]), key_value_table(input_rows),

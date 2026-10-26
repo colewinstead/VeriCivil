@@ -98,6 +98,12 @@ class PdfReportTests(unittest.TestCase):
         for phrase in ("REVIEW NOTICE", "Warning start", "Warning end", "Lane transitions"):
             self.assertIn(phrase, text)
 
+    def test_empty_curve_index_uses_full_width_diagnostic_message(self):
+        content = self.export([])
+        reader = PdfReader(io.BytesIO(content))
+        self.assertEqual(len(reader.pages), 1)
+        self.assertIn("No calculated curves are available.", reader.pages[0].extract_text())
+
     def mdot_curve(self, name: str = "Curve 1", *, notes: str = "Synthetic test data only", e_manual: str = "") -> dict:
         results = Super.calculate_superelevation(
             "120+00", "140+00", "45", "1200", "centerline", "rural", "12", "2", e_manual, "", "", "0.02", "", ""
