@@ -17,7 +17,7 @@ import tdot_criteria
 class PdfReportTests(unittest.TestCase):
     def ramp_curves(self) -> list[dict]:
         return super_service.build_all_landxml_curves(
-            Path("tests/fixtures/840 choice ramps.xml").read_text(), "840 choice ramps.xml",
+            Path("tests/fixtures/840 choice ramps.xml").read_text(encoding="utf-8-sig"), "840 choice ramps.xml",
             {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "45",
              "roadway": "one_way", "initial_section": "single_slope", "lane_widths": "12",
              "rotation_axis": "left_edge", "initial_slope": "0.02", "normal_crown": "0.02",
