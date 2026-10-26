@@ -127,8 +127,12 @@ def _geometry_source(value: object) -> str:
 def _curve_status(results: dict) -> str:
     if results.get("warnings"):
         return "Review"
-    overrides = ((results.get("calculation_metadata", {}) or {}).get("manual_overrides", {}) or {}).values()
-    if any(overrides):
+    overrides = (results.get("calculation_metadata", {}) or {}).get("manual_overrides", {}) or {}
+    # Older AASHTO snapshots marked every required circular placement as an override.
+    circular_project_placement = (results.get("transition_method") == "aashto_fixed_pivot"
+                                  and results.get("inputs", {}).get("alignment_type") == "circular")
+    if any(enabled for key, enabled in overrides.items()
+           if key != "placement" or not circular_project_placement):
         return "Override"
     if results.get("normal_crown_only"):
         return "Normal crown"
