@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import copy
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,10 +10,48 @@ import Super
 from app_info import APP_VERSION, CALCULATION_ENGINE_VERSION
 import super_batch
 import super_pdf
+import super_service
 import tdot_criteria
 
 
 class PdfReportTests(unittest.TestCase):
+    def ramp_curves(self) -> list[dict]:
+        return super_service.build_all_landxml_curves(
+            Path("tests/fixtures/840 choice ramps.xml").read_text(), "840 choice ramps.xml",
+            {"criteria_profile": "aashto-green-book-2018-2019-10", "speed": "45",
+             "roadway": "one_way", "initial_section": "single_slope", "lane_widths": "12",
+             "rotation_axis": "left_edge", "initial_slope": "0.02", "normal_crown": "0.02",
+             "max_superelevation": "8", "runoff_tangent_percent": "70"},
+            excluded_curve_indexes=[0, 1, 7],
+        )
+
+    def test_required_aashto_circular_placement_is_not_a_manual_override(self):
+        curves = self.ramp_curves()
+        self.assertEqual([c["meta"]["curve_name"] for c in curves], [f"Curve {n}" for n in range(3, 8)])
+        for curve in curves:
+            result = curve["results"]
+            self.assertFalse(any(result["calculation_metadata"]["manual_overrides"].values()))
+            self.assertEqual(result["inputs"]["runoff_tangent_percent"], "70")
+            self.assertIn(super_pdf._curve_status(result), ("Calculated", "Normal crown"))
+        content = self.export(curves)
+        self.assertNotIn(b"Override", content)
+        self.assertIn(b"70% runoff on tangent", content)
+
+    def test_saved_circular_placement_keeps_real_overrides_and_warnings(self):
+        result = copy.deepcopy(self.ramp_curves()[3]["results"])
+        result["calculation_metadata"]["manual_overrides"]["placement"] = True
+        original = copy.deepcopy(result)
+        self.assertEqual(super_pdf._curve_status(result), "Calculated")
+        self.assertEqual(result, original)
+        for key in ("superelevation_rate", "runoff_length", "tangent_runout"):
+            manual = copy.deepcopy(result)
+            manual["calculation_metadata"]["manual_overrides"][key] = True
+            self.assertEqual(super_pdf._curve_status(manual), "Override")
+        result["inputs"]["alignment_type"] = "spiral"
+        self.assertEqual(super_pdf._curve_status(result), "Override")
+        result["warnings"] = ["Independent review required"]
+        self.assertEqual(super_pdf._curve_status(result), "Review")
+
     def mdot_curve(self, name: str = "Curve 1", *, notes: str = "Synthetic test data only", e_manual: str = "") -> dict:
         results = Super.calculate_superelevation(
             "120+00", "140+00", "45", "1200", "centerline", "rural", "12", "2", e_manual, "", "", "0.02", "", ""
