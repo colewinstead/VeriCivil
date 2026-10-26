@@ -212,7 +212,8 @@ def required_spiral_lengths(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def present_results(results: dict, direction: str = "left", station_format: bool = True) -> dict[str, Any]:
-    results = {**results, "warnings": super_qa.calculation_warnings(results)}
+    results = {**results, "warnings": super_qa.calculation_warnings(results),
+               "section_transition": Super.section_transition_presentation(results.get("section_transition"))}
     left_rows, right_rows = super_exports.build_lane_rows(results, direction, station_format)
     section_lanes=[]
     for lane in results.get("section_lanes",[]):

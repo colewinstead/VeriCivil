@@ -348,7 +348,7 @@ class AASHTOTests(unittest.TestCase):
                         runoff_tangent_percent="")
         r = aashto.calculate(values)
         self.assertEqual((r["crown_state"], r["Lr"], r["Lt"]), ("reverse", 0, 0))
-        self.assertEqual(r["section_transition"]["target_slope_label"], "+2%")
+        self.assertEqual(r["section_transition"]["target_slope_label"], "-2%")
         self.assertTrue(r["no_transition_required"])
         self.assertTrue(all(e["event_type"] == "Initial section" for e in r["section_lanes"][0]["events"]))
         for key in ("Lr_manual", "Lt_manual"):
@@ -360,8 +360,54 @@ class AASHTOTests(unittest.TestCase):
         adverse = super_service.required_spiral_lengths({**values, "curve_direction":"left"})
         self.assertAlmostEqual(adverse["Lr"], 45)
         self.assertAlmostEqual(adverse["Lt"], 45)
-        self.assertEqual(adverse["section_transition"]["target_slope_label"], "-2%")
+        self.assertEqual(adverse["section_transition"]["target_slope_label"], "+2%")
         self.assertEqual(adverse["minimum_spiral_in_spiral_ft"], 90)
+
+    def test_ramp_display_signs_preserve_physical_lane_events(self):
+        import Super
+        for direction in ("left", "right"):
+            for pivot in ("left_edge", "right_edge"):
+                for initial in (-.02, .02):
+                    for radius in (1000, 30000):
+                        with self.subTest(direction=direction, pivot=pivot, initial=initial, radius=radius):
+                            r = self.result(e_manual="", speed=45, radius=radius, max_superelevation=8,
+                                            roadway="one_way", initial_section="single_slope", initial_slope=initial,
+                                            lane_widths="12", rotation_axis=pivot, curve_direction=direction,
+                                            runoff_tangent_percent="50")
+                            bank = r["section_transition"]["target_signed_slope"]
+                            expected = f"{-bank * 100:+g}%"
+                            self.assertEqual(r["section_transition"]["target_slope_label"], expected)
+                            self.assertIn(expected, " ".join(Super.format_results(r, True)))
+                            lane = r["section_lanes"][0]
+                            for event in lane["events"]:
+                                physical = (event["right_elevation_ft"] - event["left_elevation_ft"]) / lane["width_ft"] * 100
+                                self.assertAlmostEqual(event["slope_pct"], physical)
+                            lookup = super_service.lookup(r, direction, str(r["full_super_ft"]), "")
+                            self.assertAlmostEqual(lookup["station"]["slopes"]["Lane 1"]["percent"], -bank * 100)
+
+    def test_saved_ramp_labels_refresh_without_changing_engineering_results(self):
+        import Super
+        r = self.result(e_manual="", speed=45, radius=1000, roadway="one_way",
+                        initial_section="single_slope", lane_widths="12", rotation_axis="left_edge",
+                        initial_slope=.02, curve_direction="right", runoff_tangent_percent="50")
+        r["section_transition"]["target_slope_label"] = "+6.8%"
+        r["section_transition"]["note"] = "Uniform section rotates. Cross-slope sign: + rises toward left; - rises toward right."
+        original = copy.deepcopy(r)
+        project = super_project.loads_project(super_project.dumps_project({"curves":[{"results":r}], "last_results":r}))
+        restored = project["curves"][0]["results"]
+        presented = super_service.present_results(restored, "right")["results"]
+        self.assertEqual(presented["section_transition"]["target_slope_label"], "-6.8%")
+        self.assertIn("+ drains toward left", presented["section_transition"]["note"])
+        self.assertEqual(restored, original)
+        self.assertEqual(r, original)
+        for key in ("lane_events", "section_lanes", "Lr", "Lt", "full_super_ft", "section_definition"):
+            self.assertEqual(presented[key], original[key])
+        self.assertIn("-6.8%", " ".join(Super.format_results(restored, True)))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "saved.pdf"
+            super_pdf.export_pdf(str(path), [{"results":restored, "meta":{"curve_direction":"right"}}])
+            self.assertIn(b"-6.8%", path.read_bytes())
+            self.assertNotIn(b"+6.8%", path.read_bytes())
 
     def test_single_slope_rc_spiral_shortage_is_not_bypassed(self):
         values = inputs(e_manual="", speed=45, radius=5000, max_superelevation=8,
@@ -399,7 +445,7 @@ class AASHTOTests(unittest.TestCase):
             super_pdf.export_pdf(str(target), [curve])
             from pypdf import PdfReader
             text = " ".join(page.extract_text() for page in PdfReader(target).pages)
-            for phrase in ("Initial single slope is retained", "+2%", "10.9.6.2.14", "Initial section retained"):
+            for phrase in ("Initial single slope is retained", "-2%", "10.9.6.2.14", "Initial section retained"):
                 self.assertIn(phrase, text)
 
     def test_ramp_controls_manifest_and_empty_section_inputs(self):

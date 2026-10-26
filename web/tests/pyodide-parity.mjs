@@ -79,11 +79,16 @@ for (const curves of [[], spacingCurves]) {
 pyodide.FS.writeFile("/app/test_aashto_criteria.py", await readFile(new URL("../../test_aashto_criteria.py", import.meta.url), "utf8"), { encoding: "utf8" });
 pyodide.runPython(`
 import unittest
-from test_aashto_criteria import TableSelectionTests
+from test_aashto_criteria import TableSelectionTests, AASHTOTests
 selection_checks = unittest.TestResult()
 unittest.defaultTestLoader.loadTestsFromTestCase(TableSelectionTests).run(selection_checks)
 assert selection_checks.wasSuccessful(), repr(selection_checks.errors + selection_checks.failures)
 assert selection_checks.testsRun > 0
+sign_checks = unittest.TestResult()
+for name in ('test_ramp_display_signs_preserve_physical_lane_events',
+             'test_saved_ramp_labels_refresh_without_changing_engineering_results'):
+    AASHTOTests(name).run(sign_checks)
+assert sign_checks.wasSuccessful(), repr(sign_checks.errors + sign_checks.failures)
 `);
 console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
 
