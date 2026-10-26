@@ -116,6 +116,14 @@ def _station(results: dict, value: object) -> str:
     return Super.format_result_station(results, float(value), True)
 
 
+def _geometry_source(value: object) -> str:
+    if not isinstance(value, dict):
+        return _text(value, "Manual station-only")
+    return "<br/>".join(f"{_text(key.removesuffix('_ft').replace('_', ' ').capitalize())}: " +
+                        (_number(item, 2, " ft") if key.endswith("_ft") and isinstance(item, (int, float)) else _text(item))
+                        for key, item in value.items() if item is not None) or "Manual station-only"
+
+
 def _curve_status(results: dict) -> str:
     if results.get("warnings"):
         return "Review"
@@ -212,24 +220,28 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             self.rect(0, page_height - 0.11 * inch, page_width, 0.11 * inch, fill=1, stroke=0)
             self.setFillColor(HexColor(MUTED))
             self.setFont("Helvetica-Bold", 6.7)
-            self.drawString(0.58 * inch, page_height - 0.42 * inch, "SUPERELEVATION CALCULATION REPORT")
+            self.drawString(0.875 * inch, page_height - 0.42 * inch, "SUPERELEVATION CALCULATION REPORT")
             self.setFont("Helvetica", 6.7)
-            self.drawRightString(page_width - 0.58 * inch, page_height - 0.42 * inch, self._report_info["project"])
+            self.drawRightString(page_width - 0.875 * inch, page_height - 0.42 * inch,
+                                 self._fit_text(self._report_info["project"], 2.9 * inch, 6.7))
             self.setStrokeColor(HexColor(MID_GRAY))
             self.setLineWidth(0.5)
-            self.line(0.58 * inch, 0.48 * inch, page_width - 0.58 * inch, 0.48 * inch)
+            self.line(0.875 * inch, 0.48 * inch, page_width - 0.875 * inch, 0.48 * inch)
             self.setFillColor(HexColor(MUTED))
             self.setFont("Helvetica", 6.5)
             project_route = f"{self._report_info['project']} | {self._report_info['route']}"
-            if len(project_route) > 58:
-                project_route = f"{project_route[:55]}..."
-            self.drawString(0.58 * inch, 0.3 * inch, project_route)
+            self.drawString(0.875 * inch, 0.3 * inch, self._fit_text(project_route, 1.9 * inch, 6.5))
             context = str(getattr(self, "_report_context", "Report summary"))
-            if len(context) > 52:
-                context = f"{context[:49]}..."
-            self.drawCentredString(page_width / 2, 0.3 * inch, context)
-            self.drawRightString(page_width - 0.58 * inch, 0.3 * inch, f"Page {self._pageNumber} of {page_count}")
+            self.drawString(2.95 * inch, 0.3 * inch, self._fit_text(context, 3.7 * inch, 6.5))
+            self.drawRightString(page_width - 0.875 * inch, 0.3 * inch, f"Page {self._pageNumber} of {page_count}")
             self.restoreState()
+
+        def _fit_text(self, value: str, width: float, size: float) -> str:
+            if self.stringWidth(value, "Helvetica", size) <= width:
+                return value
+            while value and self.stringWidth(value + "...", "Helvetica", size) > width:
+                value = value[:-1]
+            return value + "..."
 
     curve_list = [
         {**curve, "results": {**curve["results"], "section_transition":
@@ -259,18 +271,18 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=24, leading=27, textColor=HexColor(INK), spaceAfter=8, alignment=TA_LEFT))
     styles.add(ParagraphStyle(name="ReportSubtitle", parent=styles["Normal"], fontName="Helvetica", fontSize=9, leading=13, textColor=HexColor(MUTED), spaceAfter=14))
-    styles.add(ParagraphStyle(name="Section", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=11, leading=13, textColor=HexColor(INK), spaceBefore=8, spaceAfter=5))
+    styles.add(ParagraphStyle(name="Section", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=11, leading=13, textColor=HexColor(INK), spaceBefore=8, spaceAfter=5, keepWithNext=True))
     styles.add(ParagraphStyle(name="CurveTitle", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=18, leading=21, textColor=HexColor(INK), spaceAfter=3))
-    styles.add(ParagraphStyle(name="Small", parent=styles["Normal"], fontName="Helvetica", fontSize=7.2, leading=9.2, textColor=HexColor(INK)))
+    styles.add(ParagraphStyle(name="Small", parent=styles["Normal"], fontName="Helvetica", fontSize=8.5, leading=11, textColor=HexColor(INK)))
     styles.add(ParagraphStyle(name="SmallMuted", parent=styles["Small"], textColor=HexColor(MUTED)))
-    styles.add(ParagraphStyle(name="Tiny", parent=styles["Normal"], fontName="Helvetica", fontSize=6.3, leading=8, textColor=HexColor(MUTED)))
+    styles.add(ParagraphStyle(name="Tiny", parent=styles["Normal"], fontName="Helvetica", fontSize=7.5, leading=10, textColor=HexColor(MUTED)))
     styles.add(ParagraphStyle(name="TableHeader", parent=styles["Small"], fontName="Helvetica-Bold", textColor=HexColor(WHITE), alignment=TA_LEFT))
     styles.add(ParagraphStyle(name="TableHeaderRight", parent=styles["TableHeader"], alignment=TA_RIGHT))
     styles.add(ParagraphStyle(name="TableCell", parent=styles["Small"], alignment=TA_LEFT))
     styles.add(ParagraphStyle(name="TableCellRight", parent=styles["Small"], alignment=TA_RIGHT))
-    styles.add(ParagraphStyle(name="LaneHeader", parent=styles["TableHeader"], fontSize=6.4, leading=7.2))
+    styles.add(ParagraphStyle(name="LaneHeader", parent=styles["TableHeader"], fontSize=8, leading=10))
     styles.add(ParagraphStyle(name="LaneHeaderRight", parent=styles["LaneHeader"], alignment=TA_RIGHT))
-    styles.add(ParagraphStyle(name="LaneCell", parent=styles["TableCell"], fontSize=6.4, leading=7.5))
+    styles.add(ParagraphStyle(name="LaneCell", parent=styles["TableCell"], fontSize=8, leading=10))
     styles.add(ParagraphStyle(name="LaneCellRight", parent=styles["LaneCell"], alignment=TA_RIGHT))
     styles.add(ParagraphStyle(name="KpiLabel", parent=styles["Tiny"], fontName="Helvetica-Bold", textColor=HexColor(MUTED), alignment=TA_CENTER))
     styles.add(ParagraphStyle(name="KpiValue", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=12, leading=14, textColor=HexColor(INK), alignment=TA_CENTER))
@@ -280,9 +292,9 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
     styles.add(ParagraphStyle(name="Provenance", parent=styles["Tiny"], backColor=HexColor(LIGHT_GRAY), borderColor=HexColor(MID_GRAY), borderWidth=0.5, borderPadding=6, spaceBefore=5))
 
     width, height = letter
-    margin = 0.58 * inch
+    margin = 0.875 * inch
     top_margin = 0.7 * inch
-    bottom_margin = 0.58 * inch
+    bottom_margin = 0.875 * inch
     document = BaseDocTemplate(
         path,
         pagesize=letter,
@@ -316,7 +328,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         [Paragraph("PROJECT", styles["Tiny"]), Paragraph("ROUTE", styles["Tiny"]), Paragraph("ALIGNMENT", styles["Tiny"]), Paragraph("CURVES", styles["Tiny"])],
         [Paragraph(_text(_shared_meta(curve_list, "project_name")), styles["KpiValue"]), Paragraph(_text(_shared_meta(curve_list, "route_name")), styles["KpiValue"]), Paragraph(_text(_shared_meta(curve_list, "alignment_name")), styles["KpiValue"]), Paragraph(str(len(curve_list)), styles["KpiValue"])],
     ]
-    summary = Table(summary_data, colWidths=[1.85 * inch, 1.7 * inch, 2.25 * inch, 0.95 * inch], rowHeights=[0.24 * inch, 0.52 * inch])
+    summary = Table(summary_data, colWidths=[1.85 * inch, 1.7 * inch, 2.25 * inch, 0.95 * inch], splitByRow=1, splitInRow=1)
     summary.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), HexColor(LIGHT_GRAY)),
         ("TEXTCOLOR", (0, 0), (-1, -1), HexColor(INK)),
@@ -378,7 +390,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
     ]))
     story.extend([Paragraph("Governing standard", styles["Section"]), governing_standard, Spacer(1, 0.14 * inch), Paragraph("Curve index", styles["Section"])])
 
-    index_headers = ["#", "Curve", "Direction", "PC - PT", "Speed", "Radius", "e", "Status"]
+    index_headers = ["#", "Curve", "Direction", "PC - PT", "Speed", "Radius", "e (ft/ft)", "Status"]
     index_data = [[Paragraph(header, styles["TableHeaderRight"] if header in {"Speed", "Radius", "e"} else styles["TableHeader"]) for header in index_headers]]
     for index, curve in enumerate(curve_list, start=1):
         results = curve.get("results", {}) or {}
@@ -408,6 +420,8 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]
+    if not curve_list:
+        index_style.append(("SPAN", (0, 1), (-1, 1)))
     for row_index in range(1, len(index_data)):
         index_style.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.white if row_index % 2 else HexColor(LIGHT_GRAY)))
     curve_index.setStyle(TableStyle(index_style))
@@ -419,9 +433,9 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         for finding in corridor_qa["findings"]:
             story.append(Paragraph(f"<b>{_text(finding.get('severity','review')).upper()} · {_text(finding.get('code'))}</b>: {_text(finding.get('message'))}<br/>{_text(finding.get('details'))}",styles["Small"]))
 
-    def key_value_table(rows: list[tuple[str, str]], width_value: float = 2.15 * inch) -> object:
+    def key_value_table(rows: list[tuple[str, str]], width_value: float = 5.6 * inch) -> object:
         data = [[Paragraph(_text(label), styles["Tiny"]), Paragraph(value, styles["Small"])] for label, value in rows]
-        table = Table(data, colWidths=[1.15 * inch, width_value])
+        table = Table(data, colWidths=[1.15 * inch, width_value], splitByRow=1, splitInRow=1, hAlign="LEFT")
         commands = [
             ("BACKGROUND", (0, 0), (0, -1), HexColor(LIGHT_GRAY)),
             ("BOX", (0, 0), (-1, -1), 0.5, HexColor(MID_GRAY)),
@@ -439,7 +453,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         edges=bool(rows and "left_elevation_ft" in rows[0])
         data = [
             [Paragraph(title.upper(), styles["LaneHeader"]), "", "", ""],
-            [Paragraph("POINT", styles["LaneHeader"]), Paragraph("STATION", styles["LaneHeader"]), Paragraph("SLOPE", styles["LaneHeaderRight"]), Paragraph("NOTE", styles["LaneHeader"])],
+            [Paragraph("POINT", styles["LaneHeader"]), Paragraph("STATION", styles["LaneHeader"]), Paragraph("SLOPE (%)", styles["LaneHeaderRight"]), Paragraph("NOTE", styles["LaneHeader"])],
         ]
         if edges:
             data[0].extend(["", ""])
@@ -453,8 +467,8 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ])
             if edges:
                 data[-1].extend([Paragraph(f"{row[key]:+.4f}",styles["LaneCellRight"]) for key in ("left_elevation_ft","right_elevation_ft")])
-        widths=[1.15,1.05,.65,2,.85,.85] if edges else [.55,.9,.55,1.25]
-        table = Table(data, colWidths=[w*inch for w in widths], repeatRows=2, splitByRow=1)
+        widths=[1.05,1.05,.7,2.25,.85,.85] if edges else [.85,1.05,.7,4.15]
+        table = Table(data, colWidths=[w*inch for w in widths], repeatRows=2, splitByRow=1, splitInRow=1, hAlign="LEFT")
         commands = [
             ("SPAN", (0, 0), (-1, 0)),
             ("BACKGROUND", (0, 0), (-1, 1), HexColor(CHARCOAL)),
@@ -692,7 +706,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         if section_transition:
             kpis[0] = ("CURVE CROSS SLOPE", _text(section_transition["target_slope_label"]))
         kpi_data = [[Paragraph(label, styles["KpiLabel"]) for label, _ in kpis], [Paragraph(value, styles["KpiValue"]) for _, value in kpis]]
-        kpi_table = Table(kpi_data, colWidths=[1.69 * inch] * 4, rowHeights=[0.27 * inch, 0.47 * inch])
+        kpi_table = Table(kpi_data, colWidths=[1.6875 * inch] * 4)
         kpi_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), HexColor(LIGHT_GRAY)),
             ("BOX", (0, 0), (-1, -1), 0.7, HexColor(MID_GRAY)),
@@ -703,13 +717,14 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         story.extend([kpi_table, Spacer(1, 0.12 * inch)])
 
         warnings = [str(value) for value in (results.get("warnings", []) or []) if value]
-        if section_transition:
-            warnings.insert(0, section_transition["note"])
-        elif results.get("normal_crown_only"):
-            warnings.insert(0, "Normal crown is maintained; no superelevation transition is required.")
+        section_note = section_transition["note"] if section_transition else (
+            "Normal crown is maintained; no superelevation transition is required." if results.get("normal_crown_only") else "")
+        if section_note:
+            story.extend([Paragraph(_text(section_note), styles["SmallMuted"]), Spacer(1, 0.08 * inch)])
         if warnings:
-            alert_text = "<br/>".join(f"- {_text(value)}" for value in warnings)
-            alert = Table([[Paragraph(f"REVIEW NOTICE<br/>{alert_text}", styles["Alert"])]], colWidths=[6.75 * inch])
+            alert = Table([[Paragraph("REVIEW NOTICE", styles["Alert"])]] +
+                          [[Paragraph(_text(value), styles["Small"]) ] for value in warnings],
+                          colWidths=[6.75 * inch], repeatRows=1, splitByRow=1, splitInRow=1)
             alert.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, -1), HexColor(ORANGE_TINT)),
                 ("BOX", (0, 0), (-1, -1), 0.8, HexColor(ORANGE)),
@@ -754,7 +769,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                                    ("Lane-width ratio (to 12 ft)",_number(lane_width / 12, 4)),
                                    ("Lane adjustment factor",_number(results["bw"], 4)),
                                    ("Units",_text("; ".join(str(v) for v in results.get("units",{}).values()))),
-                                   ("Geometry source",_text(inputs.get("geometry_provenance","Manual station-only")))])
+                                   ("Geometry source",_geometry_source(inputs.get("geometry_provenance")))])
                 station_rows.extend((name,_station(results,station)) for name,station in results.get("alignment_anchors",{}).items())
                 if results.get("spiral_lengths"):
                     lengths=results["spiral_lengths"]
@@ -843,7 +858,6 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         curve_notes = str(curve.get("notes") or "").strip()
         notes_in_reference = len(calculation_notes) + len(curve_notes) <= 1_200
 
-        left_column = [Paragraph("Inputs", styles["Section"]), key_value_table(input_rows), Paragraph("Station references", styles["Section"]), key_value_table(station_rows)]
         reference_elements: list[object] = [Paragraph("Criteria reference", styles["Section"])]
         reference_elements.append(Paragraph(f"<b>Applicable:</b> {_text(applicable_drawings_label(criteria))}", styles["Small"]))
         reference_elements.append(Spacer(1, 0.05 * inch))
@@ -859,44 +873,16 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             reference_elements.extend([Spacer(1, 0.12 * inch), Paragraph("TDOT criteria pages intentionally omit MDOT reference artwork.", styles["SmallMuted"])])
         if notes_in_reference:
             reference_elements.extend([
-                Spacer(1, 0.12 * inch),
-                Paragraph("<b>Notes and provenance</b>", styles["Small"]),
-                Spacer(1, 0.04 * inch),
-                Paragraph(f"<b>Calculation:</b> {_text(calculation_notes)}", styles["Tiny"]),
-                Spacer(1, 0.03 * inch),
-                Paragraph(f"<b>Curve:</b> {_text(curve_notes)}", styles["Tiny"]),
-                Spacer(1, 0.03 * inch),
-                Paragraph(f"<b>Design standard:</b> {_text(profile_name)}", styles["Tiny"]),
+                Paragraph("Notes and provenance", styles["Section"]),
+                Paragraph(f"<b>Design standard:</b> {_text(profile_name)}<br/>"
+                          f"<b>Calculation:</b> {_text(calculation_notes)}<br/>"
+                          f"<b>Curve:</b> {_text(curve_notes)}", styles["Tiny"]),
             ])
 
-        detail_columns = Table([[left_column, reference_elements]], colWidths=[3.55 * inch, 3.05 * inch], hAlign="LEFT")
-        detail_columns.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (0, 0), 0),
-            ("RIGHTPADDING", (0, 0), (0, 0), 8),
-            ("LEFTPADDING", (1, 0), (1, 0), 8),
-            ("RIGHTPADDING", (1, 0), (1, 0), 0),
-            ("LINEBEFORE", (1, 0), (1, 0), 0.6, HexColor(MID_GRAY)),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        story.extend([detail_columns, Spacer(1, 0.08 * inch)])
+        story.extend([Paragraph("Inputs", styles["Section"]), key_value_table(input_rows),
+                      Paragraph("Station references", styles["Section"]), key_value_table(station_rows),
+                      Spacer(1, 0.08 * inch)])
 
-        left_rows, right_rows = build_lane_rows(results, meta.get("curve_direction", "left"), True)
-        lane_columns = Table(
-            [[lane_table("Left lane", left_rows), lane_table("Right lane", right_rows)]],
-            colWidths=[3.3 * inch, 3.3 * inch],
-            hAlign="LEFT",
-        )
-        lane_columns.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (0, 0), 0),
-            ("RIGHTPADDING", (0, 0), (0, 0), 4),
-            ("LEFTPADDING", (1, 0), (1, 0), 4),
-            ("RIGHTPADDING", (1, 0), (1, 0), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ]))
         if results.get("section_lanes"):
             lane_heading = Paragraph("Lane transitions", styles["Section"])
             lane_heading.keepWithNext = True
@@ -909,16 +895,17 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                        "slope":f"{event['slope_pct']:.3f}","slope_label":f"{event['slope_pct']:+.3f}%"} for event in lane["events"]]
                 story.extend([lane_table(lane["lane_name"],rows),Spacer(1,.08*inch)])
         else:
-            story.extend([Paragraph("Lane transitions", styles["Section"]), lane_columns])
+            left_rows, right_rows = build_lane_rows(results, meta.get("curve_direction", "left"), True)
+            story.extend([Paragraph("Lane transitions", styles["Section"]),
+                          lane_table("Left lane", left_rows), Spacer(1, 0.08 * inch),
+                          lane_table("Right lane", right_rows)])
+        story.extend(reference_elements)
 
         if not notes_in_reference:
-            provenance_text = (
-                f"<b>NOTES AND PROVENANCE</b><br/>"
-                f"<b>Calculation:</b> {_text(calculation_notes)}<br/>"
-                f"<b>Curve:</b> {_text(curve_notes)}<br/>"
-                f"<b>Design standard:</b> {_text(profile_name)}"
-            )
-            story.append(Paragraph(provenance_text, styles["Provenance"]))
+            story.extend([Paragraph("Notes and provenance", styles["Section"]),
+                          Paragraph(f"<b>Design standard:</b> {_text(profile_name)}", styles["Tiny"]),
+                          Paragraph(f"<b>Calculation:</b> {_text(calculation_notes)}", styles["Tiny"]),
+                          Paragraph(f"<b>Curve:</b> {_text(curve_notes)}", styles["Small"])])
 
     def canvas_factory(*args: object, **kwargs: object) -> NumberedCanvas:
         return NumberedCanvas(*args, report_info=report_info, **kwargs)

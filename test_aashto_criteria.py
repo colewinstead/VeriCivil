@@ -941,7 +941,7 @@ class AASHTOTests(unittest.TestCase):
             from pypdf import PdfReader
 
             text = " ".join(page.extract_text() for page in PdfReader(target).pages)
-            self.assertIn("LEFT EDGE (ft)", text)
+            self.assertIn("LEFT EDGE (ft)", " ".join(text.split()))
             self.assertIn("two_way / crowned", text)
         reply = super_service.dispatch_safe(
             "calculate",
