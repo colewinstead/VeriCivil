@@ -12,6 +12,8 @@ import super_batch
 import super_pdf
 import super_service
 import tdot_criteria
+from pypdf import PdfReader
+import io
 
 
 class PdfReportTests(unittest.TestCase):
@@ -51,6 +53,50 @@ class PdfReportTests(unittest.TestCase):
         self.assertEqual(super_pdf._curve_status(result), "Override")
         result["warnings"] = ["Independent review required"]
         self.assertEqual(super_pdf._curve_status(result), "Review")
+
+    def test_ramp_details_flow_without_heading_only_pages_or_routine_alerts(self):
+        content = self.export(self.ramp_curves())
+        reader = PdfReader(io.BytesIO(content))
+        self.assertLess(len(reader.pages), 15)
+        text = "\n".join(page.extract_text() for page in reader.pages)
+        self.assertNotIn("REVIEW NOTICE", text)
+        self.assertIn("Source: LandXML", text)
+        self.assertNotIn("{'source':", text)
+        for page in reader.pages[1:]:
+            body = page.extract_text().split("SUPERELEVATION CALCULATION REPORT")[0].strip()
+            if re.search(r"Curve \d+ / Curve", body):
+                self.assertIn("Inputs", body)
+            self.assertNotIn(body.splitlines()[-1],
+                             ("Inputs", "Station references", "Lane transitions", "Criteria reference", "Notes and provenance"))
+
+    def test_long_metadata_and_notes_keep_footer_regions_separate(self):
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        curve = self.mdot_curve(notes="Long review note " * 180)
+        curve["meta"].update(project_name="Wide WWW project " * 20, route_name="Long route " * 25)
+        content = self.export([curve])
+        reader = PdfReader(io.BytesIO(content))
+        text = "\n".join(page.extract_text() for page in reader.pages)
+        self.assertIn("Long review note", text)
+        for page in reader.pages:
+            footer = []
+            def visit(value, cm, tm, font, size):
+                x, y = cm[4] + tm[4], cm[5] + tm[5]
+                if value.strip() and abs(size - 6.5) < .01 and 18 < y < 25:
+                    footer.append((x, x + stringWidth(value.strip(), "Helvetica", size)))
+            page.extract_text(visitor_text=visit)
+            self.assertEqual(len(footer), 3)
+            footer.sort()
+            self.assertGreaterEqual(footer[0][0], 62)
+            self.assertLessEqual(footer[-1][1], 550)
+            self.assertTrue(all(a[1] < b[0] for a, b in zip(footer, footer[1:])))
+
+    def test_long_review_warnings_split_without_losing_content(self):
+        curve = self.tdot_curve()
+        curve["results"]["warnings"] = ["Warning start " + "Review requirement " * 600 + " Warning end"]
+        reader = PdfReader(io.BytesIO(self.export([curve])))
+        text = "\n".join(page.extract_text() for page in reader.pages)
+        for phrase in ("REVIEW NOTICE", "Warning start", "Warning end", "Lane transitions"):
+            self.assertIn(phrase, text)
 
     def mdot_curve(self, name: str = "Curve 1", *, notes: str = "Synthetic test data only", e_manual: str = "") -> dict:
         results = Super.calculate_superelevation(

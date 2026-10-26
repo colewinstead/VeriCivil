@@ -119,7 +119,7 @@ def _station(results: dict, value: object) -> str:
 def _geometry_source(value: object) -> str:
     if not isinstance(value, dict):
         return _text(value, "Manual station-only")
-    return "<br/>".join(f"{_text(key.replace('_', ' ').capitalize())}: " +
+    return "<br/>".join(f"{_text(key.removesuffix('_ft').replace('_', ' ').capitalize())}: " +
                         (_number(item, 2, " ft") if key.endswith("_ft") and isinstance(item, (int, float)) else _text(item))
                         for key, item in value.items() if item is not None) or "Manual station-only"
 
@@ -868,7 +868,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         if notes_in_reference:
             reference_elements.extend([
                 Spacer(1, 0.12 * inch),
-                Paragraph("<b>Notes and provenance</b>", styles["Small"]),
+                Paragraph("Notes and provenance", styles["Section"]),
                 Spacer(1, 0.04 * inch),
                 Paragraph(f"<b>Calculation:</b> {_text(calculation_notes)}", styles["Tiny"]),
                 Spacer(1, 0.03 * inch),
