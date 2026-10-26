@@ -107,7 +107,7 @@ def coordinate_compound_curve_transitions(curves: Iterable[dict]) -> list[dict]:
             result["no_transition_required"] = bool(original["no_transition_required"]) and not changes_bank
         if result.get("section_transition"):
             result["section_transition"]["no_transition_required"] = result["no_transition_required"]
-            result["section_transition"]["note"] = "Single-slope bank retained between the compound transitions. Cross-slope sign: + rises toward left; - rises toward right, looking ahead along increasing alignment station."
+            result["section_transition"]["note"] = "Single-slope bank retained between the compound transitions. Cross-slope sign: + drains toward left; - drains toward right, looking ahead along increasing alignment station."
         if entry:
             result.update(pnc_ft=entry["start_ft"], reverse_crown_ft=entry["start_ft"], full_super_ft=entry["end_ft"])
         if exit_plan:
