@@ -11,6 +11,7 @@ export default function SiteHeader({ compact = false, showGithub = true }: { com
         <Link className="nav-calculators" href="/calculators">Calculators</Link>
         <Link href="/calculators/superelevation">Superelevation</Link>
         <Link className="nav-roadstation" href="/roadstation">RoadStation</Link>
+        <Link href="/downloads">Desktop</Link>
         <Link href="/account">Account</Link>
         {showGithub && <a href="https://github.com/colewinstead/VeriCivil">GitHub</a>}
       </div>

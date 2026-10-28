@@ -1,11 +1,15 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import './prepare-runtime.mjs';
 
 const app = new URL('../../desktop/app/', import.meta.url);
 await build({ configFile: fileURLToPath(new URL('vite.config.ts', import.meta.url)) });
-for (const file of ['launch.cjs', 'main.cjs', 'preload.cjs', 'security.cjs', 'files.cjs']) await cp(new URL('../../desktop/' + file, import.meta.url), new URL(file, app));
+for (const file of ['launch.cjs', 'main.cjs', 'preload.cjs', 'security.cjs', 'files.cjs', 'projects.cjs', 'updates.cjs', 'diagnostics.cjs']) await cp(new URL('../../desktop/' + file, import.meta.url), new URL(file, app));
+await rm(new URL('node_modules/', app), { recursive: true, force: true });
+await cp(new URL('../../desktop/node_modules/', import.meta.url), new URL('node_modules/', app), { recursive: true });
+await cp(new URL('../app/generated/release-info.json', import.meta.url), new URL('release-info.json', app));
+await writeFile(new URL('desktop-config.json', app), JSON.stringify({ signedUpdates: false }));
 await cp(new URL('../public/brand/vericivil-icon.png', import.meta.url), new URL('icon.png', app));
 await cp(new URL('../public/python/', import.meta.url), new URL('renderer/python/', app), { recursive: true });
 await cp(new URL('../../desktop/runtime/pyodide/', import.meta.url), new URL('renderer/pyodide/', app), { recursive: true });
@@ -15,6 +19,7 @@ await cp(new URL('../public/pyodide-worker.js', import.meta.url), new URL('rende
 await mkdir(new URL('renderer/showcase/', app), { recursive: true });
 await cp(new URL('../public/showcase/superelevation-report-sample.pdf', import.meta.url), new URL('renderer/showcase/superelevation-report-sample.pdf', app));
 const { application_version: version } = JSON.parse(await readFile(new URL('../app/generated/release-info.json', import.meta.url)));
-await writeFile(new URL('package.json', app), JSON.stringify({ name: 'vericivil-desktop-preview', productName: 'VeriCivil Desktop Preview', version, private: true, main: 'launch.cjs' }, null, 2));
+const { dependencies } = JSON.parse(await readFile(new URL('../../desktop/package.json', import.meta.url)));
+await writeFile(new URL('package.json', app), JSON.stringify({ name: 'vericivil-desktop', productName: 'VeriCivil Superelevation', description: 'Offline roadway superelevation workspace', author: 'CW Aerial Media LLC', version, private: true, main: 'launch.cjs', dependencies }, null, 2));
 await cp(new URL('../../LICENSE', import.meta.url), new URL('LICENSE', app));
 console.log(`Electron preview ${version} built at ${fileURLToPath(app)}`);

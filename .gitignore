@@ -84,3 +84,6 @@ SuperElevation_legacy_*.exe
 /desktop/runtime/
 /desktop/releases/
 /desktop/release-assets/
+/desktop/node_modules/
+/desktop/installers/
+/desktop/installer-tests/

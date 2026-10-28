@@ -1,7 +1,8 @@
 "use client";
 
 import ControlIcon from "./ControlIcon";
-import type { DesktopHost } from "../lib/desktop";
+import type { DesktopHost, DesktopProject } from "../lib/desktop";
+import DesktopUpdates from "./DesktopUpdates";
 import { requiresCompoundCalculation } from "../lib/qa-findings";
 import { curveInputValues, editLandxmlInputs, type LandxmlInputs } from "../lib/curve-inputs";
 
@@ -147,6 +148,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const [inspectorTab, setInspectorTab] = useState("curve");
   const projectInputRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const bootTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const entitlementProviderRef = useRef<{ refresh(): Promise<EntitlementSnapshot> } | null>(null);
   const pendingRef = useRef(new Map<number, { resolve: (value: any) => void; reject: (reason: Error) => void }>());
   const requestId = useRef(0);
@@ -204,12 +206,19 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [recovery, setRecovery] = useState<DesktopProject | null>(null);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState("");
+  const nativeReady = useRef(false);
+  const autosaveContent = useRef<() => string | null>(() => null);
+  const saveAsRequested = useRef(false);
   const compoundPreviewPending = !lengthCheckMode && inputs.geometry_provenance?.source === "LandXML"
     && requiresCompoundCalculation(landxml?.curve_presets?.[landxmlPreset]?.compound_neighbor_indexes, excludedCurveIndexes, selectedCurve >= 0);
   const selectedInputsMode = !!landxml && landxmlPreset >= 0 && inputScope === "selected";
   const calculateSelectedCurves = compoundPreviewPending || selectedInputsMode;
   useEffect(() => trackCalculatorEvent("superelevation", "calculator_opened"), []);
   const startWorker = useCallback(() => {
+    clearTimeout(bootTimer.current);
     workerRef.current?.terminate();
     pendingRef.current.forEach(({ reject }) => reject(new Error("Browser workspace restarted.")));
     pendingRef.current.clear();
@@ -226,11 +235,12 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
         setRuntimeMessage(message.message);
         setProgress(message.progress || 0);
       } else if (message.type === "ready") {
+        clearTimeout(bootTimer.current);
         setRuntime("ready");
         setManifest(message.manifest);
         if (message.manifest?.commercial) {
           const provider = entitlementProviderRef.current ?? (desktop
-            ? { refresh: async () => ({ ...localSnapshot(message.manifest.commercial, "pro"), source: "desktop-preview" }) }
+            ? { refresh: async () => ({ ...localSnapshot(message.manifest.commercial, "pro"), source: "desktop-free" }) }
             : isLocalEntitlementDevelopment()
             ? new LocalDevelopmentEntitlementProvider(message.manifest.commercial)
             : new RemoteEntitlementProvider(message.manifest.commercial));
@@ -239,6 +249,9 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
           setLocalDevelopment(!desktop && isLocalEntitlementDevelopment());
         }
       } else if (message.type === "fatal") {
+        clearTimeout(bootTimer.current);
+        pendingRef.current.forEach(({ reject }) => reject(new Error(message.message || "Calculation engine stopped.")));
+        pendingRef.current.clear();
         setRuntime("error");
         setRuntimeMessage(message.message);
       } else if (message.type === "response") {
@@ -252,12 +265,29 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
         }
       }
     };
+    const failed = () => {
+      clearTimeout(bootTimer.current);
+      worker.terminate();
+      setRuntime("error");
+      setRuntimeMessage("The calculation engine stopped. Your inputs are still here; retry to restart the engine.");
+      pendingRef.current.forEach(({ reject }) => reject(new Error("Calculation engine stopped. Retry the engine.")));
+      pendingRef.current.clear();
+      void desktop?.reportRuntimeFailure().catch(() => {});
+    };
+    worker.onerror = failed;
+    worker.onmessageerror = failed;
+    bootTimer.current = setTimeout(failed, 120000);
     worker.postMessage({ calculator: "superelevation", operation: "initialize" });
   }, [desktop]);
 
   useEffect(() => {
     startWorker();
-    return () => workerRef.current?.terminate();
+    return () => {
+      clearTimeout(bootTimer.current);
+      workerRef.current?.terminate();
+      pendingRef.current.forEach(({ reject }) => reject(new Error("Workspace closed.")));
+      pendingRef.current.clear();
+    };
   }, [startWorker]);
 
   useEffect(() => {
@@ -278,10 +308,20 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     if (!workerRef.current || runtime !== "ready") return Promise.reject(new Error("The browser workspace is not ready yet."));
     const id = ++requestId.current;
     return new Promise<any>((resolve, reject) => {
-      pendingRef.current.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        pendingRef.current.delete(id);
+        reject(new Error("The calculation engine did not respond. Retry the engine or restart the app."));
+        workerRef.current?.terminate();
+        pendingRef.current.forEach(({ reject }) => reject(new Error("Calculation engine stopped.")));
+        pendingRef.current.clear();
+        setRuntime("error");
+        setRuntimeMessage("The calculation engine did not respond. Your current inputs are still here.");
+        void desktop?.reportRuntimeFailure().catch(() => {});
+      }, 120000);
+      pendingRef.current.set(id, { resolve: value => { clearTimeout(timer); resolve(value); }, reject: reason => { clearTimeout(timer); reject(reason); } });
       workerRef.current!.postMessage({ id, calculator: "superelevation", operation, payload: { ...payload, entitlement } });
     });
-  }, [runtime, entitlement]);
+  }, [runtime, entitlement, desktop]);
 
   const requestCapability = useCallback((capability: string) => {
     if (allows(entitlement, capability)) return true;
@@ -765,9 +805,23 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
 
   const exportCurves = () => curves.length ? curves : (curveObject() ? [curveObject()!] : []);
 
+  const projectSnapshot = () => ({
+    version: 5,
+    application_version: manifest?.application_version,
+    calculation_engine_version: manifest?.calculation_engine_version,
+    criteria: calculation?.results?.calculation_metadata?.criteria || manifest?.criteria,
+    vars: {...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== "coordinate_reverse_curves")),diagnostic_findings:blockedFindings,landxml_shared_inputs:landxmlInputs.shared,landxml_curve_inputs:landxmlInputs.curves},
+    curves,
+    excluded_landxml_curve_indexes: excludedCurveIndexes,
+    reverse_curve_pairs: reverseCurvePairs,
+    last_results: calculation?.results || null,
+    last_meta: meta,
+    landxml_source: landxml?.source || null,
+  });
+
   const saveProject = async () => {
     if (!requestCapability(CAPABILITIES.projectFiles)) return;
-    const filename = `${cleanName(inputs.project_name, "superelevation-project")}.json`;
+    const filename = `${cleanName(inputs.project_name, "superelevation-project")}.${desktop ? "vericivil" : "json"}`;
     let target: SaveTarget | null;
     try {
       target = await chooseSaveTarget(filename, "application/json", "json", "Superelevation project");
@@ -776,55 +830,32 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
       return;
     }
     if (!target) return;
-    const project = {
-      version: 5,
-      application_version: manifest?.application_version,
-      calculation_engine_version: manifest?.calculation_engine_version,
-      criteria: calculation?.results?.calculation_metadata?.criteria || manifest?.criteria,
-      vars: {...Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== "coordinate_reverse_curves")),diagnostic_findings:blockedFindings,landxml_shared_inputs:landxmlInputs.shared,landxml_curve_inputs:landxmlInputs.curves},
-      curves,
-      excluded_landxml_curve_indexes: excludedCurveIndexes,
-      reverse_curve_pairs: reverseCurvePairs,
-      last_results: calculation?.results || null,
-      last_meta: meta,
-      landxml_source: landxml?.source || null,
-    };
+    const project = projectSnapshot();
     const content = await run("Preparing project", () => call("project_save", { project }));
     if (content) {
       let outcome;
-      try { outcome = await saveExport(target, filename, content, "application/json"); }
+      try { outcome = desktop ? await desktop.saveFile(filename, new TextEncoder().encode(content), saveAsRequested.current) : await saveExport(target, filename, content, "application/json"); }
       catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); return; }
+      finally { saveAsRequested.current = false; }
       if (outcome === "cancelled") return;
       setDirty(false);
       setNotice(`Project ${outcome} with calculation provenance and embedded LandXML.`);
     }
   };
 
-  const loadProject = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (!requestCapability(CAPABILITIES.projectFiles)) {
-      event.target.value = "";
-      return;
-    }
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    let content: string;
-    try {
-      content = await file.text();
-    } catch {
-      setError(`Could not read ${file.name}. Select a saved JSON project file and try again.`);
-      return;
-    }
+  const openProjectContent = async (content: string, name: string, recovered = false) => {
+    if (!requestCapability(CAPABILITIES.projectFiles)) return false;
     if (!content.trim()) {
       setError("The selected project file is empty. Select a saved JSON project file.");
       return;
     }
-    if (file.name.toLowerCase().endsWith(".xml") || content.trimStart().startsWith("<")) {
+    if (name.toLowerCase().endsWith(".xml") || content.trimStart().startsWith("<")) {
       setError("Use Select LandXML to open XML alignment files. Open accepts saved JSON project files.");
       return;
     }
     const loaded = await run("Opening project", () => call("project_load", { content }));
     if (!loaded) return;
+    if (dirty && !window.confirm("Replace the current unsaved working project?")) return false;
     const restoredInputs = { ...INITIAL_INPUTS, ...(loaded.project.vars || {}) };
     const restoredCurves = loaded.project.curves || [];
     const drafts = { shared: restoredInputs.landxml_shared_inputs || { ...restoredInputs }, curves: {
@@ -868,12 +899,21 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
       setLandxmlPreset(-1);
       setSelectedCurve(-1);
     }
-    setDirty(false);
+    setDirty(recovered);
     const migrationWarnings = loaded.project.migration_warnings || [];
     setNotice(
-      `Opened ${file.name}${loaded.landxml ? " with embedded LandXML" : ""}.`
+      `${recovered ? "Recovered" : "Opened"} ${name}${loaded.landxml ? " with embedded LandXML" : ""}.`
       + (migrationWarnings.length ? ` ${migrationWarnings.join(" ")}` : "")
     );
+    return true;
+  };
+
+  const loadProject = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try { await openProjectContent(await file.text(), file.name); }
+    catch { setError(`Could not read ${file.name}. Select a saved project file and try again.`); }
   };
 
   const loadSampleCalculation = () => {
@@ -902,7 +942,9 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   };
 
   const newProject = () => {
+    if (recovery) { setError("Restore or discard the recovery snapshot first."); return; }
     if (dirty && !window.confirm("Discard the unsaved working project?")) return;
+    void desktop?.newProject().catch(reason => setError(String(reason)));
     setLandxmlInputs({ shared: {}, curves: {} }); setInputScope("selected");
     setInputs(INITIAL_INPUTS); setCalculation(null); setCurves([]); setReverseCurvePairs([]); setLandxml(null); setLandxmlPreset(0); setSelectedCurve(-1); setExcludedCurveIndexes([]);
     setLookupResult(null); setError(""); setNotice(""); setDirty(false);
@@ -1053,18 +1095,63 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
 
   useEffect(() => desktop?.onMenu((action) => {
     if (action === "new") newProject();
-    if (action === "open") projectInputRef.current?.click();
-    if (action === "save") void saveProject();
+    if (action === "open") void desktop.openProjectDialog().catch(reason => setError(String(reason)));
+    if (action === "save" || action === "save-as") { saveAsRequested.current = action === "save-as"; void saveProject(); }
+    if (action === "updates") setUpdatesOpen(true);
   }));
+  useEffect(() => desktop?.onUpdate(state => {
+    if (["available", "manual", "downloaded"].includes(state.status)) setUpdateAvailable(state.nextVersion || "New version");
+    else if (["current", "disabled"].includes(state.status)) setUpdateAvailable("");
+  }), [desktop]);
+
+  useEffect(() => desktop?.onProject(project => {
+    void (async () => {
+      let accepted = false;
+      try { accepted = !!await openProjectContent(project.content, project.name); }
+      finally { if (project.token) await desktop.projectOpened(project.token, accepted); }
+    })().catch(() => setError("The project could not be opened. Your current workspace is unchanged."));
+  }));
+  useEffect(() => {
+    if (!desktop || runtime !== "ready" || entitlement.source !== "desktop-free" || nativeReady.current) return;
+    nativeReady.current = true;
+    desktop.ready().then(setRecovery).catch(() => { nativeReady.current = false; setError("Could not read desktop recovery. Retry the engine."); });
+  }, [desktop, runtime, entitlement.source]);
+  useEffect(() => { void desktop?.workspaceState(dirty, !!busy || runtime !== "ready").catch(() => {}); }, [desktop, dirty, busy, runtime]);
+  useEffect(() => {
+    if (!desktop || recovery) return;
+    autosaveContent.current = () => dirty ? JSON.stringify(projectSnapshot()) : null;
+  });
+  useEffect(() => {
+    if (!desktop) return;
+    let last: string | null | undefined;
+    let pending = false;
+    const timer = setInterval(() => {
+      if (pending) return;
+      const content = autosaveContent.current();
+      if (content === last) return;
+      pending = true;
+      desktop.saveRecovery(content).then(() => { last = content; }).catch(() => setError("Local recovery could not be saved. Save your project before closing.")).finally(() => { pending = false; });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [desktop]);
+  const resolveRecovery = async (restore: boolean) => {
+    if (!desktop || !recovery) return;
+    try {
+      if (restore && !await openProjectContent(recovery.content, "workspace", true)) return;
+      await desktop.resolveRecovery(restore);
+      setRecovery(null);
+    } catch { setError("Recovery could not finish. The snapshot is still on this computer."); }
+  };
 
   return (
     <main className={`app-shell${desktop ? " desktop-workspace" : ""}`} data-inspector={desktop ? inspectorTab : undefined}>
       {desktop ? <header className="desktop-toolbar">
-        <div><h1>Superelevation</h1><span>VeriCivil <span className="desktop-preview-label">Desktop preview</span></span></div>
+        <div><h1>Superelevation</h1><span>VeriCivil <span className="desktop-preview-label">Free desktop app</span></span></div>
         <div className={`desktop-runtime ${runtime}`} role="status"><i />{runtime === "ready" ? "Offline engine ready" : runtimeMessage}</div>
         <button onClick={loadSampleCalculation} disabled={runtime !== "ready" || !!busy}>Load synthetic sample</button>
         <button onClick={newProject}>New project</button>
-        <button onClick={saveProject} disabled={runtime !== "ready" || !!busy}>Save project…</button>
+        <button onClick={saveProject} disabled={runtime !== "ready" || !!busy}>Save project</button>
+        <button onClick={() => setUpdatesOpen(true)}>Updates{updateAvailable ? ` · ${updateAvailable}` : ""}</button>
       </header> : <header className="topbar">
         <div className="brand-mark">SE</div>
         <div><p className="eyebrow">Civil design workspace</p><h1>Superelevation Calculator</h1></div>
@@ -1075,11 +1162,13 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
       </header>}
 
       {upgradeFeature && <UpgradeNotice feature={upgradeFeature} onClose={() => setUpgradeFeature("")} />}
+      {desktop && <DesktopUpdates host={desktop} open={updatesOpen} onClose={() => setUpdatesOpen(false)} />}
+      {desktop && recovery && <section className="desktop-recovery" aria-label="Recovered work"><p>A local recovery snapshot is available. Restore it before opening another project.</p><button disabled={runtime !== "ready" || !!busy} onClick={() => void resolveRecovery(true)}>Restore work</button><button onClick={() => void resolveRecovery(false)}>Discard snapshot</button></section>}
 
       {runtime !== "ready" && <section className="runtime-gate" role="status">
         <div className="gate-card"><p className="eyebrow">{desktop ? "Local desktop processing" : "Browser-only processing"}</p><h2>{runtime === "error" ? "The workspace could not start" : runtimeMessage}</h2>
           <div className="progress"><i style={{ width: `${progress}%` }} /></div>
-          <p>{runtime === "error" ? desktop ? "The bundled runtime could not start. Retry or rebuild the desktop preview." : "Check your connection and retry." : desktop ? "Loading the bundled Python engine and engineering libraries. No connection is required." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
+          <p>{runtime === "error" ? desktop ? "The bundled runtime could not start. Retry the engine or restart the app." : "Check your connection and retry." : desktop ? "Loading the bundled Python engine and engineering libraries. No connection is required." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
           {runtime === "error" && <button className="primary" onClick={startWorker}>Retry</button>}
         </div>
       </section>}
@@ -1091,7 +1180,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
       <div className="workspace">
         <aside className="panel project-panel">
           <div className="panel-heading"><div><p className="step">01</p><h2>Project</h2></div>{dirty && <span className="dirty">Unsaved</span>}</div>
-          <div className="button-grid"><button onClick={newProject}>New</button>{allows(entitlement, CAPABILITIES.projectFiles) ? <label className="button">Open<input ref={projectInputRef} type="file" accept=".json,application/json" onChange={loadProject} /></label> : <button onClick={() => requestCapability(CAPABILITIES.projectFiles)}>Open {proChip(CAPABILITIES.projectFiles)}</button>}<button onClick={saveProject} disabled={runtime !== "ready"}>Save {proChip(CAPABILITIES.projectFiles)}</button></div>
+          <div className="button-grid"><button onClick={newProject}>New</button>{desktop ? <button disabled={runtime !== "ready" || !!busy} onClick={() => void desktop.openProjectDialog().catch(reason => setError(String(reason)))}>Open…</button> : allows(entitlement, CAPABILITIES.projectFiles) ? <label className="button">Open<input ref={projectInputRef} type="file" accept=".json,.vericivil,application/json" onChange={loadProject} /></label> : <button onClick={() => requestCapability(CAPABILITIES.projectFiles)}>Open {proChip(CAPABILITIES.projectFiles)}</button>}<button onClick={saveProject} disabled={runtime !== "ready"}>Save {proChip(CAPABILITIES.projectFiles)}</button></div>
           {entitlement.plan === "free" && <button className="sample-button" onClick={loadSampleCalculation}>Load synthetic sample <span>Free</span></button>}
           {input("project_name", "Project name")}{input("route_name", "Route name")}
           <div className="source-card">
@@ -1224,7 +1313,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
 
       <section className="exports panel"><div><p className="step">04</p><h2>Review & export {proChip(CAPABILITIES.pdfReports)}</h2><p>{desktop ? "Save the recorded results through a native file dialog." : "Exports use the same recorded calculation results shown above. Supported browsers open a Save dialog; others use Downloads."}</p></div><div className="crs-status"><span>Overlay coordinates</span><strong>{landxml?.summary?.coordinate_system?.display_name || "Select LandXML to detect"}</strong><small>DXF preserves the LandXML XY coordinates without reprojection.</small></div><div className="export-buttons"><button onClick={() => performExport("export_pdf", "pdf", "application/pdf")}>PDF report {proChip(CAPABILITIES.pdfReports)}</button><button onClick={() => performExport("export_ord_csv", "csv", "text/csv")}>ORD CSV {proChip(CAPABILITIES.ordCsv)}</button><button className="primary" onClick={() => performExport("export_overlay_dxf", "dxf", "application/dxf")}>Overlay DXF {proChip(CAPABILITIES.overlayDxf)}</button></div></section>
 
-      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Evaluation preview · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
+      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Free desktop · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
     </main>
   );
 }

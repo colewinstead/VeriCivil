@@ -176,6 +176,26 @@ jobs:
       - name: Verify actual offline desktop runtime
         run: npm --prefix web run desktop:test:offline
 
+      - name: Build unsigned installable desktop app
+        run: node web/desktop/installer.mjs
+
+      - name: Stage unsigned installer downloads without update feeds
+        run: python scripts/stage_desktop_installers.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      - name: Build the next version for Windows upgrade acceptance
+        if: matrix.platform == 'win32'
+        run: node web/desktop/installer.mjs win32 --upgrade-test
+
+      - name: Verify Windows install, upgrade, and uninstall preserve projects
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $initial = @(Get-ChildItem desktop/installers/win32-x64/VeriCivil-Superelevation-*-unsigned.exe)
+          $upgrade = @(Get-ChildItem desktop/installer-tests/VeriCivil-Superelevation-*-unsigned.exe)
+          if ($initial.Count -ne 1 -or $upgrade.Count -ne 1) { throw 'Expected one installer for each test version' }
+          $version = python -c "from app_info import APP_VERSION; p=list(map(int,APP_VERSION.split('.'))); p[2]+=1; print('.'.join(map(str,p)))"
+          ./scripts/test_windows_installer.ps1 -InitialInstaller $initial[0].FullName -UpgradeInstaller $upgrade[0].FullName -ExpectedVersion $version
+
       - name: Archive unsigned preview and checksum
         run: python scripts/package_electron_release.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
 

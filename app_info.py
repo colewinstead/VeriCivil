@@ -1,7 +1,7 @@
 """Authoritative product and calculation-engine release identifiers."""
 
 APP_NAME = "Superelevation Calculator"
-APP_VERSION = "1.6.26"
+APP_VERSION = "1.7.0"
 CALCULATION_ENGINE_VERSION = "1.5.1"
 
 

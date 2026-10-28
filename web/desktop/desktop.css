@@ -27,6 +27,14 @@ button:disabled { opacity: .55; }
 .primary, .accent { color: var(--panel); background: var(--teal); border-color: var(--teal); }
 .primary:hover, .accent:hover { color: var(--panel); background: var(--teal-dark); }
 .desktop-workspace { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.desktop-update-dialog { width: min(560px, calc(100vw - 48px)); max-height: calc(100dvh - 80px); overflow: auto; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); }
+.desktop-update-dialog::backdrop { background: rgb(0 0 0 / 48%); }
+.desktop-update-actions, .desktop-recovery { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.desktop-update-actions { margin-top: 24px; }
+.desktop-update-dialog progress { width: 100%; }
+.desktop-update-dialog .update-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.desktop-recovery { padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.desktop-recovery p { flex: 1 1 300px; margin: 0; }
 .desktop-toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .desktop-toolbar > div:first-child { display: flex; align-items: baseline; gap: 12px; margin-right: auto; }
 .desktop-toolbar h1 { font-size: 19px; font-weight: 650; letter-spacing: -.025em; margin: 0; }

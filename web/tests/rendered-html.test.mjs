@@ -16,6 +16,24 @@ async function render(path = "/") {
   );
 }
 
+test("desktop downloads show trusted release files and unsigned status", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options) => {
+    if (String(input) === "https://api.github.com/repos/colewinstead/VeriCivil/releases/latest") return Response.json({ tag_name: "v1.7.0", assets: [{ name: "VeriCivil-Superelevation-1.7.0-win-x64-unsigned.exe", browser_download_url: "https://github.com/colewinstead/VeriCivil/releases/download/v1.7.0/VeriCivil-Superelevation-1.7.0-win-x64-unsigned.exe" }] });
+    return originalFetch(input, options);
+  };
+  try {
+    const response = await render("/downloads");
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Unsigned evaluation build/);
+    assert.match(html, /Windows installer/);
+    assert.match(html, /1.7.0-win-x64-unsigned.exe/);
+    assert.match(html, /Current desktop tools are free/);
+    assert.match(html, /Automatic installation of updates is disabled/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test("renders the VeriCivil calculator hub without starting a calculation runtime", async () => {
   const response = await render("/");
   assert.equal(response.status, 200);
