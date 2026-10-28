@@ -148,6 +148,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const [inspectorTab, setInspectorTab] = useState("curve");
   const projectInputRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const bootTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const entitlementProviderRef = useRef<{ refresh(): Promise<EntitlementSnapshot> } | null>(null);
   const pendingRef = useRef(new Map<number, { resolve: (value: any) => void; reject: (reason: Error) => void }>());
   const requestId = useRef(0);
@@ -207,6 +208,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const [dirty, setDirty] = useState(false);
   const [recovery, setRecovery] = useState<DesktopProject | null>(null);
   const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState("");
   const nativeReady = useRef(false);
   const autosaveContent = useRef<() => string | null>(() => null);
   const saveAsRequested = useRef(false);
@@ -216,6 +218,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const calculateSelectedCurves = compoundPreviewPending || selectedInputsMode;
   useEffect(() => trackCalculatorEvent("superelevation", "calculator_opened"), []);
   const startWorker = useCallback(() => {
+    clearTimeout(bootTimer.current);
     workerRef.current?.terminate();
     pendingRef.current.forEach(({ reject }) => reject(new Error("Browser workspace restarted.")));
     pendingRef.current.clear();
@@ -232,6 +235,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
         setRuntimeMessage(message.message);
         setProgress(message.progress || 0);
       } else if (message.type === "ready") {
+        clearTimeout(bootTimer.current);
         setRuntime("ready");
         setManifest(message.manifest);
         if (message.manifest?.commercial) {
@@ -245,6 +249,9 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
           setLocalDevelopment(!desktop && isLocalEntitlementDevelopment());
         }
       } else if (message.type === "fatal") {
+        clearTimeout(bootTimer.current);
+        pendingRef.current.forEach(({ reject }) => reject(new Error(message.message || "Calculation engine stopped.")));
+        pendingRef.current.clear();
         setRuntime("error");
         setRuntimeMessage(message.message);
       } else if (message.type === "response") {
@@ -259,6 +266,8 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
       }
     };
     const failed = () => {
+      clearTimeout(bootTimer.current);
+      worker.terminate();
       setRuntime("error");
       setRuntimeMessage("The calculation engine stopped. Your inputs are still here; retry to restart the engine.");
       pendingRef.current.forEach(({ reject }) => reject(new Error("Calculation engine stopped. Retry the engine.")));
@@ -267,12 +276,18 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     };
     worker.onerror = failed;
     worker.onmessageerror = failed;
+    bootTimer.current = setTimeout(failed, 120000);
     worker.postMessage({ calculator: "superelevation", operation: "initialize" });
   }, [desktop]);
 
   useEffect(() => {
     startWorker();
-    return () => workerRef.current?.terminate();
+    return () => {
+      clearTimeout(bootTimer.current);
+      workerRef.current?.terminate();
+      pendingRef.current.forEach(({ reject }) => reject(new Error("Workspace closed.")));
+      pendingRef.current.clear();
+    };
   }, [startWorker]);
 
   useEffect(() => {
@@ -293,10 +308,20 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     if (!workerRef.current || runtime !== "ready") return Promise.reject(new Error("The browser workspace is not ready yet."));
     const id = ++requestId.current;
     return new Promise<any>((resolve, reject) => {
-      pendingRef.current.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        pendingRef.current.delete(id);
+        reject(new Error("The calculation engine did not respond. Retry the engine or restart the app."));
+        workerRef.current?.terminate();
+        pendingRef.current.forEach(({ reject }) => reject(new Error("Calculation engine stopped.")));
+        pendingRef.current.clear();
+        setRuntime("error");
+        setRuntimeMessage("The calculation engine did not respond. Your current inputs are still here.");
+        void desktop?.reportRuntimeFailure().catch(() => {});
+      }, 120000);
+      pendingRef.current.set(id, { resolve: value => { clearTimeout(timer); resolve(value); }, reject: reason => { clearTimeout(timer); reject(reason); } });
       workerRef.current!.postMessage({ id, calculator: "superelevation", operation, payload: { ...payload, entitlement } });
     });
-  }, [runtime, entitlement]);
+  }, [runtime, entitlement, desktop]);
 
   const requestCapability = useCallback((capability: string) => {
     if (allows(entitlement, capability)) return true;
@@ -1074,6 +1099,10 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     if (action === "save" || action === "save-as") { saveAsRequested.current = action === "save-as"; void saveProject(); }
     if (action === "updates") setUpdatesOpen(true);
   }));
+  useEffect(() => desktop?.onUpdate(state => {
+    if (["available", "manual", "downloaded"].includes(state.status)) setUpdateAvailable(state.nextVersion || "New version");
+    else if (["current", "disabled"].includes(state.status)) setUpdateAvailable("");
+  }), [desktop]);
 
   useEffect(() => desktop?.onProject(project => {
     void (async () => {
@@ -1108,7 +1137,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const resolveRecovery = async (restore: boolean) => {
     if (!desktop || !recovery) return;
     try {
-      if (restore && !await openProjectContent(recovery.content, "recovered project", true)) return;
+      if (restore && !await openProjectContent(recovery.content, "workspace", true)) return;
       await desktop.resolveRecovery(restore);
       setRecovery(null);
     } catch { setError("Recovery could not finish. The snapshot is still on this computer."); }
@@ -1121,8 +1150,8 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
         <div className={`desktop-runtime ${runtime}`} role="status"><i />{runtime === "ready" ? "Offline engine ready" : runtimeMessage}</div>
         <button onClick={loadSampleCalculation} disabled={runtime !== "ready" || !!busy}>Load synthetic sample</button>
         <button onClick={newProject}>New project</button>
-        <button onClick={saveProject} disabled={runtime !== "ready" || !!busy}>Save project…</button>
-        <button onClick={() => setUpdatesOpen(true)}>Updates</button>
+        <button onClick={saveProject} disabled={runtime !== "ready" || !!busy}>Save project</button>
+        <button onClick={() => setUpdatesOpen(true)}>Updates{updateAvailable ? ` · ${updateAvailable}` : ""}</button>
       </header> : <header className="topbar">
         <div className="brand-mark">SE</div>
         <div><p className="eyebrow">Civil design workspace</p><h1>Superelevation Calculator</h1></div>
@@ -1139,7 +1168,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
       {runtime !== "ready" && <section className="runtime-gate" role="status">
         <div className="gate-card"><p className="eyebrow">{desktop ? "Local desktop processing" : "Browser-only processing"}</p><h2>{runtime === "error" ? "The workspace could not start" : runtimeMessage}</h2>
           <div className="progress"><i style={{ width: `${progress}%` }} /></div>
-          <p>{runtime === "error" ? desktop ? "The bundled runtime could not start. Retry or rebuild the desktop preview." : "Check your connection and retry." : desktop ? "Loading the bundled Python engine and engineering libraries. No connection is required." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
+          <p>{runtime === "error" ? desktop ? "The bundled runtime could not start. Retry the engine or restart the app." : "Check your connection and retry." : desktop ? "Loading the bundled Python engine and engineering libraries. No connection is required." : "Python and the engineering libraries are loading into this tab. Calculations run locally; the LandXML retention control appears beside the file selector."}</p>
           {runtime === "error" && <button className="primary" onClick={startWorker}>Retry</button>}
         </div>
       </section>}
@@ -1284,7 +1313,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
 
       <section className="exports panel"><div><p className="step">04</p><h2>Review & export {proChip(CAPABILITIES.pdfReports)}</h2><p>{desktop ? "Save the recorded results through a native file dialog." : "Exports use the same recorded calculation results shown above. Supported browsers open a Save dialog; others use Downloads."}</p></div><div className="crs-status"><span>Overlay coordinates</span><strong>{landxml?.summary?.coordinate_system?.display_name || "Select LandXML to detect"}</strong><small>DXF preserves the LandXML XY coordinates without reprojection.</small></div><div className="export-buttons"><button onClick={() => performExport("export_pdf", "pdf", "application/pdf")}>PDF report {proChip(CAPABILITIES.pdfReports)}</button><button onClick={() => performExport("export_ord_csv", "csv", "text/csv")}>ORD CSV {proChip(CAPABILITIES.ordCsv)}</button><button className="primary" onClick={() => performExport("export_overlay_dxf", "dxf", "application/dxf")}>Overlay DXF {proChip(CAPABILITIES.overlayDxf)}</button></div></section>
 
-      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Evaluation preview · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
+      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Free desktop · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
     </main>
   );
 }

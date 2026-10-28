@@ -131,10 +131,46 @@ original.start().then(async (window) => {
     if (process.env.VERICIVIL_CAPTURE_DIR) {
       const { mkdir, writeFile } = require('node:fs/promises');
       await mkdir(process.env.VERICIVIL_CAPTURE_DIR, { recursive: true });
+      await new Promise(resolve => setTimeout(resolve, 250));
       await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR, `desktop-${theme}.png`), (await window.capturePage()).toPNG());
     }
   }
   nativeTheme.themeSource='system';
+  await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'Updates').click()");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')")) break;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), true);
+  assert.match(await window.webContents.executeJavaScript("document.querySelector('dialog').textContent"), /signed production build/);
+  await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Close').click()");
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), false);
+  await window.webContents.executeJavaScript(`(() => {
+    window.confirm = () => true;
+    const original = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function(...args) { window.testWorker = this; return original.apply(this, args); };
+    window.restoreWorkerPrototype = () => { Worker.prototype.postMessage = original; };
+    Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'Load synthetic sample').click();
+  })()`);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (await window.webContents.executeJavaScript('!!window.testWorker')) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(await window.webContents.executeJavaScript('!!window.testWorker'), true);
+  await window.webContents.executeJavaScript("window.restoreWorkerPrototype(); window.testWorker.dispatchEvent(new ErrorEvent('error', {message:'Synthetic worker failure'}))");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (await window.webContents.executeJavaScript("!!document.querySelector('.runtime-gate button')")) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('input')).some(input => input.value === 'Synthetic free sample')"), true);
+  await window.webContents.executeJavaScript("document.querySelector('.runtime-gate button').click()");
+  for (let attempt = 0; attempt < 600; attempt++) {
+    if (await window.webContents.executeJavaScript("!!document.querySelector('.desktop-runtime.ready')")) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-runtime.ready')"), true);
+  assert.equal(await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('input')).some(input => input.value === 'Synthetic free sample')"), true);
+  console.log('PASS: worker failure offers retry and retains the project inputs.');
   console.log('PASS: native save bridge writes and cancels correctly; laptop/wide layout:',JSON.stringify(geometry));
   console.log('PASS: actual offline Electron worker matches native Python; LandXML, project roundtrip, PDF, ORD CSV and overlay DXF passed; remote requests blocked and renderer isolated.');
   clearTimeout(timer);app.exit(0);

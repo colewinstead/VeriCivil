@@ -40,6 +40,8 @@ The profile is `%APPDATA%/VeriCivil Superelevation` on Windows and `~/Library/Ap
 
 Signing identities are not currently configured. PR/main builds remain unsigned, and never publish automatic-update feeds. Production packaging fails when required signing credentials are absent. Keep secrets in the protected GitHub environment `desktop-production`, restricted to `main`, with release approval:
 
+The environment is configured to allow only the `main` branch and requires approval by the repository owner. Signing secrets still need to be supplied.
+
 - Windows: `WINDOWS_CSC_LINK` (certificate path/secure URL/base64 supported by electron-builder), `WINDOWS_CSC_KEY_PASSWORD`, and `WINDOWS_PUBLISHER` matching the certificate identity.
 - Mac: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` for signing and notarization.
 

@@ -28,7 +28,7 @@ At the baseline, distribution was a portable Windows ZIP and Mac DMGs without an
 
 ## Recommended first milestone
 
-Deliver one complete Windows installation and update cycle before adding more desktop features. Keep the current renderer and runtime build; add the supported installer/update packaging around it. Evaluate Electron Forge first because it builds on the existing `@electron/packager`; its Windows Squirrel maker and Mac ZIP maker can generate update artifacts for Electron's built-in updater. Select one packaging/update stack and pin its versions in the implementation PR.
+Deliver one complete Windows installation and update cycle before adding more desktop features. Keep the current renderer and runtime build; add the supported installer/update packaging around it. Forge was the first candidate because it builds on `@electron/packager`. The implementation selects pinned electron-builder/electron-updater instead for NSIS installation, download progress, Windows update signature verification, and direct GitHub Release delivery. Existing packager-based previews remain available during migration.
 
 The milestone is complete when a user can install a signed Windows build, save a project, receive a newer version, choose when to restart, and reopen that project after the upgrade. Test cancellation, interrupted downloads, offline operation, and preservation of user data. A notification linking to a download is a useful intermediate step, but does not complete automatic updating.
 

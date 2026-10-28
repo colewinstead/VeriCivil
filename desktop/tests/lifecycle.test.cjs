@@ -31,6 +31,10 @@ test('recovery survives restart, ordered clears win, and project reads are bound
   const clear = store.saveRecovery(null);
   await Promise.all([pending, clear]);
   assert.equal(await store.recovery(), null);
+  await fs.writeFile(path.join(directory, 'recovery.json'), '{broken');
+  await assert.rejects(store.recovery());
+  assert.equal(await fs.readFile(path.join(directory, 'recovery.json'), 'utf8'), '{broken');
+  await store.saveRecovery(null);
   assert.throws(() => projectContent('{broken'));
   assert.throws(() => projectContent('{"version":5}'));
   await assert.rejects(store.read('relative.vericivil'));

@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import './prepare-runtime.mjs';
@@ -6,7 +6,8 @@ import './prepare-runtime.mjs';
 const app = new URL('../../desktop/app/', import.meta.url);
 await build({ configFile: fileURLToPath(new URL('vite.config.ts', import.meta.url)) });
 for (const file of ['launch.cjs', 'main.cjs', 'preload.cjs', 'security.cjs', 'files.cjs', 'projects.cjs', 'updates.cjs', 'diagnostics.cjs']) await cp(new URL('../../desktop/' + file, import.meta.url), new URL(file, app));
-await cp(new URL('../../desktop/node_modules/', import.meta.url), new URL('node_modules/', app), { recursive: true, force: true });
+await rm(new URL('node_modules/', app), { recursive: true, force: true });
+await cp(new URL('../../desktop/node_modules/', import.meta.url), new URL('node_modules/', app), { recursive: true });
 await cp(new URL('../app/generated/release-info.json', import.meta.url), new URL('release-info.json', app));
 await writeFile(new URL('desktop-config.json', app), JSON.stringify({ signedUpdates: false }));
 await cp(new URL('../public/brand/vericivil-icon.png', import.meta.url), new URL('icon.png', app));
