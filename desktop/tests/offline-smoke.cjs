@@ -1,4 +1,4 @@
-const { app, dialog, nativeTheme } = require('electron');
+const { app, dialog, nativeImage, nativeTheme } = require('electron');
 const { mkdtemp, readFile, readdir, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const assert = require('node:assert/strict');
@@ -12,6 +12,9 @@ const root = path.resolve(__dirname, '../..');
 const timer = setTimeout(() => { console.error('Desktop smoke timed out'); app.exit(1); }, 180000);
 const original = require('../app/main.cjs');
 original.start().then(async (window) => {
+  const icon = nativeImage.createFromPath(path.join(root, 'desktop/app/icon.png'));
+  assert.deepEqual(icon.getSize(), { width: 512, height: 512 });
+  assert.equal(readFileSync(path.join(root, 'desktop/app/icon.png')).equals(readFileSync(path.join(root, 'web/public/brand/vericivil-icon.png'))), true);
   window.webContents.setBackgroundThrottling(false);
   window.webContents.on('console-message', (event) => console.log('Renderer:', event.message));
   const inputs = { pc: '10+00', pt: '12+00', speed: '45', radius: '1200', facility: 'centerline', area: 'rural', lane_width: '12', lanes_rotated: '2', normal_crown: '0.02', curve_direction: 'right' };

@@ -6,6 +6,7 @@ import './prepare-runtime.mjs';
 const app = new URL('../../desktop/app/', import.meta.url);
 await build({ configFile: fileURLToPath(new URL('vite.config.ts', import.meta.url)) });
 for (const file of ['launch.cjs', 'main.cjs', 'preload.cjs', 'security.cjs', 'files.cjs']) await cp(new URL('../../desktop/' + file, import.meta.url), new URL(file, app));
+await cp(new URL('../public/brand/vericivil-icon.png', import.meta.url), new URL('icon.png', app));
 await cp(new URL('../public/python/', import.meta.url), new URL('renderer/python/', app), { recursive: true });
 await cp(new URL('../../desktop/runtime/pyodide/', import.meta.url), new URL('renderer/pyodide/', app), { recursive: true });
 await cp(new URL('../../desktop/runtime/wheels/', import.meta.url), new URL('renderer/wheels/', app), { recursive: true });
