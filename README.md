@@ -258,7 +258,7 @@ Use one short-lived branch per issue or feature:
 2. In the issue's **Development** section, choose **Create a branch**, use `main` as the source, and include the issue number in the name, such as `fix/123-export-error` or `feat/123-new-calculator`.
 3. Fetch in VS Code and check out that branch. Make the scoped change, run the applicable checks, commit, and push. Code/configuration changes need a version bump; documentation-only changes do not.
 4. Open a PR from the issue branch into `main`. Include `Closes #123` when the issue is fully resolved, or `Related to #123` for partial work.
-5. Wait for required checks and merge using **Create a merge commit**. If GitHub requires a branch update, merge the latest `main` into the issue branch and let checks rerun. GitHub automatically closes fully resolved issues and deletes the merged remote branch.
+5. Wait for required checks and merge using **Squash and merge**, producing one commit per PR. Only squash merges are enabled in repository settings and the `main` ruleset. If GitHub requires a branch update, merge the latest `main` into the issue branch and let checks rerun. GitHub automatically closes fully resolved issues and deletes the merged remote branch.
 6. Switch to `main`, pull the latest changes, and start the next issue from there. Delete the old local issue branch only after checking that its work is merged and the working tree is clean. The former permanent `dev` workflow is retired.
 
 After an application release succeeds, invoke **Ship main** to publish the matching website version. Documentation-only changes do not require a website update.

@@ -13,8 +13,8 @@
 - Do not merge when `validate-version` or any other required check is red.
 - Create a short-lived branch for each issue from the latest `origin/main`, such as `fix/123-export-error`, `feat/123-new-calculator`, or `docs/123-workflow`. Open PRs from that branch into `main`; do not use `dev` as a permanent integration branch.
 - Enable automatic deletion of merged head branches on GitHub. After merging, start the next issue from updated `main`; remove local issue branches only after confirming their work is merged and the working tree is clean. Do not reuse merged issue branches.
-- Use regular merge commits for PRs into `main`, preserving the individual commits; do not squash or rebase merge.
-- Keep only merge commits enabled in GitHub's PR merge settings. Do not require linear history on `main`, because it blocks merge commits; preserve all other branch protections and required checks.
+- Use squash merges for PRs into `main`, producing one commit per PR; do not use merge commits or rebase merges.
+- Keep only squash merges enabled in GitHub's PR merge settings and the `main` ruleset's allowed merge methods. Preserve all other branch protections and required checks.
 - If `main` advances while a PR is open and GitHub requires an update, merge the latest `origin/main` into the issue branch and let required checks rerun.
 
 ## Issues and pull requests

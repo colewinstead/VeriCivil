@@ -4,6 +4,8 @@ This desktop entry point reuses `web/app/CalculatorApp.tsx` and the same Python 
 
 The preview enables the existing local Pro workflows for evaluation. It does not sign in, bill, grant a production subscription, collect analytics, retain LandXML remotely, or install updates. GitHub distributes it explicitly as an unsigned evaluation preview. Signed distribution and production desktop licensing remain separate work.
 
+See the [production desktop readiness plan](../docs/desktop-production-readiness.md) for the remaining distribution, update, licensing, recovery, and support work.
+
 ## Build and run
 
 Use the repository's supported Node/Python versions. Install the native Python requirements if running the parity checks. Dependency installation and the first desktop build require internet access; the resulting app does not.
