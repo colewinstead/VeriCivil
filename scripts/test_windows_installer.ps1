@@ -27,6 +27,8 @@ foreach ($installer in @($InitialInstaller, $UpgradeInstaller)) {
 }
 if ((Get-Item -LiteralPath $application).VersionInfo.ProductVersion -notlike "$ExpectedVersion*") { throw 'Upgrade did not install the expected application version.' }
 if (-not (Test-Path -LiteralPath (Join-Path $installPath 'resources/app.asar'))) { throw 'Installed runtime is missing.' }
+node desktop/tests/installed-smoke.cjs $application
+if ($LASTEXITCODE -ne 0) { throw 'Installed application runtime acceptance failed.' }
 $uninstallers = @(Get-ChildItem -LiteralPath $installPath -Filter '*Uninstall*.exe')
 if ($uninstallers.Count -ne 1) { throw 'Expected one native uninstaller.' }
 $uninstall = Start-Process -FilePath $uninstallers[0].FullName -ArgumentList '/S' -WindowStyle Hidden -PassThru -Wait
