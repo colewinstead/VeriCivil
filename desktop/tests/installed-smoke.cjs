@@ -41,10 +41,24 @@ async function verify() {
         if (message.error) pending.reject(new Error(message.error.message)); else pending.resolve(message.result);
       });
       socket.addEventListener('close', () => { requests.forEach(({ reject }) => reject(new Error('Installed workspace closed.'))); requests.clear(); });
-      const result = await new Promise((resolve, reject) => {
-        requests.set(1, { resolve, reject });
-        socket.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { awaitPromise: true, returnByValue: true, expression: `(async () => {
-          const worker = new Worker('/pyodide-worker.js');
+      let sequence = 0;
+      const command = params => new Promise((resolve, reject) => {
+        const id = ++sequence;
+        requests.set(id, { resolve, reject });
+        socket.send(JSON.stringify({ id, method: 'Runtime.evaluate', params }));
+      });
+      let ready = false;
+      for (let attempt = 0; attempt < 300; attempt++) {
+        try {
+          const document = await command({ returnByValue: true, expression: "location.href.startsWith('vericivil://app/') && !!document.querySelector('.desktop-toolbar')" });
+          ready = document.result?.value === true;
+          if (ready) break;
+        } catch { /* Navigation may replace the initial about:blank execution context. */ }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      if (!ready) throw new Error('Installed workspace document did not finish loading.');
+      const result = await command({ awaitPromise: true, returnByValue: true, expression: `(async () => {
+          const worker = new Worker('vericivil://app/pyodide-worker.js');
           try {
             await new Promise((resolve, reject) => {
               worker.onmessage = ({data}) => { if(data.type==='ready')resolve(); if(data.type==='fatal')reject(new Error(data.message)); };
@@ -57,8 +71,7 @@ async function verify() {
             });
             return {calculation:JSON.stringify(calculation,(_key,value)=>value===undefined?null:value), require:typeof window.require, node:typeof window.process};
           } finally { worker.terminate(); }
-        })()` } }));
-      });
+        })()` });
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || 'Installed worker failed.');
       const actual = result.result.value;
       const expected = JSON.parse(execFileSync('python', ['-c', 'import sys,json,super_service; print(json.dumps(super_service.dispatch("calculate",sys.stdin.read())))'], { cwd: path.resolve(__dirname, '../..'), input: JSON.stringify({ inputs, entitlement }), encoding: 'utf8' }));
