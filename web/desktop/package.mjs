@@ -12,6 +12,7 @@ const paths = await packager({
   out: fileURLToPath(new URL('../../desktop/releases/', import.meta.url)),
   electronVersion, prune: false,
   name: 'VeriCivil Desktop Preview', appBundleId: 'com.vericivil.desktop.preview',
+  icon: fileURLToPath(new URL(`../../desktop/icons/vericivil.${platform === 'darwin' ? 'icns' : 'ico'}`, import.meta.url)),
   overwrite: true, asar: true,
 });
 console.log(paths.join('\n'));

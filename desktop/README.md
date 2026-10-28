@@ -23,6 +23,12 @@ npm --prefix web run desktop:package:windows
 
 The first command packages the host platform: the current Mac architecture, or Windows x64 when run on Windows. The second packages Windows x64, including from a Mac. Outputs are under `desktop/releases/`. Runtime downloads and generated application assets are ignored by Git. The runtime cache records dependency URLs and verified SHA-256 values in `desktop/runtime/checksums.json`. Repeated builds verify cached bytes before use.
 
+The Mac app bundle and Windows executable use the VeriCivil icon, and the running window uses the same artwork. The portable ZIP itself keeps the operating system's archive icon; extract it to see the branded executable. Native icons in `desktop/icons/` come from `web/public/brand/vericivil-icon.png`. To regenerate them with Pillow installed, run from the repository root:
+
+```sh
+python -c "from PIL import Image; im = Image.open('web/public/brand/vericivil-icon.png'); im.save('desktop/icons/vericivil.ico', sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)]); im.save('desktop/icons/vericivil.icns')"
+```
+
 To create a downloadable archive after packaging, run the matching command from the repository root:
 
 ```sh

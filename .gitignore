@@ -40,6 +40,7 @@ web/public/python/
 Sample Data/
 Test exports/
 *.png
+!web/public/brand/vericivil-icon.png
 !web/public/og.png
 !web/public/showcase/
 !web/public/showcase/*.png

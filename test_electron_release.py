@@ -8,10 +8,28 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+from PIL import Image
+
 from scripts.package_electron_release import package_release
 
 
 class ElectronReleaseTests(unittest.TestCase):
+    def test_native_icons_have_multiple_resolutions_and_transparency(self):
+        icons = Path(__file__).resolve().parent / "desktop/icons"
+        with Image.open(icons / "vericivil.ico") as icon:
+            self.assertEqual(icon.format, "ICO")
+            self.assertEqual(icon.ico.sizes(), {(size, size) for size in (16, 24, 32, 48, 64, 128, 256)})
+            for size in icon.ico.sizes():
+                frame = icon.ico.getimage(size)
+                self.assertEqual(frame.mode, "RGBA")
+                self.assertEqual(frame.getextrema()[3], (0, 255))
+        with Image.open(icons / "vericivil.icns") as icon:
+            self.assertEqual(icon.format, "ICNS")
+            self.assertTrue({(size, size, 1) for size in (128, 256, 512)}.issubset(icon.info["sizes"]))
+            icon.load()
+            self.assertEqual(icon.mode, "RGBA")
+            self.assertEqual(icon.getextrema()[3], (0, 255))
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

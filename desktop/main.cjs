@@ -23,6 +23,7 @@ async function start() {
     window = new BrowserWindow({ width: 1440, height: 960, minWidth: 1040, minHeight: 700,
       title: 'Superelevation · VeriCivil Desktop Preview', show: false,
       backgroundColor: '#10201b',
+      icon: path.join(__dirname, 'icon.png'),
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     window.webContents.setWindowOpenHandler(({ url }) => {
