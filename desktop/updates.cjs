@@ -7,6 +7,19 @@ function availableVersion(release, currentVersion) {
   return difference > 0 ? release.tag_name.slice(1) : null;
 }
 
+function closeForUpdate(window) {
+  if (!window || window.isDestroyed()) return Promise.resolve(true);
+  return new Promise((resolve, reject) => {
+    const contents = window.webContents;
+    const cleanup = () => { window.removeListener('closed', closed); contents.removeListener('will-prevent-unload', prevented); };
+    const closed = () => { cleanup(); resolve(true); };
+    const prevented = event => { if (!event.defaultPrevented) { cleanup(); resolve(false); } };
+    window.once('closed', closed);
+    contents.once('will-prevent-unload', prevented);
+    try { window.close(); } catch (error) { cleanup(); reject(error); }
+  });
+}
+
 class Updates extends EventEmitter {
   constructor(updater, { enabled, version, isDirty, closeWindows, record, discover }) {
     super();
@@ -65,4 +78,4 @@ class Updates extends EventEmitter {
     return this.state;
   }
 }
-module.exports = { Updates, availableVersion };
+module.exports = { Updates, availableVersion, closeForUpdate };

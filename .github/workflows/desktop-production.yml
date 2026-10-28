@@ -138,6 +138,8 @@ jobs:
           mapfile -d '' FEEDS < <(find signed-artifacts -type f -name '*.yml' -print0)
           test "${#BINARIES[@]}" -gt 0
           test "${#FEEDS[@]}" -eq 3
-          sha256sum "${BINARIES[@]}" > SHA256SUMS-signed-desktop.txt
+          for FILE in "${BINARIES[@]}"; do
+            (cd "$(dirname "$FILE")" && sha256sum "$(basename "$FILE")")
+          done > SHA256SUMS-signed-desktop.txt
           gh release upload "$RELEASE_TAG" "${BINARIES[@]}" SHA256SUMS-signed-desktop.txt
           gh release upload "$RELEASE_TAG" "${FEEDS[@]}"

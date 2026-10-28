@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell
 const { saveAtomically } = require('./files.cjs');
 const { Projects, projectContent } = require('./projects.cjs');
 const { createDiagnostics } = require('./diagnostics.cjs');
-const { Updates, availableVersion } = require('./updates.cjs');
+const { Updates, availableVersion, closeForUpdate } = require('./updates.cjs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -122,15 +122,14 @@ async function start() {
       if (!response.ok) throw new Error('Release check unavailable.');
       return availableVersion(await response.json(), app.getVersion());
     },
-    closeWindows: () => new Promise(resolve => {
-      if (!window || window.isDestroyed()) return resolve(true);
+    closeWindows: async () => {
       closingForUpdate = true;
-      const target = window;
-      const closed = () => { clearTimeout(timer); resolve(true); };
-      const timer = setTimeout(() => { closingForUpdate = false; target.removeListener('closed', closed); resolve(false); }, 300);
-      target.once('closed', closed);
-      target.close();
-    }), record: diagnostics.record,
+      try {
+        const closed = await closeForUpdate(window);
+        if (!closed) closingForUpdate = false;
+        return closed;
+      } catch (error) { closingForUpdate = false; throw error; }
+    }, record: diagnostics.record,
   });
   updates.on('state', state => {
     if (state.status === 'error' && window?.isDestroyed()) { closingForUpdate = false; void createWindow().catch(error => showError('Restart VeriCivil to continue', error)); }

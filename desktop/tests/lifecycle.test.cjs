@@ -6,7 +6,7 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const { Projects, projectContent } = require('../projects.cjs');
 const { createDiagnostics } = require('../diagnostics.cjs');
-const { Updates, availableVersion } = require('../updates.cjs');
+const { Updates, availableVersion, closeForUpdate } = require('../updates.cjs');
 const project = JSON.stringify({ version: 5, vars: { project_name: 'Private project' }, last_results: { retained: 42 } });
 
 test('recovery survives restart, ordered clears win, and project reads are bounded', async t => {
@@ -128,4 +128,20 @@ test('unsigned apps can discover new releases but cannot download or install the
   f.updates.discover = async () => { throw new Error('offline'); };
   await f.updates.action('check');
   assert.equal(f.updates.state.status, 'disabled');
+});
+
+test('update closing waits for the native close result and respects the unsaved-work choice', async () => {
+  for (const discard of [false, true]) {
+    const window = new EventEmitter();
+    window.webContents = new EventEmitter();
+    window.isDestroyed = () => false;
+    window.close = () => {
+      window.webContents.emit('will-prevent-unload', { defaultPrevented: discard });
+      if (discard) setImmediate(() => window.emit('closed'));
+    };
+    assert.equal(await closeForUpdate(window), discard);
+    assert.equal(window.listenerCount('closed'), 0);
+    assert.equal(window.webContents.listenerCount('will-prevent-unload'), 0);
+  }
+  assert.equal(await closeForUpdate(null), true);
 });
