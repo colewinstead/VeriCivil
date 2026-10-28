@@ -82,7 +82,7 @@ Startup uses `python3` on macOS/Linux and `python` on Windows; the selected exec
 
 ## Electron desktop preview
 
-The desktop preview shares the React interface and Python engine with the browser calculator, and bundles its runtime for offline processing. It enables the existing Pro tools for evaluation without account login or production licensing. Packages are unsigned previews; signing, notarization, and automatic in-app updates are not configured.
+The desktop app shares the React interface and Python engine with the browser calculator, and bundles its runtime for offline processing. Current desktop tools are free without account login. It supports local recovery, recent projects, native project files, and update controls. Automated downloads remain unsigned previews: automatic installation requires the separate credential-backed signing/notarization workflow. See [desktop lifecycle, installer, and signing instructions](desktop/README.md). The public download page is `/downloads`.
 
 From the repository root, install and package the app:
 

@@ -66,16 +66,35 @@ original.start().then(async (window) => {
   assert.equal(result.remoteBlocked,true);
   assert.deepEqual(result.rendererSecurity,{require:'undefined',node:'undefined'});
   assert.match(result.ui,/desktop-workspace/);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (await window.webContents.executeJavaScript("!!document.querySelector('.desktop-recovery button:not(:disabled)')")) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-recovery')"), true);
+  await window.webContents.executeJavaScript("document.querySelector('.desktop-recovery button').click()");
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (await window.webContents.executeJavaScript("!document.querySelector('.desktop-recovery')")) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('input')).some(input => input.value === 'Recovery acceptance')"), true);
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-recovery')"), false);
+  console.log('PASS: startup recovery restores a saved workspace through the shared project loader.');
   const folder = await mkdtemp(path.join(tmpdir(), 'vericivil-native-dialog-'));
   const originalDialog = dialog.showSaveDialog;
   try {
     dialog.showSaveDialog = async () => ({ canceled: true });
-    assert.equal(await window.webContents.executeJavaScript("window.vericivilDesktop.saveFile('project.json',new TextEncoder().encode('native test'))"), 'cancelled');
+    assert.equal(await window.webContents.executeJavaScript("window.vericivilDesktop.saveFile('project.json',new TextEncoder().encode(JSON.stringify({version:5,vars:{native_test:true}})))"), 'cancelled');
     assert.deepEqual(await readdir(folder), []);
     const destination = path.join(folder, 'project.json');
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: destination });
-    assert.equal(await window.webContents.executeJavaScript("window.vericivilDesktop.saveFile('project.json',new TextEncoder().encode('native test'))"), 'saved');
-    assert.equal(await readFile(destination,'utf8'),'native test');
+    assert.equal(await window.webContents.executeJavaScript("window.vericivilDesktop.saveFile('project.json',new TextEncoder().encode(JSON.stringify({version:5,vars:{native_test:true}})))"), 'saved');
+    assert.deepEqual(JSON.parse(await readFile(destination,'utf8')), {version:5,vars:{native_test:true}});
+    assert.equal(await window.webContents.executeJavaScript("window.vericivilDesktop.access"), 'free');
+    assert.equal((await window.webContents.executeJavaScript("window.vericivilDesktop.updateState()")).status, 'disabled');
+    await window.webContents.executeJavaScript("window.vericivilDesktop.saveRecovery(JSON.stringify({version:5,vars:{recovery_test:true}}))");
+    const recovered = JSON.parse(await readFile(path.join(app.getPath('userData'), 'recovery.json'), 'utf8'));
+    assert.equal(recovered.vars.recovery_test, true);
+    await window.webContents.executeJavaScript("window.vericivilDesktop.saveRecovery(null)");
   } finally { dialog.showSaveDialog = originalDialog; await rm(folder,{recursive:true,force:true}); }
   const geometry = [];
   for (const [width,height] of [[1040,760],[1440,960]]) {
@@ -109,6 +128,11 @@ original.start().then(async (window) => {
       await new Promise(resolve=>setTimeout(resolve,50));
     }
     assert.equal(paper,expectedPaper,`${theme} system appearance`);
+    if (process.env.VERICIVIL_CAPTURE_DIR) {
+      const { mkdir, writeFile } = require('node:fs/promises');
+      await mkdir(process.env.VERICIVIL_CAPTURE_DIR, { recursive: true });
+      await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR, `desktop-${theme}.png`), (await window.capturePage()).toPNG());
+    }
   }
   nativeTheme.themeSource='system';
   console.log('PASS: native save bridge writes and cancels correctly; laptop/wide layout:',JSON.stringify(geometry));

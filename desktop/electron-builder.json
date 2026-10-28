@@ -1,0 +1,14 @@
+{
+  "appId": "com.vericivil.superelevation",
+  "productName": "VeriCivil Superelevation",
+  "executableName": "VeriCivilSuperelevation",
+  "directories": { "app": "app", "output": "installers", "buildResources": "icons" },
+  "files": ["**/*", "!**/*.map"],
+  "asar": true,
+  "npmRebuild": false,
+  "fileAssociations": [{ "ext": "vericivil", "name": "VeriCivil project", "role": "Editor" }],
+  "win": { "target": "nsis", "icon": "icons/vericivil.ico", "verifyUpdateCodeSignature": true },
+  "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": "always", "deleteAppDataOnUninstall": false, "runAfterFinish": false },
+  "mac": { "target": ["dmg", "zip"], "icon": "icons/vericivil.icns", "category": "public.app-category.productivity", "hardenedRuntime": true },
+  "publish": null
+}

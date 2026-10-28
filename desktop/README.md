@@ -2,7 +2,9 @@
 
 This desktop entry point reuses `web/app/CalculatorApp.tsx` and the same Python modules as the browser and Tkinter editions. It bundles Pyodide, its nine required packages, and the pinned ReportLab/ezdxf wheels. Engineering processing runs locally without an internet connection. Formulas, criteria, project schemas, and export implementations are unchanged.
 
-The preview enables the existing local Pro workflows for evaluation. It does not sign in, bill, grant a production subscription, collect analytics, retain LandXML remotely, or install updates. GitHub distributes it explicitly as an unsigned evaluation preview. Signed distribution and production desktop licensing remain separate work.
+Current desktop tools are free without account sign-in or device licensing. The desktop app does not bill, collect analytics, or retain LandXML remotely. It stores recovery snapshots, recent-project paths, and bounded support logs locally. Unsigned builds can check for newer releases and open the download page, but cannot install updates automatically. Signed builds support verified updates with an explicit download/restart flow.
+
+See the [production desktop readiness plan](../docs/desktop-production-readiness.md) for implementation status and remaining release acceptance.
 
 ## Build and run
 
@@ -19,9 +21,31 @@ npm --prefix web run desktop:dev
 ```sh
 npm --prefix web run desktop:package
 npm --prefix web run desktop:package:windows
+npm --prefix web run desktop:installer
 ```
 
 The first command packages the host platform: the current Mac architecture, or Windows x64 when run on Windows. The second packages Windows x64, including from a Mac. Outputs are under `desktop/releases/`. Runtime downloads and generated application assets are ignored by Git. The runtime cache records dependency URLs and verified SHA-256 values in `desktop/runtime/checksums.json`. Repeated builds verify cached bytes before use.
+
+`desktop:installer` builds an unsigned NSIS installer on Windows, or DMG and update ZIP on Mac, under `desktop/installers/`. The installer uses the stable identity `com.vericivil.superelevation`. Windows creates Start menu/desktop shortcuts and an uninstaller; upgrades and uninstall preserve user projects and the local profile. Local Windows Application Control can prevent NSIS from executing its unsigned build stub; use the clean Windows CI runner for acceptance rather than bypassing that policy.
+
+## Projects, recovery, and support
+
+New desktop projects use `.vericivil` (the existing JSON project format). Older `.json` projects still open. File → Open recent remembers ten paths; double-clicking a `.vericivil` file opens it in the existing application instance. Save updates the opened project; Save As chooses another destination. File validation and shared-engine schema checks run before accepting the opened project.
+
+Dirty work is snapshotted locally every two seconds; a startup banner offers Restore work or Discard snapshot. A failed/unreadable recovery file is preserved until an explicit discard. Recovery does not replace a separate backup of saved projects. Updates refuse restart while work is unsaved, an operation is running, or recovery needs a decision.
+
+The profile is `%APPDATA%/VeriCivil Superelevation` on Windows and `~/Library/Application Support/VeriCivil Superelevation` on Mac. It contains recovery/project data and recent paths; do not include the profile in public reports. Help → Export diagnostics writes only versions, platform/architecture, and bounded event/error-code logs, excluding project contents, file paths, and credentials. No diagnostic upload is performed.
+
+## Signed production releases
+
+Signing identities are not currently configured. PR/main builds remain unsigned, and never publish automatic-update feeds. Production packaging fails when required signing credentials are absent. Keep secrets in the protected GitHub environment `desktop-production`, restricted to `main`, with release approval:
+
+- Windows: `WINDOWS_CSC_LINK` (certificate path/secure URL/base64 supported by electron-builder), `WINDOWS_CSC_KEY_PASSWORD`, and `WINDOWS_PUBLISHER` matching the certificate identity.
+- Mac: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` for signing and notarization.
+
+After a successful main release, run **Signed Desktop Release** with that latest stable tag. It checks out the released main commit, tests/builds each target, requires signing, verifies Windows signatures and Mac notarization, and uploads binaries before the architecture-specific update metadata. The workflow does not create a public release from a PR. The updater uses GitHub Releases; `https://vericivil.com/downloads` discovers those artifacts and labels unsigned builds. Do not put signing keys in this repository or paste them into chat.
+
+The updater implementation uses pinned electron-builder/electron-updater versions. Signing, tampered-package rejection by real OS signatures, and signed N-to-N+1 installation on each Mac architecture require credential-backed acceptance before production distribution. Mocked updater tests are not evidence of those OS checks.
 
 The Mac app bundle and Windows executable use the VeriCivil icon, and the running window uses the same artwork. The portable ZIP itself keeps the operating system's archive icon; extract it to see the branded executable. Native icons in `desktop/icons/` come from `web/public/brand/vericivil-icon.png`. To regenerate them with Pillow installed, run from the repository root:
 
@@ -45,7 +69,7 @@ The **Full Release** workflow validates `APP_VERSION` before building Electron p
 
 Each native runner installs the pinned Electron runtime, checks the save/security boundaries, packages the app, exercises the offline runtime against native Python, and creates its DMG or portable ZIP plus checksum. PR runs have read-only repository permissions and upload `desktop-release-<version>-<target>` Actions artifacts retained for 30 days. They do not publish a GitHub Release or use signing secrets.
 
-After merge to `main`, desktop and browser builds run against the merged source. The public versioned GitHub Release is published only after all release build jobs succeed, and includes both Mac DMGs, the Windows ZIP, per-target checksums, and the browser archive. The **Legacy Tkinter macOS Build** and **Legacy Tkinter Windows Build** jobs remain manual rollback builds; they do not produce the Electron release files. Website publishing remains a separate `Ship main` operation.
+After merge to `main`, desktop and browser builds run against the merged source. The public versioned GitHub Release is published only after all release build jobs succeed, and includes unsigned installers, both preview Mac DMGs, the portable Windows ZIP, checksums, and the browser archive. Windows CI installs version N, upgrades to a synthetic N+1, and uninstalls, checking that project and recovery data survive. The **Legacy Tkinter macOS Build** and **Legacy Tkinter Windows Build** jobs remain manual rollback builds. Website publishing remains a separate `Ship main` operation.
 
 ## Interface and file handling
 
@@ -71,4 +95,4 @@ The Windows x64 package was built and copied to the LAN test PC in an isolated t
 
 ## Rollback and scope
 
-The browser build remains its own entry point. `python3 super_app.py`, the PyInstaller specifications, and the manual legacy build workflows remain available. The earlier Tkinter redesign is an unmerged checkpoint on `codex/58-desktop-workspace`; the Electron implementation is on its linked issue branch. Automatic Electron preview packaging and release assets are enabled in the release workflow; no website deployment, production licensing, signing, or updater is configured by that workflow.
+The browser build remains its own entry point. `python3 super_app.py`, the PyInstaller specifications, and manual legacy build workflows remain available. Unsigned preview archives and installers use the normal release workflow; signing and update-feed publication use the separate protected manual workflow. Website publication still requires Ship main. Production licensing is intentionally deferred while desktop tools remain free.

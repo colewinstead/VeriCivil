@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+.desktop-downloads { max-width: 1120px; margin: 0 auto; padding: 64px 24px; }
+.desktop-downloads h1 { font-size: clamp(2.2rem, 5vw, 4rem); line-height: 1.1; letter-spacing: -0.03em; margin: 16px 0 24px; }
+.downloads-lede { max-width: 680px; font-size: 1.15rem; line-height: 1.7; }
+.desktop-download-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 24px; margin: 36px 0; }
+.desktop-download-list article { border-top: 1px solid currentColor; padding: 24px 0; min-width: 0; }
+.desktop-download-list h2, .downloads-notes h2 { font-size: 1.35rem; margin: 0 0 12px; }
+.desktop-download-list p, .downloads-notes p { line-height: 1.65; margin: 16px 0; }
+.downloads-notes { max-width: 720px; margin-top: 56px; }
+
 :root {
   color-scheme: dark;
   --ink: #e8f0ed;
