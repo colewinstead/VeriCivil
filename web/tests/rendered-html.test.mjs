@@ -31,7 +31,22 @@ test("desktop downloads show trusted release files and unsigned status", async (
     assert.match(html, /1.7.0-win-x64-unsigned.exe/);
     assert.match(html, /Current desktop tools are free/);
     assert.match(html, /Automatic installation of updates is disabled/);
+    assert.match(html, /href="\/code-signing"/);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("code signing policy states pending approval and explains desktop network access", async () => {
+  const response = await render("/code-signing");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /SignPath signing is not active/);
+  assert.match(html, /Signing the outer Windows installer does not sign/);
+  assert.match(html, /automatically check GitHub Releases/);
+  assert.match(html, /IP address/);
+  assert.match(html, /no account sign-in, billing, product analytics/);
+  assert.match(html, /Cole Winstead/);
+  assert.match(html, /href="\/privacy"/);
+  assert.match(html, /Redistribution clearance.*remains unresolved/);
 });
 
 test("renders the VeriCivil calculator hub without starting a calculation runtime", async () => {
@@ -43,6 +58,7 @@ test("renders the VeriCivil calculator hub without starting a calculation runtim
   assert.match(html, /you can verify/i);
   assert.match(html, /Tested engineering logic/i);
   assert.match(html, /VeriCivil is a brand of CW Aerial Media LLC\./);
+  assert.match(html, /href="\/code-signing"/);
   assert.doesNotMatch(html, /Shared Python engines|Roadway calculation toolkit/i);
   assert.match(html, /Crushed Stone Base/i);
   assert.match(html, /Superelevation Calculator/i);

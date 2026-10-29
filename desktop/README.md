@@ -38,6 +38,8 @@ The profile is `%APPDATA%/VeriCivil Superelevation` on Windows and `~/Library/Ap
 
 ## Signed production releases
 
+The public [Code signing policy](https://vericivil.com/code-signing) records pending SignPath approval and current unsigned status. See [SignPath onboarding](../docs/signpath-onboarding.md) for the protected **Windows SignPath Review** workflow, required configuration after approval, and remaining Electron/NSIS production gates. Its outputs are review artifacts only, not installable signed production releases or update feeds.
+
 Signing identities are not currently configured. PR/main builds remain unsigned, and never publish automatic-update feeds. Production packaging fails when required signing credentials are absent. Keep secrets in the protected GitHub environment `desktop-production`, restricted to `main`, with release approval:
 
 The environment is configured to allow only the `main` branch and requires approval by the repository owner. Signing secrets still need to be supplied.

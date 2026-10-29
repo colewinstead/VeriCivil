@@ -84,6 +84,8 @@ Startup uses `python3` on macOS/Linux and `python` on Windows; the selected exec
 
 The desktop app shares the React interface and Python engine with the browser calculator, and bundles its runtime for offline processing. Current desktop tools are free without account login. It supports local recovery, recent projects, native project files, and update controls. Automated downloads remain unsigned previews: automatic installation requires the separate credential-backed signing/notarization workflow. See [desktop lifecycle, installer, and signing instructions](desktop/README.md). The public download page is `/downloads`.
 
+Code signing policy: [vericivil.com/code-signing](https://vericivil.com/code-signing). SignPath approval is pending; prepared signing-review artifacts are not production releases. [Onboarding instructions](docs/signpath-onboarding.md) describe the remaining setup and verification.
+
 From the repository root, install and package the app:
 
 ```sh
