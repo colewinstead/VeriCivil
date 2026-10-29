@@ -1,0 +1,140 @@
+name: Windows SignPath Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Latest published stable release tag (review artifacts only; no publication)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: windows-signpath-review
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate released main source
+        id: release
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$REQUESTED_TAG" == "$(gh release view --json tagName --jq .tagName)" ]]
+          [[ "$(gh release view "$REQUESTED_TAG" --json isDraft,isPrerelease --jq '[.isDraft,.isPrerelease] | any')" == false ]]
+          SHA=$(git rev-list -n 1 "$REQUESTED_TAG")
+          git merge-base --is-ancestor "$SHA" origin/main
+          echo "tag=$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: validate
+    runs-on: windows-latest
+    environment: desktop-production
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
+      - name: Require completed SignPath onboarding
+        shell: pwsh
+        env:
+          SIGNPATH_ENABLED: ${{ vars.SIGNPATH_ENABLED }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          SIGNPATH_PUBLISHER: ${{ vars.SIGNPATH_PUBLISHER }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SIGNPATH_ENABLED -ne 'true') { throw 'SignPath approval is pending. Complete docs/signpath-onboarding.md before enabling review requests.' }
+          foreach ($name in @('SIGNPATH_ORGANIZATION_ID', 'SIGNPATH_PROJECT_SLUG', 'SIGNPATH_SIGNING_POLICY_SLUG', 'SIGNPATH_ARTIFACT_CONFIGURATION_SLUG', 'SIGNPATH_PUBLISHER', 'SIGNPATH_API_TOKEN')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Missing protected SignPath configuration: $name" }
+          }
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - run: python -m pip install -r requirements-lock.txt
+      - run: npm --prefix web ci --ignore-scripts
+      - run: node web/node_modules/electron/install.js
+      - run: python -m unittest -v
+      - run: npm --prefix web run desktop:test
+      - run: npm --prefix web run desktop:build
+      - run: npm --prefix web run desktop:test:offline
+      - name: Build unsigned input for signing review
+        run: node web/desktop/installer.mjs win32
+      - name: Stage only our app executable and outer installer
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = python -c "from app_info import APP_VERSION; print(APP_VERSION)"
+          if ("v$version" -ne $env:RELEASE_TAG) { throw 'Source version does not match the released tag' }
+          New-Item -ItemType Directory signpath-input | Out-Null
+          Copy-Item -LiteralPath "desktop/installers/win32-x64/VeriCivil-Superelevation-$version-win-x64-unsigned.exe" signpath-input/installer.exe
+          Copy-Item -LiteralPath desktop/installers/win32-x64/win-unpacked/VeriCivilSuperelevation.exe signpath-input/VeriCivilSuperelevation.exe
+      - uses: actions/upload-artifact@v7
+        id: unsigned
+        with:
+          name: signpath-review-input-${{ needs.validate.outputs.tag }}
+          path: signpath-input/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Request manually approved SignPath signing
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: "1800"
+          output-artifact-directory: signpath-review
+      - name: Verify returned signatures and publisher
+        shell: pwsh
+        env:
+          EXPECTED_PUBLISHER: ${{ vars.SIGNPATH_PUBLISHER }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(Get-ChildItem -LiteralPath signpath-review -File -Recurse)
+          if ($files.Count -ne 2) { throw 'Expected exactly the two submitted executables' }
+          foreach ($name in @('installer.exe', 'VeriCivilSuperelevation.exe')) {
+            $file = Get-Item -LiteralPath "signpath-review/$name"
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid' -or $signature.SignatureType -ne 'Authenticode' -or -not $signature.TimeStamperCertificate) { throw "Missing valid timestamped Authenticode signature: $name" }
+            $publisher = $signature.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+            if ($publisher -cne $env:EXPECTED_PUBLISHER) { throw "Unexpected signing publisher: $name" }
+            "$( (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() )  $name" | Add-Content -LiteralPath signpath-review/SHA256SUMS.txt
+          }
+          'Review artifacts only: the outer installer still embeds an unsigned app/uninstaller. Do not publish or enable update feeds.' | Set-Content -LiteralPath signpath-review/REVIEW-ONLY.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signpath-review-only-${{ needs.validate.outputs.tag }}
+          path: signpath-review/
+          if-no-files-found: error
+          retention-days: 7

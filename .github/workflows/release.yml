@@ -236,6 +236,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Superelevation Calculator v$RELEASE_VERSION" \
+              --notes "Code signing policy: https://vericivil.com/code-signing. SignPath approval is pending. Automated desktop downloads are unsigned evaluation builds; automatic update installation is disabled." \
               --generate-notes \
               --latest
           fi

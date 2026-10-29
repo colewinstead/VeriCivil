@@ -8,6 +8,8 @@ The implementation branch adds Windows NSIS/Mac installer packaging, manual/auto
 
 Signing credentials are not configured. Unsigned builds do not install updates automatically and do not publish update feeds. Production signing/notarization, real signed-update authenticity checks, and signed installed-app upgrade acceptance on all targets remain release gates. Windows CI also exercises unsigned install/upgrade/uninstall data preservation. The priorities below remain the acceptance checklist; code presence alone does not complete those external gates.
 
+SignPath preparation: the pending-status [Code signing policy](https://vericivil.com/code-signing) is linked from the website/downloads and release notes; the protected manual **Windows SignPath Review** workflow is prepared but requires approved SignPath configuration before use. It signs only review copies of the outer installer and standalone app executable, without publication or update feeds. See [onboarding and production gates](signpath-onboarding.md). [AASHTO clearance steps and an unsent permissions request](aashto-permission-request.md) remain separate from signing approval.
+
 ## Existing foundation
 
 The Electron edition already has the shared React interface and Python calculation engine, a bundled offline Pyodide runtime, VeriCivil icons, native save dialogs, atomic file writes, an unsaved-close confirmation, and isolated renderer/IPC boundaries. CI builds Windows x64, Apple Silicon, and Intel Mac previews and exercises offline calculations and exports. Keep these foundations and the engineering results unchanged.

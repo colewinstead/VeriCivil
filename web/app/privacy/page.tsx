@@ -11,6 +11,7 @@ export default function PrivacyPage() {
   return (
     <LegalShell title="Privacy Policy" effectiveDate={PRIVACY_EFFECTIVE_DATE}>
       <p>This Policy explains how CW Aerial Media LLC (<strong>Provider</strong>), operating under the VeriCivil brand, handles personal information for the Superelevation Calculator Service.</p>
+      <p>The standalone desktop app does not use the browser service&apos;s analytics, billing, or remote LandXML retention. Its local storage, diagnostics, and automatic GitHub update checks are described in the <a href="/code-signing#desktop-privacy">desktop privacy notice</a>.</p>
 
       <section><h2>1. Local calculations and engineering analytics</h2>
         <p><strong>Project files, project names, LandXML, engineering inputs, calculations, stationing, coordinates, project JSON, PDF reports, ORD CSV exports, and overlay DXF files are not automatically uploaded to authentication, billing, or entitlement services.</strong></p>
