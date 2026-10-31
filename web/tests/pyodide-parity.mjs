@@ -92,6 +92,33 @@ assert sign_checks.wasSuccessful(), repr(sign_checks.errors + sign_checks.failur
 `);
 console.log("Synthetic AASHTO automatic table-selection checks passed in Pyodide.");
 
+// Typicals shares the same analytical coordinates, report importer and vector exporters on both hosts.
+const typicalsCall = (operation, payload = {}) => {
+  pyodide.globals.set('_typicals_payload', JSON.stringify(payload));
+  pyodide.globals.set('_typicals_operation', operation);
+  return JSON.parse(pyodide.runPython("__import__('json').dumps(__import__('typicals.service',fromlist=['dispatch']).dispatch(_typicals_operation,_typicals_payload))"));
+};
+const nativeTypicals = (operation, payload = {}) => JSON.parse(execFileSync(nativePython, ['-c',
+  'import sys,json; from typicals.service import dispatch; print(json.dumps(dispatch(sys.argv[1],sys.stdin.read())))', operation],
+{ cwd: new URL('../../', import.meta.url), input: JSON.stringify(payload), encoding: 'utf8' }));
+const typicalsProject = typicalsCall('starter');
+assert.deepEqual(typicalsProject, nativeTypicals('starter'));
+typicalsProject.left.lane_width_ft = 11;
+typicalsProject.right.lane_slope_pct = 3;
+typicalsProject.units = 'us_survey_foot';
+const typicalsCsv = await readFile(new URL('../../tests/fixtures/typicals_synthetic_levels.csv', import.meta.url), 'utf8');
+const catalogPayload = { content: typicalsCsv, source: 'Synthetic test report only', revision: '1' };
+typicalsProject.catalog = typicalsCall('import_levels', catalogPayload);
+assert.deepEqual(typicalsProject.catalog, nativeTypicals('import_levels', catalogPayload));
+for (const role of ['surface','pavement','left_slope','right_slope','ground','centerline','dimensions','dimension_text','slopes','callouts','text']) typicalsProject.level_mappings[role] = 'TS_TEST_GEOMETRY';
+const typicalsPayload = { project: typicalsProject };
+assert.deepEqual(typicalsCall('draw', typicalsPayload), nativeTypicals('draw', typicalsPayload));
+const typicalsSaved = typicalsCall('save', typicalsPayload);
+assert.deepEqual(typicalsCall('load', typicalsSaved), typicalsProject);
+for (const format of ['svg', 'pdf']) assert.deepEqual(typicalsCall(format, typicalsPayload), nativeTypicals(format, typicalsPayload));
+assert.deepEqual(typicalsCall('dxf', typicalsPayload).report, nativeTypicals('dxf', typicalsPayload).report);
+console.log('Typicals native/Pyodide geometry, catalog, persistence and vector export parity passed.');
+
 pyodide.FS.mkdirTree("/app/tests/fixtures");
 pyodide.FS.writeFile("/app/tests/fixtures/compound_synthetic.xml", await readFile(new URL("../../tests/fixtures/compound_synthetic.xml", import.meta.url), "utf8"));
 pyodide.FS.writeFile("/app/test_compound_transitions.py", await readFile(new URL("../../test_compound_transitions.py", import.meta.url), "utf8"));

@@ -1,7 +1,7 @@
 const path = require('node:path');
 
 const APP_URL = 'vericivil://app/';
-const FILE_TYPES = { json: 'Superelevation project', vericivil: 'VeriCivil project', pdf: 'PDF report', csv: 'OpenRoads CSV', dxf: 'DXF drawing' };
+const FILE_TYPES = { json: 'VeriCivil project', vericivil: 'VeriCivil project', pdf: 'PDF report', csv: 'OpenRoads CSV', dxf: 'DXF drawing', svg: 'Vector drawing', txt: 'Export report' };
 
 function assetPath(url, root) {
   const parsed = new URL(url);

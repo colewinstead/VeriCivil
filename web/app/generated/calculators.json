@@ -1,5 +1,17 @@
 [
   {
+    "id": "typicals",
+    "slug": "typicals",
+    "title": "VeriCivil Typicals",
+    "short_title": "Typicals",
+    "description": "Design parametric rural roadway sections and export editable CAD and vector engineering sheets. Preview; imported workspace levels required for DXF.",
+    "category": "Roadway Drafting",
+    "status": "available",
+    "access": "Free preview",
+    "engine_version": "1.0.0",
+    "route": "/calculators/typicals"
+  },
+  {
     "id": "superelevation",
     "slug": "superelevation",
     "title": "Superelevation Calculator",

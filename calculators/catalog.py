@@ -44,6 +44,18 @@ _STONE_MODULES = [
 
 CALCULATORS: tuple[dict[str, Any], ...] = (
     {
+        "id": "typicals", "slug": "typicals", "title": "VeriCivil Typicals",
+        "short_title": "Typicals", "description": "Design parametric rural roadway sections and export editable CAD and vector engineering sheets. Preview; imported workspace levels required for DXF.",
+        "category": "Roadway Drafting", "status": "available", "access": "Free preview",
+        "engine_version": "1.0.0", "route": "/calculators/typicals",
+        "runtime": {
+            "modules": ["vericivil_service.py", "typicals/__init__.py", "typicals/model.py", "typicals/workspace.py",
+                        "typicals/drawing.py", "typicals/exports.py", "typicals/service.py"],
+            "pyodide_packages": ["micropip", "numpy", "fonttools", "Pillow"],
+            "micropip_packages": ["reportlab==4.4.7", "ezdxf==1.4.4"],
+        },
+    },
+    {
         "id": "superelevation",
         "slug": "superelevation",
         "title": "Superelevation Calculator",

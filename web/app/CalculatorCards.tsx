@@ -22,11 +22,11 @@ export default function CalculatorCards() {
             <b>{calculator.access}</b>
           </div>
           <div className="calculator-card-image">
-            <img src={calculatorImages[calculator.id].src} alt={calculatorImages[calculator.id].alt} />
+            {calculator.id === "typicals" ? <svg viewBox="0 0 560 220" role="img" aria-label="Parametric roadway typical section preview"><path d="M40 165 100 120 180 115 280 108 380 115 460 120 520 165 M100 129 180 124 280 117 380 124 460 129 M100 138 180 133 280 126 380 133 460 138" stroke="currentColor" fill="none" strokeWidth="2"/><path d="M180 65H380 M180 55V90 M280 48V144 M380 55V90" stroke="currentColor" fill="none"/><text x="218" y="51" fill="currentColor" fontSize="16">Editable section geometry</text></svg> : <img src={calculatorImages[calculator.id].src} alt={calculatorImages[calculator.id].alt} />}
           </div>
           <h3>{calculator.short_title}</h3>
           <p>{calculator.description}</p>
-          <div className="calculator-card-action"><span>{calculator.id === "superelevation" ? "Open professional workspace" : "Open free quantity tool"}</span><b>↗</b></div>
+          <div className="calculator-card-action"><span>{calculator.id === "typicals" ? "Open section designer" : calculator.id === "superelevation" ? "Open professional workspace" : "Open free quantity tool"}</span><b>↗</b></div>
         </a>
       ))}
     </div>
