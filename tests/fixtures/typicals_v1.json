@@ -1,0 +1,91 @@
+{
+  "format": "vericivil.typicals",
+  "version": 1,
+  "units": "international_foot",
+  "metadata": {
+    "title": "TYPICAL SECTION",
+    "route": "Route / project",
+    "construction": "New construction",
+    "stations": "Station range",
+    "notes": [
+      "Generic rural starter; not an approved MDOT standard."
+    ]
+  },
+  "origin": [
+    0.0,
+    0.0
+  ],
+  "left": {
+    "lane_width_ft": 12.0,
+    "lane_slope_pct": -2.0,
+    "shoulder_width_ft": 6.0,
+    "shoulder_slope_pct": -4.0,
+    "shoulder_paved": true,
+    "roadside_hv": 3.0,
+    "roadside_height_ft": -3.0
+  },
+  "right": {
+    "lane_width_ft": 12.0,
+    "lane_slope_pct": -2.0,
+    "shoulder_width_ft": 6.0,
+    "shoulder_slope_pct": -4.0,
+    "shoulder_paved": true,
+    "roadside_hv": 4.0,
+    "roadside_height_ft": -3.0
+  },
+  "layers": [
+    {
+      "id": "wearing",
+      "name": "Surface course",
+      "material": "Project-specified asphalt",
+      "thickness_in": 3.0
+    },
+    {
+      "id": "base",
+      "name": "Base course",
+      "material": "Project-specified base",
+      "thickness_in": 8.0
+    }
+  ],
+  "ground": [
+    [
+      -36.0,
+      -3.8
+    ],
+    [
+      -20.0,
+      -3.2
+    ],
+    [
+      0.0,
+      -3.0
+    ],
+    [
+      20.0,
+      -3.3
+    ],
+    [
+      36.0,
+      -4.0
+    ]
+  ],
+  "constraints": {
+    "locked_points": {}
+  },
+  "drafting": {
+    "scale_ft_per_in": 5.0,
+    "text_height_in": 0.14,
+    "dimension_gap_in": 0.42,
+    "font": "Helvetica",
+    "precision": 2
+  },
+  "print": {
+    "monochrome": true,
+    "width_in": 17.0,
+    "height_in": 11.0
+  },
+  "annotations": {},
+  "presentation": {},
+  "level_mappings": {},
+  "catalog": null
+}

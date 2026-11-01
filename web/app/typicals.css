@@ -15,6 +15,27 @@
 .typicals-inspector { overflow: auto; background: var(--tp-panel); border-right: 1px solid var(--tp-line); padding: 0 18px 24px; scrollbar-color: var(--tp-line) transparent; }
 .typicals-inspector nav { position: sticky; top: 0; display: flex; gap: 3px; padding: 12px 0; background: var(--tp-panel); z-index: 1; }
 .typicals-app fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.typicals-component-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 18px 0 8px; }
+.typicals-inspector .typicals-component-heading h3 { margin: 0; }
+.typicals-component-heading > span { font-size: 11px; color: var(--tp-muted); }
+.typicals-side-switch { display: flex; gap: 6px; margin-top: 16px; }
+.typicals-side-switch button { flex: 1; }
+.typicals-component-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--tp-line); border-radius: 5px; max-height: 220px; overflow: auto; }
+.typicals-component-list li + li { border-top: 1px solid var(--tp-line); }
+.typicals-component-list button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 0; padding: 9px 10px; text-align: left; font-weight: 400; }
+.typicals-component-list button[aria-pressed="true"] { background: var(--tp-raised); box-shadow: inset 0 0 0 1px var(--tp-accent); }
+.typicals-component-list strong, .typicals-component-list small { display: block; }
+.typicals-component-list strong { font-size: 12px; font-weight: 600; }
+.typicals-component-list small { color: var(--tp-muted); font-size: 11px; margin-top: 2px; }
+.typicals-component-order { width: 20px; flex: 0 0 20px; font: 11px "SFMono-Regular", Consolas, monospace; color: var(--tp-muted); }
+.typicals-add-component { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; margin-top: 8px; }
+.typicals-add-component select { font-size: 12px; }
+.typicals-app .typicals-preset-button { margin-top: 7px; font-size: 11px; padding: 5px 8px; min-height: 29px; }
+.typicals-component-properties { border-top: 1px solid var(--tp-line); margin-top: 24px; padding-top: 4px; }
+.typicals-component-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.typicals-component-actions button { font-size: 11px; min-height: 30px; padding: 5px 8px; }
+.typicals-geometry-settings { margin-top: 22px; border-top: 1px solid var(--tp-line); padding-top: 14px; }
+.typicals-geometry-settings > summary { font-size: 12px; font-weight: 600; }
 .typicals-inspector h2 { font-size: 17px; margin: 16px 0 8px; }
 .typicals-inspector h3 { font-size: 14px; margin: 24px 0 12px; }
 .typicals-inspector p { font-size: 12px; margin: 9px 0 16px; line-height: 1.55; }

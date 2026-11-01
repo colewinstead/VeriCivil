@@ -6,7 +6,7 @@ import io
 import json
 import re
 
-from typicals.model import ROLES, number, text
+from typicals.model import number, text, required_roles
 
 WEIGHTS = {0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211}
 
@@ -76,13 +76,13 @@ def import_report(content, source, revision):
                              "report_sha256": hashlib.sha256(content.encode()).hexdigest(), "levels": levels})
 
 
-def mapping_issues(project):
+def mapping_issues(project, roles=None):
     catalog = project.get("catalog")
     levels = {v["name"]: v for v in catalog["levels"]} if catalog else {}
     issues = []
     if not catalog or catalog["extraction_status"] != "report-imported":
         issues.append("Import a Bentley-generated report with resolved symbology; binary workspace extraction is unverified.")
-    for role in ROLES:
+    for role in required_roles(project) if roles is None else roles:
         name = project["level_mappings"].get(role)
         level = levels.get(name)
         if not level:

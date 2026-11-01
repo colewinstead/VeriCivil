@@ -103,20 +103,35 @@ const nativeTypicals = (operation, payload = {}) => JSON.parse(execFileSync(nati
 { cwd: new URL('../../', import.meta.url), input: JSON.stringify(payload), encoding: 'utf8' }));
 const typicalsProject = typicalsCall('starter');
 assert.deepEqual(typicalsProject, nativeTypicals('starter'));
-typicalsProject.left.lane_width_ft = 11;
-typicalsProject.right.lane_slope_pct = 3;
+const typicalsLibrary = typicalsCall('component_library');
+assert.deepEqual(typicalsLibrary, nativeTypicals('component_library'));
+const extraLane = structuredClone(typicalsLibrary.find(c => c.kind === 'auxiliary_lane').template);
+extraLane.id = extraLane.end_point = 'right_aux';
+typicalsProject.right.splice(1, 0, extraLane);
+for (const kind of ['barrier', 'ditch', 'retaining_wall', 'custom']) {
+  const component = structuredClone(typicalsLibrary.find(c => c.kind === kind).template);
+  component.id = component.end_point = `right_${kind}_test`;
+  typicalsProject.right.push(component);
+}
+typicalsProject.drafting.scale_ft_per_in = 10;
+typicalsProject.left[0].params.width_ft = 11;
+typicalsProject.right[0].params.slope_pct = 3;
 typicalsProject.units = 'us_survey_foot';
 const typicalsCsv = await readFile(new URL('../../tests/fixtures/typicals_synthetic_levels.csv', import.meta.url), 'utf8');
 const catalogPayload = { content: typicalsCsv, source: 'Synthetic test report only', revision: '1' };
 typicalsProject.catalog = typicalsCall('import_levels', catalogPayload);
 assert.deepEqual(typicalsProject.catalog, nativeTypicals('import_levels', catalogPayload));
-for (const role of ['surface','pavement','left_slope','right_slope','ground','centerline','dimensions','dimension_text','slopes','callouts','text']) typicalsProject.level_mappings[role] = 'TS_TEST_GEOMETRY';
+for (const role of ['surface','pavement','left_slope','right_slope','ground','centerline','dimensions','dimension_text','slopes','callouts','text','barrier','ditch','retaining_wall','custom']) typicalsProject.level_mappings[role] = 'TS_TEST_GEOMETRY';
 const typicalsPayload = { project: typicalsProject };
 assert.deepEqual(typicalsCall('draw', typicalsPayload), nativeTypicals('draw', typicalsPayload));
 const typicalsSaved = typicalsCall('save', typicalsPayload);
 assert.deepEqual(typicalsCall('load', typicalsSaved), typicalsProject);
 for (const format of ['svg', 'pdf']) assert.deepEqual(typicalsCall(format, typicalsPayload), nativeTypicals(format, typicalsPayload));
 assert.deepEqual(typicalsCall('dxf', typicalsPayload).report, nativeTypicals('dxf', typicalsPayload).report);
+const legacyTypicals = await readFile(new URL('../../tests/fixtures/typicals_v1.json', import.meta.url), 'utf8');
+assert.deepEqual(typicalsCall('load', {content:legacyTypicals}), nativeTypicals('load', {content:legacyTypicals}));
+const savedComponent = typicalsCall('component_save', {component:extraLane});
+assert.deepEqual(typicalsCall('component_load', savedComponent), extraLane);
 console.log('Typicals native/Pyodide geometry, catalog, persistence and vector export parity passed.');
 
 pyodide.FS.mkdirTree("/app/tests/fixtures");

@@ -4,11 +4,11 @@
     "slug": "typicals",
     "title": "VeriCivil Typicals",
     "short_title": "Typicals",
-    "description": "Design parametric rural roadway sections and export editable CAD and vector engineering sheets. Preview; imported workspace levels required for DXF.",
+    "description": "Assemble roadway sections with editable lanes, shoulders, ditches, barriers, walls and custom profiles. Export engineering sheets and mapped CAD.",
     "category": "Roadway Drafting",
     "status": "available",
     "access": "Free preview",
-    "engine_version": "1.0.0",
+    "engine_version": "2.0.0",
     "route": "/calculators/typicals"
   },
   {

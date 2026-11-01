@@ -26,6 +26,9 @@ test("typicals is discoverable and its section workspace renders without changin
   const catalog = await render("/calculators");
   assert.equal(catalog.status, 200);
   assert.match(await catalog.text(), /\/calculators\/typicals/);
+  const cards = await readFile(new URL("../app/CalculatorCards.tsx", import.meta.url), "utf8");
+  assert.match(cards, /typicals-editor\.webp/);
+  assert.doesNotMatch(cards, /Editable section geometry/);
 });
 
 test("desktop downloads show trusted release files and unsigned status", async () => {

@@ -9,6 +9,14 @@ const { createDiagnostics } = require('../diagnostics.cjs');
 const { Updates, availableVersion, closeForUpdate } = require('../updates.cjs');
 const project = JSON.stringify({ version: 5, vars: { project_name: 'Private project' }, last_results: { retained: 42 } });
 
+test('native project gate accepts legacy and component-based typicals without accepting future schemas', () => {
+  for (const version of [1, 2]) {
+    const content = JSON.stringify({ format: 'vericivil.typicals', version, origin: [0, 0], left: version === 1 ? {} : [], right: version === 1 ? {} : [], layers: [] });
+    assert.equal(projectContent(content), content);
+  }
+  assert.throws(() => projectContent(JSON.stringify({ format: 'vericivil.typicals', version: 3, origin: [0, 0], left: [], right: [], layers: [] })));
+});
+
 test('recovery survives restart, ordered clears win, and project reads are bounded', async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'vericivil-project-test-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));

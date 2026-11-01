@@ -15,6 +15,7 @@ test('asset access stays inside the packaged renderer and trusted origin', () =>
 test('save requests accept only supported bounded exports without a renderer-supplied path', () => {
   const data = new TextEncoder().encode('project');
   assert.equal(savePayload({ name: 'project.json', data }).data.toString(), 'project');
+  assert.equal(savePayload({ name: 'lane.vccomponent', data }).extension, 'vccomponent');
   for (const name of ['../project.json', 'C:\\project.json', 'project.exe', '/project.json', 'bad\0.json']) {
     assert.throws(() => savePayload({ name, data }), name);
   }

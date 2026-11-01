@@ -109,10 +109,10 @@ def dxf(project):
     import ezdxf
     from ezdxf.enums import TextEntityAlignment
     p = validate(project)
-    issues = mapping_issues(p)
+    scene = drawing(p)
+    issues = scene["warnings"]
     if issues:
         raise ValueError("DXF blocked: " + " ".join(issues))
-    scene = drawing(p)
     document = ezdxf.new("R2018")
     document.header["$INSUNITS"] = 21 if p["units"] == "us_survey_foot" else 2
     document.header["$MEASUREMENT"] = 0
@@ -120,7 +120,7 @@ def dxf(project):
     document.header["$LUPREC"] = 8
     ms = document.modelspace()
     mapped = p["level_mappings"]
-    for name in sorted(set(mapped.values())):
+    for name in sorted({mapped[role] for role in scene["styles"]}):
         level = next(v for v in p["catalog"]["levels"] if v["name"] == name)
         dash = level["dash_ft"]
         line_style = "CONTINUOUS"

@@ -8,6 +8,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 from typicals import exports, model
+from typicals.components import template, library
 from typicals.drawing import drawing
 from typicals.workspace import import_report, mapping_issues, validate_catalog
 import vericivil_service
@@ -33,8 +34,9 @@ class GeometryTests(unittest.TestCase):
 
     def test_signed_outward_slopes_and_asymmetric_sections(self):
         p = model.starter()
-        p["left"].update(lane_width_ft=11, lane_slope_pct=3, shoulder_width_ft=4, shoulder_slope_pct=-5)
-        p["right"].update(lane_width_ft=14, lane_slope_pct=-1)
+        p["left"][0]["params"].update(width_ft=11, slope_pct=3)
+        p["left"][1]["params"].update(width_ft=4, slope_pct=-5)
+        p["right"][0]["params"].update(width_ft=14, slope_pct=-1)
         result = model.solve(p)["points"]
         self.assertEqual(result["left_lane"], [-11, .33])
         self.assertAlmostEqual(result["left_shoulder"][1], .13)
@@ -42,8 +44,8 @@ class GeometryTests(unittest.TestCase):
 
     def test_hv_cut_and_fill(self):
         p = model.starter()
-        p["left"].update(roadside_hv=4, roadside_height_ft=2)
-        p["right"].update(roadside_hv=3, roadside_height_ft=-2)
+        p["left"][2]["params"].update(hv=4, rise_ft=2)
+        p["right"][2]["params"].update(hv=3, rise_ft=-2)
         pts = model.solve(p)["points"]
         self.assertEqual(pts["left_toe"], [-26, 1.52])
         self.assertEqual(pts["right_toe"], [24, -2.48])
@@ -65,7 +67,7 @@ class GeometryTests(unittest.TestCase):
 
     def test_unpaved_shoulders_excluded_from_pavement_structure(self):
         p = model.starter()
-        p["left"]["shoulder_paved"] = False
+        p["left"][1]["paved"] = False
         layer = model.solve(p)["layers"][0]
         self.assertEqual(layer["top"][0], [-12, -.24])
         self.assertEqual(layer["top"][-1], [18, -.48])
@@ -73,7 +75,7 @@ class GeometryTests(unittest.TestCase):
     def test_edit_propagates_only_downstream_and_annotation_updates(self):
         p = model.starter()
         before = model.solve(p)
-        p["left"]["lane_width_ft"] = 11
+        p["left"][0]["params"]["width_ft"] = 11
         after = model.solve(p)
         self.assertEqual(after["points"]["left_shoulder"][0], -17)
         self.assertAlmostEqual(after["points"]["left_shoulder"][1], -.46, places=12)
@@ -87,7 +89,7 @@ class GeometryTests(unittest.TestCase):
         p = model.starter()
         p["constraints"]["locked_points"]["left_shoulder"] = [-18, -.48]
         model.solve(p)
-        p["left"]["lane_width_ft"] = 11
+        p["left"][0]["params"]["width_ft"] = 11
         original = deepcopy(p)
         with self.assertRaisesRegex(ValueError, "Constraint conflict: left_shoulder"):
             model.solve(p)
@@ -96,7 +98,7 @@ class GeometryTests(unittest.TestCase):
     def test_invalid_inputs(self):
         for value in (0, -1, math.inf, math.nan, True, "12"):
             p = model.starter()
-            p["left"]["lane_width_ft"] = value
+            p["left"][0]["params"]["width_ft"] = value
             with self.subTest(value=value), self.assertRaises(ValueError):
                 model.solve(p)
         p = model.starter()
@@ -115,7 +117,7 @@ class GeometryTests(unittest.TestCase):
         p["constraints"]["locked_points"]["CL"] = p["origin"][:]
         p["presentation"] = {"future_user_metadata": "preserved"}
         self.assertEqual(model.loads(model.dumps(p)), p)
-        p["version"] = 2
+        p["version"] = 99
         with self.assertRaisesRegex(ValueError, "version 1"):
             model.loads(json.dumps(p))
 
@@ -130,11 +132,11 @@ class GeometryTests(unittest.TestCase):
 
     def test_dot_drawing_hierarchy_uses_computed_dimensions_and_layer_anchors(self):
         p = model.starter()
-        p["left"]["lane_width_ft"] = 11
+        p["left"][0]["params"]["width_ft"] = 11
         result = drawing(p)
         texts = [v["text"] for v in result["primitives"] if v["kind"] == "text"]
         self.assertIn("TRAVEL", texts)
-        self.assertIn("SHLDR", texts)
+        self.assertIn("SHOULDER", texts)
         self.assertIn("17' PAVED", texts)
         self.assertIn("23'", texts)
         self.assertIn("35'", texts)
@@ -145,7 +147,7 @@ class GeometryTests(unittest.TestCase):
         self.assertLess(dimensions["dim_paved_left"]["y"], dimensions["dim_carriageway"]["y"])
         self.assertLess(dimensions["dim_carriageway"]["y"], dimensions["dim_total"]["y"])
         self.assertGreater(sum(v["kind"] == "polygon" for v in result["primitives"]), 10)
-        p["left"]["lane_slope_pct"] = 0
+        p["left"][0]["params"]["slope_pct"] = 0
         self.assertIn("0%", [v.get("text") for v in drawing(p)["primitives"]])
 
 
@@ -200,6 +202,162 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual([v["name"] for v in result["catalog"]["levels"]], ["TS_TEST_REFERENCE"])
             self.assertEqual(result["catalog"]["extraction_status"], "name-references-only")
             self.assertEqual((root / "x.dgnlib").read_bytes(), before)
+
+
+class ComponentTests(unittest.TestCase):
+    def test_v1_migration_preserves_geometry_locks_metadata_and_source(self):
+        content = (FIXTURE.parent / "typicals_v1.json").read_text()
+        legacy = json.loads(content)
+        legacy["constraints"]["locked_points"]["left_shoulder"] = [-18, -.48]
+        before = deepcopy(legacy)
+        p = model.loads(json.dumps(legacy))
+        self.assertEqual(legacy, before)
+        self.assertEqual(p["version"], 2)
+        self.assertEqual(p["metadata"], before["metadata"])
+        self.assertEqual(p["drafting"], before["drafting"])
+        self.assertEqual(p["constraints"], before["constraints"])
+        pts = model.solve(p)["points"]
+        for name, expected in {"CL": [0, 0], "left_lane": [-12, -.24], "right_lane": [12, -.24],
+                               "left_shoulder": [-18, -.48], "right_shoulder": [18, -.48],
+                               "left_toe": [-27, -3.48], "right_toe": [30, -3.48]}.items():
+            self.assertEqual(pts[name], expected)
+        self.assertEqual(model.loads(model.dumps(p)), p)
+
+    def test_additional_lanes_propagate_downstream_without_changing_other_side(self):
+        p = model.starter()
+        before = model.solve(p)
+        p["right"].insert(1, template("auxiliary_lane", "right_aux"))
+        result = model.solve(p)
+        self.assertEqual(result["points"]["right_aux"], [24, -.48])
+        self.assertEqual(result["points"]["right_shoulder"], [30, -.72])
+        self.assertEqual(result["points"]["right_toe"][0], 42)
+        self.assertAlmostEqual(result["points"]["right_toe"][1], -3.72, places=12)
+        self.assertEqual(result["points"]["left_toe"], before["points"]["left_toe"])
+        self.assertIn("30' PAVED", [v.get("text") for v in drawing(p)["primitives"]])
+
+    def test_ditch_fore_bottom_and_back_are_analytical_and_connected(self):
+        p = model.starter()
+        ditch = template("ditch", "drain")
+        ditch["params"].update(depth_ft=3, foreslope_hv=2, bottom_width_ft=4, backslope_hv=4, back_rise_ft=1)
+        p["right"] = [ditch, template("slope", "beyond_ditch")]
+        result = model.solve(p)
+        self.assertEqual(result["components"][-2]["paths"][0], [[0, 0], [6, -3], [10, -3], [14, -2]])
+        self.assertEqual(result["components"][-1]["a"], [14, -2])
+        p["left"] = [deepcopy(ditch)]
+        p["left"][0]["id"] = p["left"][0]["end_point"] = "left_drain"
+        self.assertEqual(model.solve(p)["points"]["left_drain"], [-14, -2])
+
+    def test_wall_grade_step_and_barrier_footprint_have_distinct_connections(self):
+        p = model.starter()
+        p["right"] = [template("retaining_wall", "wall"), template("lane", "upper_lane")]
+        points = model.solve(p)["points"]
+        self.assertEqual(points["wall"], [1, 4])
+        self.assertEqual(points["upper_lane"], [13, 3.76])
+        p["right"][0]["params"]["height_ft"] = -4
+        self.assertEqual(model.solve(p)["points"]["wall"], [1, -4])
+        p["right"] = [template("barrier", "rail"), template("lane", "beside_barrier")]
+        result = model.solve(p)
+        self.assertEqual(result["points"]["rail"], [2, 0])
+        self.assertEqual(result["points"]["beside_barrier"], [14, -.24])
+        self.assertEqual(max(pt[1] for pt in result["components"][-2]["paths"][0]), 3.5)
+
+    def test_curb_inch_conversion_and_sidewalk_connection(self):
+        p = model.starter()
+        p["right"] = [template("curb_gutter", "curb"), template("sidewalk", "walk")]
+        pts = model.solve(p)["points"]
+        self.assertEqual(pts["curb"], [2.5, .46])
+        self.assertAlmostEqual(pts["walk"][1], .36, places=12)
+        self.assertEqual(pts["walk"][0], 7.5)
+        p["units"] = "us_survey_foot"
+        self.assertAlmostEqual(model.solve(p)["points"]["curb"][1], -.04 + .1524 / (1200 / 3937), places=12)
+
+    def test_custom_profile_is_relative_outward_geometry(self):
+        p = model.starter()
+        custom = template("custom", "profile")
+        custom["points"] = [[0, 0], [2, -1], [5, 1]]
+        p["left"] = [custom, template("lane", "outside_profile")]
+        pts = model.solve(p)["points"]
+        self.assertEqual(pts["profile"], [-5, 1])
+        self.assertEqual(pts["outside_profile"], [-17, .76])
+        custom["points"] = [[0, 0], [2, -1], [1, 0]]
+        custom["paved"] = True
+        with self.assertRaisesRegex(ValueError, "increasing offsets"):
+            model.solve(p)
+        custom["paved"] = False
+        custom["points"] = [[0, 0], [-1, -1], [3, -1], [3, 1], [0, 0]]
+        self.assertEqual(model.solve(p)["points"]["profile"], [0, 0])
+
+    def test_pavement_runs_stop_at_median_barrier_and_wall_instead_of_bridging_gaps(self):
+        for kind in ("median", "barrier", "retaining_wall"):
+            p = model.starter()
+            p["right"].insert(1, template(kind, "separator"))
+            result = model.solve(p)
+            self.assertEqual(len(result["paved_runs"]), 2)
+            first, second = result["paved_runs"]
+            self.assertEqual(first[-1], [12, -.24])
+            self.assertGreater(second[0][0], 12)
+            for a, b in zip(result["layers"][0]["runs"], result["layers"][1]["runs"]):
+                self.assertEqual(a["bottom"], b["top"])
+            self.assertNotIn("18' PAVED", [v["text"] for v in drawing(p)["dimensions"] if v["a"][0] >= 0])
+
+    def test_reorder_remove_and_locked_endpoint_conflict(self):
+        p = model.starter()
+        p["right"][0], p["right"][1] = p["right"][1], p["right"][0]
+        pts = model.solve(p)["points"]
+        self.assertEqual(pts["right_shoulder"], [6, -.24])
+        self.assertEqual(pts["right_lane"], [18, -.48])
+        p["constraints"]["locked_points"]["right_lane"] = pts["right_lane"]
+        p["right"] = p["right"][:1]
+        with self.assertRaisesRegex(ValueError, "no longer exists"):
+            model.solve(p)
+
+    def test_invalid_ids_dimensions_and_version_do_not_produce_geometry(self):
+        for change in (lambda p: p["right"].append(deepcopy(p["left"][0])),
+                       lambda p: p["right"][0].update(end_point="CL"),
+                       lambda p: p.update(version=True),
+                       lambda p: p["right"].append({**template("barrier", "bad"), "params": {"width_ft": 1, "height_ft": 3, "top_width_ft": 2}})):
+            p = model.starter(); change(p)
+            with self.assertRaises(ValueError):
+                model.solve(p)
+
+    def test_all_library_components_draw_and_empty_section_has_no_fictitious_structure(self):
+        for item in library():
+            p = mapped_project()
+            p["right"] = [item["template"]]
+            with self.subTest(kind=item["kind"]):
+                scene = drawing(p)
+                self.assertTrue(scene["geometry"]["components"][-1]["paths"])
+                self.assertTrue(exports.svg(p).startswith(b"<svg"))
+        p = model.starter(); p["left"] = []; p["right"] = []
+        self.assertEqual(model.solve(p)["paved_runs"], [])
+        self.assertNotIn("STRUCTURE", [v.get("text") for v in drawing(p)["primitives"]])
+
+    def test_component_specific_level_is_exported_and_missing_used_mapping_blocks(self):
+        import ezdxf
+        p = mapped_project()
+        p["right"].insert(1, template("barrier", "concrete"))
+        new_level = {**p["catalog"]["levels"][0], "name": "TS_TEST_BARRIER", "rgb": "#cc8833"}
+        p["catalog"]["levels"].append(new_level)
+        p["level_mappings"]["component:concrete"] = "TS_TEST_BARRIER"
+        content, _ = exports.dxf(p)
+        doc = ezdxf.read(io.StringIO(content.decode()))
+        self.assertGreater(len(doc.modelspace().query('LINE[layer=="TS_TEST_BARRIER"]')), 0)
+        p["level_mappings"]["component:concrete"] = "TS_MISSING"
+        with self.assertRaisesRegex(ValueError, "TS_MISSING"):
+            exports.dxf(p)
+
+    def test_component_preset_roundtrip_and_malformed_presets_are_rejected(self):
+        from typicals.service import dispatch
+        c = template("ditch", "reusable_drain")
+        c["name"] = "North roadside ditch"
+        c["params"]["bottom_width_ft"] = 4.5
+        saved = dispatch("component_save", json.dumps({"component": c}))
+        self.assertEqual(dispatch("component_load", json.dumps(saved)), c)
+        for preset in ({"format": "vericivil.typicals.component", "version": 99, "component": c},
+                       {"format": "vericivil.typicals.component", "version": True, "component": c},
+                       {"format": "vericivil.typicals.component", "version": 1, "component": {**c, "params": {}}}):
+            with self.assertRaises(ValueError):
+                dispatch("component_load", json.dumps({"content": json.dumps(preset)}))
 
 
 class ExportTests(unittest.TestCase):

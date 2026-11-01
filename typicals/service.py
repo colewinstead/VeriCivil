@@ -6,6 +6,7 @@ from typicals import ENGINE_VERSION
 from typicals import model, exports
 from typicals.drawing import drawing
 from typicals.workspace import import_report
+from typicals.components import library
 
 
 def application_manifest():
@@ -16,6 +17,25 @@ def dispatch(operation, payload_json="{}"):
     payload = json.loads(payload_json)
     if operation == "starter":
         return model.starter()
+    if operation == "component_library":
+        return library()
+    if operation in ("component_save", "component_load"):
+        if operation == "component_load":
+            content = payload["content"]
+            if not isinstance(content, str) or len(content.encode("utf-8")) > 256 * 1024:
+                raise ValueError("Component presets must be UTF-8 JSON under 256 KiB.")
+            preset = json.loads(content)
+            if not isinstance(preset, dict) or preset.get("format") != "vericivil.typicals.component" or type(preset.get("version")) is not int or preset.get("version") != 1:
+                raise ValueError("Select a version 1 VeriCivil Typicals component preset.")
+            component = preset["component"]
+        else:
+            component = payload["component"]
+        project = model.starter()
+        project["left"], project["right"] = [component], []
+        model.solve(project)
+        if operation == "component_load":
+            return component
+        return {"content": json.dumps({"format": "vericivil.typicals.component", "version": 1, "component": component}, indent=2, allow_nan=False) + "\n"}
     if operation == "load":
         return model.loads(payload["content"])
     if operation == "import_levels":
