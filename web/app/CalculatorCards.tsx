@@ -2,6 +2,10 @@
 import calculators from "./generated/calculators.json";
 
 const calculatorImages: Record<string, { src: string; alt: string }> = {
+  typicals: {
+    src: "/showcase/typicals-editor.webp",
+    alt: "VeriCivil Typicals editor with editable roadway components and an engineering section",
+  },
   superelevation: {
     src: "/showcase/calculator-ui.png",
     alt: "Superelevation Calculator browser workspace",
@@ -22,11 +26,11 @@ export default function CalculatorCards() {
             <b>{calculator.access}</b>
           </div>
           <div className="calculator-card-image">
-            <img src={calculatorImages[calculator.id].src} alt={calculatorImages[calculator.id].alt} />
+            <img src={calculatorImages[calculator.id].src} alt={calculatorImages[calculator.id].alt} loading="lazy" />
           </div>
           <h3>{calculator.short_title}</h3>
           <p>{calculator.description}</p>
-          <div className="calculator-card-action"><span>{calculator.id === "superelevation" ? "Open professional workspace" : "Open free quantity tool"}</span><b>↗</b></div>
+          <div className="calculator-card-action"><span>{calculator.id === "typicals" ? "Open section designer" : calculator.id === "superelevation" ? "Open professional workspace" : "Open free quantity tool"}</span><b>↗</b></div>
         </a>
       ))}
     </div>

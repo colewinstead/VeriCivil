@@ -6,6 +6,7 @@ const MAX_PROJECT_BYTES = 64 * 1024 * 1024;
 function projectContent(content) {
   if (typeof content !== 'string' || Buffer.byteLength(content) > MAX_PROJECT_BYTES) throw new Error('Project exceeds 64 MiB.');
   const project = JSON.parse(content);
+  if (project?.format === 'vericivil.typicals' && [1, 2].includes(project.version) && project.origin && project.left && project.right && Array.isArray(project.layers)) return content;
   if (!project || typeof project !== 'object' || Array.isArray(project) || !Number.isInteger(project.version) || !project.vars || typeof project.vars !== 'object' || Array.isArray(project.vars)) throw new Error('Select a valid saved VeriCivil project.');
   return content;
 }

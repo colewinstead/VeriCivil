@@ -29,7 +29,8 @@ async function start() {
   try { recovery = await projects.recovery(); }
   catch (error) { recovery = { name: 'unreadable recovery snapshot', content: '' }; diagnostics.record('recovery_read_failed', error.code); dialog.showErrorBox('Recovery could not be read', 'The recovery file could not be read. It will be preserved until you explicitly discard it. Your saved projects are unchanged.'); }
   let recoveryPending = !!recovery;
-  let window, currentFile, opening, rendererReady = false, dirty = false, busy = false, closingForUpdate = false;
+  let activeTool = recovery?.content && JSON.parse(recovery.content).format === 'vericivil.typicals' ? 'typicals' : 'superelevation';
+  let window, currentFile, opening, rendererReady = false, dirty = false, busy = false, closingForUpdate = false, switchingTools = false;
   const send = action => window?.webContents.send('desktop:menu', action);
   const showError = (message, error) => { diagnostics.record('file_operation_failed', error?.code); if (window && !window.isDestroyed()) void dialog.showMessageBox(window, { type: 'error', message, detail: error?.message || 'Please try again.' }); };
   protocol.handle('vericivil', request => {
@@ -50,11 +51,12 @@ async function start() {
     window.webContents.setWindowOpenHandler(({ url }) => { if (websiteUrl(url)) void shell.openExternal(url); return { action: 'deny' }; });
     window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(APP_URL)) event.preventDefault(); });
     window.webContents.on('will-prevent-unload', event => {
+      if (switchingTools) { event.preventDefault(); return; }
       if (dialog.showMessageBoxSync(window, { type: 'question', buttons: ['Keep working', 'Discard changes'], defaultId: 0, cancelId: 0,
         message: 'Close this unsaved project?', detail: 'Save your project before closing to keep your changes.' }) === 1) event.preventDefault();
     });
     window.webContents.on('render-process-gone', (_event, details) => { diagnostics.record('renderer_gone', details.reason); dirty = true; showError('The workspace stopped. Restart VeriCivil to recover your work.'); });
-    await window.loadURL(APP_URL);
+    await window.loadURL(APP_URL + (activeTool === 'typicals' ? '?tool=typicals#typicals' : ''));
     window.show();
     return window;
   };
@@ -138,6 +140,19 @@ async function start() {
   handle('desktop:update-state', () => updates.state);
   handle('desktop:update-action', action => updates.action(action));
   handle('desktop:downloads', () => shell.openExternal('https://vericivil.com/downloads'));
+  const switchTool = async tool => {
+    if (tool === activeTool) return;
+    if (busy || opening || recoveryPending) throw new Error('Finish the current operation or recovery before switching tools.');
+    if (dirty && dialog.showMessageBoxSync(window, { type: 'question', buttons: ['Keep working', 'Discard changes'], defaultId: 0, cancelId: 0, message: 'Switch tools and discard unsaved changes?' }) !== 1) return;
+    await projects.saveRecovery(null);
+    currentFile = null;
+    dirty = false;
+    rendererReady = false;
+    activeTool = tool;
+    switchingTools = true;
+    try { await window.loadURL(APP_URL + (tool === 'typicals' ? '?tool=typicals#typicals' : '')); }
+    finally { switchingTools = false; }
+  };
   const buildMenu = () => Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
@@ -149,6 +164,7 @@ async function start() {
       { type: 'separator' }, { role: process.platform === 'darwin' ? 'close' : 'quit' },
     ] },
     { role: 'editMenu' },
+    { label: 'Tools', submenu: ['superelevation', 'typicals'].map(tool => ({ label: tool === 'typicals' ? 'VeriCivil Typicals' : 'Superelevation', click: () => void switchTool(tool).catch(error => showError('Could not switch tools', error)) })) },
     { label: 'View', submenu: [{ role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
     { role: 'windowMenu' },
     { role: 'help', submenu: [

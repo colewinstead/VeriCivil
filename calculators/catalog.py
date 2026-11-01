@@ -7,6 +7,7 @@ from typing import Any
 
 from app_info import CALCULATION_ENGINE_VERSION
 from calculators.crushed_stone_base.engine import ENGINE_VERSION as STONE_ENGINE_VERSION
+from typicals import ENGINE_VERSION as TYPICALS_ENGINE_VERSION
 
 
 _SUPER_MODULES = [
@@ -43,6 +44,18 @@ _STONE_MODULES = [
 
 
 CALCULATORS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "typicals", "slug": "typicals", "title": "VeriCivil Typicals",
+        "short_title": "Typicals", "description": "Assemble roadway sections with editable lanes, shoulders, ditches, barriers, walls and custom profiles. Export engineering sheets and mapped CAD.",
+        "category": "Roadway Drafting", "status": "available", "access": "Free preview",
+        "engine_version": TYPICALS_ENGINE_VERSION, "route": "/calculators/typicals",
+        "runtime": {
+            "modules": ["vericivil_service.py", "typicals/__init__.py", "typicals/components.py", "typicals/model.py", "typicals/workspace.py",
+                        "typicals/drawing.py", "typicals/exports.py", "typicals/service.py"],
+            "pyodide_packages": ["micropip", "numpy", "fonttools", "Pillow"],
+            "micropip_packages": ["reportlab==4.4.7", "ezdxf==1.4.4"],
+        },
+    },
     {
         "id": "superelevation",
         "slug": "superelevation",

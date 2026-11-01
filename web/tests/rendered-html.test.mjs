@@ -16,6 +16,21 @@ async function render(path = "/") {
   );
 }
 
+test("typicals is discoverable and its section workspace renders without changing existing routes", async () => {
+  const response = await render("/calculators/typicals");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /VeriCivil Typicals/);
+  assert.match(html, /Engineering CAD/);
+  assert.match(html, /DXF/);
+  const catalog = await render("/calculators");
+  assert.equal(catalog.status, 200);
+  assert.match(await catalog.text(), /\/calculators\/typicals/);
+  const cards = await readFile(new URL("../app/CalculatorCards.tsx", import.meta.url), "utf8");
+  assert.match(cards, /typicals-editor\.webp/);
+  assert.doesNotMatch(cards, /Editable section geometry/);
+});
+
 test("desktop downloads show trusted release files and unsigned status", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, options) => {

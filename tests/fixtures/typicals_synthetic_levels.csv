@@ -1,0 +1,4 @@
+Name,Description,ByLevelColor,ByLevelWeight,ByLevelStyle,RGB,LineWeightMM,DashFT,Plot
+TS_TEST_GEOMETRY,Synthetic fixture only - not an MDOT definition,3,2,0,#00aa66,0.35,[],1
+TS_TEST_ANNOTATION,Synthetic annotation fixture,7,0,0,#ddaa33,0.18,[],1
+TS_TEST_GROUND,Synthetic dashed fixture,8,1,2,#778899,0.25,"[1,-0.5]",1

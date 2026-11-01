@@ -6,6 +6,10 @@ from typing import Any
 
 
 def _service(calculator: str):
+    if calculator == "typicals":
+        from typicals import service
+
+        return service
     if calculator == "superelevation":
         import super_service
 

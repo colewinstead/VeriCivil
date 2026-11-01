@@ -58,6 +58,11 @@ for (const requirement of bundle.micropip_packages) {
 bundle.pyodide_packages = [...packages];
 bundle.micropip_packages = wheels;
 bundle.offline = true;
-await writeFile(new URL('manifest.json', runtime), JSON.stringify({ calculators: { superelevation: bundle } }, null, 2));
+const typicals = manifest.calculators.typicals;
+// Both workspaces use the same pinned export wheels, already verified above.
+typicals.pyodide_packages = bundle.pyodide_packages;
+typicals.micropip_packages = wheels;
+typicals.offline = true;
+await writeFile(new URL('manifest.json', runtime), JSON.stringify({ calculators: { superelevation: bundle, typicals } }, null, 2));
 await writeFile(new URL('checksums.json', runtime), JSON.stringify(checksums.sort((a, b) => a.file.localeCompare(b.file)), null, 2));
 console.log(`Offline runtime ready: ${packages.size} Pyodide packages and ${wheels.length} pinned export wheels.`);
