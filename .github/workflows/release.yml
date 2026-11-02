@@ -179,7 +179,7 @@ jobs:
       - name: Build unsigned installable desktop app
         run: node web/desktop/installer.mjs
 
-      - name: Stage unsigned installer downloads without update feeds
+      - name: Stage unsigned installers and Windows update feed
         run: python scripts/stage_desktop_installers.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
 
       - name: Build the next version for Windows upgrade acceptance
@@ -236,7 +236,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Superelevation Calculator v$RELEASE_VERSION" \
-              --notes "Code signing policy: https://vericivil.com/code-signing. SignPath approval is pending. Automated desktop downloads are unsigned evaluation builds; automatic update installation is disabled." \
+              --notes "Code signing policy: https://vericivil.com/code-signing. SignPath approval is pending. Automated desktop downloads are unsigned evaluation builds. Windows installers support user-approved updates without publisher-signature verification; unsigned Mac and portable builds require manual updates." \
               --generate-notes \
               --latest
           fi

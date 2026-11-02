@@ -6,7 +6,7 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const { Projects, projectContent } = require('../projects.cjs');
 const { createDiagnostics } = require('../diagnostics.cjs');
-const { Updates, availableVersion, closeForUpdate } = require('../updates.cjs');
+const { Updates, availableVersion, closeForUpdate, canInstallUpdates } = require('../updates.cjs');
 const project = JSON.stringify({ version: 5, vars: { project_name: 'Private project' }, last_results: { retained: 42 } });
 
 test('recovery survives restart, ordered clears win, and project reads are bounded', async t => {
@@ -73,10 +73,25 @@ function updaterFixture(enabled = true) {
   return { updates, updater, calls, setDirty: value => { dirty = value; }, setClosed: value => { closed = value; } };
 }
 
-test('updates require signed build, user download consent, and a saved workspace before restart', async () => {
-  const unsigned = updaterFixture(false);
-  for (const action of ['check', 'download', 'install']) await unsigned.updates.action(action);
-  assert.deepEqual(unsigned.calls, []);
+test('unsigned Windows installers enable updates while Mac and portable builds remain manual', async () => {
+  const config = { signedUpdates: false, updatesEnabled: true };
+  assert.equal(canInstallUpdates(config, 'win32'), true);
+  assert.equal(canInstallUpdates(config, 'darwin'), false);
+  assert.equal(canInstallUpdates({ signedUpdates: false }, 'win32'), false);
+  assert.equal(canInstallUpdates({ signedUpdates: true }, 'win32'), true);
+  assert.equal(canInstallUpdates({ signedUpdates: true }, 'darwin'), true);
+  const f = updaterFixture(canInstallUpdates(config, 'win32'));
+  await f.updates.action('check');
+  assert.deepEqual(f.calls, ['check']);
+  await f.updates.action('download');
+  await f.updates.action('install');
+  assert.deepEqual(f.calls, ['check', 'download', 'install']);
+});
+
+test('enabled installers require user download consent and a saved workspace before restart', async () => {
+  const manual = updaterFixture(false);
+  for (const action of ['check', 'download', 'install']) await manual.updates.action(action);
+  assert.deepEqual(manual.calls, []);
   const f = updaterFixture();
   assert.equal(f.updater.autoDownload, false);
   assert.equal(f.updater.autoInstallOnAppQuit, false);
@@ -112,7 +127,7 @@ test('offline/invalid-signature update failures stay recoverable and do not inst
   assert.deepEqual(f.calls, []);
 });
 
-test('unsigned apps can discover new releases but cannot download or install them', async () => {
+test('manual-only Mac and portable apps discover releases without downloading or installing', async () => {
   assert.equal(availableVersion({ tag_name: 'v1.10.0' }, '1.9.9'), '1.10.0');
   assert.equal(availableVersion({ tag_name: 'v1.7.0' }, '1.7.0'), null);
   assert.equal(availableVersion({ tag_name: 'v1.6.0' }, '1.7.0'), null);

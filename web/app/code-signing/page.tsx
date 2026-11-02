@@ -13,9 +13,9 @@ export default function CodeSigningPolicy() {
   return <main className="platform-shell">
     <SiteHeader />
     <article className="legal-document">
-      <header><p>VeriCivil Superelevation desktop</p><h1>Code signing policy</h1><span>Updated October 28, 2026</span></header>
+      <header><p>VeriCivil Superelevation desktop</p><h1>Code signing policy</h1><span>Updated November 2, 2026</span></header>
       <section><h2>Current status: approval pending</h2>
-        <p>We are applying to the SignPath Foundation for Windows code signing. Approval is pending; SignPath signing is not active. Current automated Windows and Mac releases are unsigned evaluation builds, and automatic installation of updates is disabled.</p>
+        <p>We are applying to the SignPath Foundation for Windows code signing. Approval is pending; SignPath signing is not active. Current automated Windows and Mac releases are unsigned evaluation builds. Windows installers support update downloads and restarts with your approval; unsigned Mac and portable builds require manual updates. Unsigned Windows updates use HTTPS and checksums without publisher-signature verification.</p>
         <p>If approved and activated, Windows signing will be described as: Free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>. This is planned attribution, not a claim that current downloads are signed or endorsed by SignPath.</p>
         <p>Mac signing and notarization require a separate Apple Developer identity and are not configured. Check the status shown beside each <Link href="/downloads">desktop download</Link>.</p>
       </section>

@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell
 const { saveAtomically } = require('./files.cjs');
 const { Projects, projectContent } = require('./projects.cjs');
 const { createDiagnostics } = require('./diagnostics.cjs');
-const { Updates, availableVersion, closeForUpdate } = require('./updates.cjs');
+const { Updates, availableVersion, closeForUpdate, canInstallUpdates } = require('./updates.cjs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -115,8 +115,9 @@ async function start() {
   handle('desktop:runtime-failure', () => diagnostics.record('worker_failed'));
   const { autoUpdater } = require('electron-updater');
   const config = require('./desktop-config.json');
-  if (config.signedUpdates) autoUpdater.channel = config.updateChannel;
-  const updates = new Updates(autoUpdater, { enabled: app.isPackaged && config.signedUpdates === true, version: app.getVersion(), isDirty: () => dirty || busy || recoveryPending,
+  if (config.updateChannel) autoUpdater.channel = config.updateChannel;
+  if (!config.signedUpdates) autoUpdater.disableDifferentialDownload = true;
+  const updates = new Updates(autoUpdater, { enabled: app.isPackaged && canInstallUpdates(config, process.platform), version: app.getVersion(), isDirty: () => dirty || busy || recoveryPending,
     discover: async () => {
       const response = await fetch('https://api.github.com/repos/colewinstead/VeriCivil/releases/latest', { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'VeriCivil-desktop' }, signal: AbortSignal.timeout(10000) });
       if (!response.ok) throw new Error('Release check unavailable.');

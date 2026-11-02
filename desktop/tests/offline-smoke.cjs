@@ -142,7 +142,7 @@ original.start().then(async (window) => {
     await new Promise(resolve => setTimeout(resolve, 20));
   }
   assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), true);
-  assert.match(await window.webContents.executeJavaScript("document.querySelector('dialog').textContent"), /signed production build/);
+  assert.match(await window.webContents.executeJavaScript("document.querySelector('dialog').textContent"), /manual updates/);
   await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Close').click()");
   assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), false);
   await window.webContents.executeJavaScript(`(() => {

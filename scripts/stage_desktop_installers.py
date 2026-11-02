@@ -1,6 +1,8 @@
-"""Stage only unsigned installer binaries and checksums for the preview release."""
+"""Stage unsigned installers, checksums, and the Windows update feed."""
 import argparse
+import base64
 import hashlib
+import json
 import shutil
 from pathlib import Path
 
@@ -23,6 +25,19 @@ def stage_installers(root: Path, platform: str, arch: str, version: str) -> list
             lines.append(f"{hashlib.file_digest(data, 'sha256').hexdigest()}  {destination.name}\n")
         staged.append(destination)
     (output / f"SHA256SUMS-installers-{platform}-{arch}.txt").write_text("".join(lines), encoding="utf-8")
+    if platform == "win32":
+        installer = staged[0]
+        with installer.open("rb") as data:
+            checksum = base64.b64encode(hashlib.file_digest(data, "sha512").digest()).decode("ascii")
+        feed = output / f"latest-unsigned-{platform}-{arch}.yml"
+        # JSON is valid YAML; derive the feed from this exact version's staged installer.
+        feed.write_text(json.dumps({
+            "version": version,
+            "files": [{"url": installer.name, "sha512": checksum, "size": installer.stat().st_size}],
+            "path": installer.name,
+            "sha512": checksum,
+        }), encoding="utf-8")
+        staged.append(feed)
     return staged
 
 

@@ -2,7 +2,7 @@
 
 This desktop entry point reuses `web/app/CalculatorApp.tsx` and the same Python modules as the browser and Tkinter editions. It bundles Pyodide, its nine required packages, and the pinned ReportLab/ezdxf wheels. Engineering processing runs locally without an internet connection. Formulas, criteria, project schemas, and export implementations are unchanged.
 
-Current desktop tools are free without account sign-in or device licensing. The desktop app does not bill, collect analytics, or retain LandXML remotely. It stores recovery snapshots, recent-project paths, and bounded support logs locally. Unsigned builds can check for newer releases and open the download page, but cannot install updates automatically. Signed builds support verified updates with an explicit download/restart flow.
+Current desktop tools are free without account sign-in or device licensing. The desktop app does not bill, collect analytics, or retain LandXML remotely. It stores recovery snapshots, recent-project paths, and bounded support logs locally. Unsigned Windows installers support updates with explicit download/restart approval. Unsigned Mac and portable builds check for releases and require manual downloads. Signed builds retain publisher verification.
 
 See the [production desktop readiness plan](../docs/desktop-production-readiness.md) for implementation status and remaining release acceptance.
 
@@ -40,7 +40,7 @@ The profile is `%APPDATA%/VeriCivil Superelevation` on Windows and `~/Library/Ap
 
 The public [Code signing policy](https://vericivil.com/code-signing) records pending SignPath approval and current unsigned status. See [SignPath onboarding](../docs/signpath-onboarding.md) for the protected **Windows SignPath Review** workflow, required configuration after approval, and remaining Electron/NSIS production gates. Its outputs are review artifacts only, not installable signed production releases or update feeds.
 
-Signing identities are not currently configured. PR/main builds remain unsigned, and never publish automatic-update feeds. Production packaging fails when required signing credentials are absent. Keep secrets in the protected GitHub environment `desktop-production`, restricted to `main`, with release approval:
+Signing identities are not currently configured. PR/main builds remain unsigned. Main releases publish a separate `latest-unsigned-win32-x64.yml` feed for Windows installers; PR builds never publish releases. Unsigned Windows updates use HTTPS and SHA-512 checksums without publisher-signature verification, so trust depends on the GitHub release account and delivery service. Signed feeds stay separate and retain publisher verification. Existing manual-only Windows builds need one manual upgrade to gain this capability. Production packaging fails when required signing credentials are absent. Keep secrets in the protected GitHub environment `desktop-production`, restricted to `main`, with release approval:
 
 The environment is configured to allow only the `main` branch and requires approval by the repository owner. Signing secrets still need to be supplied.
 

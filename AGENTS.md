@@ -29,7 +29,7 @@
 - Run `python3 -m unittest -v` on macOS/Linux or `python -m unittest -v` on Windows.
 - From `web`, run the TypeScript check, lint, production build tests, and Pyodide parity tests before browser releases.
 - Version-bumped PRs automatically build and verify Electron previews for Apple Silicon, Intel Mac, and Windows x64. PR builds upload Actions artifacts; successful `main` release jobs attach the desktop DMGs/portable Windows ZIP and checksums alongside the browser archive. Never publish a public release from a PR run.
-- Legacy Tkinter EXE/DMG workflows remain manual-only rollback tools. Current Electron tools are free. Unsigned builds check for releases but cannot install updates; production updater artifacts require signing/notarization through the protected manual workflow. Keep unsigned status explicit in release documentation.
+- Legacy Tkinter EXE/DMG workflows remain manual-only rollback tools. Current Electron tools are free. Unsigned Windows installers support user-approved updates on a separate unsigned channel; unsigned macOS and portable builds require manual updates. Signed production updater artifacts require signing/notarization through the protected manual workflow. Keep unsigned status explicit in release documentation.
 - Preserve signing keys outside the repository. Automated GitHub executables are unsigned; signed pilot releases use the private Windows signing workflow and `scripts/verify_windows_release.ps1`.
 
 ## Website publishing
