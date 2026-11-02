@@ -22,11 +22,11 @@ export default async function Downloads() {
           <p>{item.unsigned ? "Unsigned evaluation build" : "Signed desktop release"} · {item.portable ? "Portable ZIP" : item.filename.endsWith(".exe") ? "Windows installer" : "Mac disk image"}</p>
           <a className="marketing-button primary-action" href={item.url}>Download for {item.label}</a>
           <p>{item.portable ? "Extract the entire ZIP before opening the application." : item.filename.endsWith(".exe") ? "Run the installer, then open VeriCivil from the Start menu." : "Open the disk image and copy the app to Applications."}</p>
-          {item.unsigned && <p>Signing is not configured for this build. Automatic installation of updates is disabled.</p>}
+          {item.unsigned && <p>Signing is not configured for this build. Windows installers support updates with your approval; unsigned Mac and portable builds require manual updates.</p>}
         </article>)}
       </div>
       <a className="marketing-button secondary-action" href={DESKTOP_RELEASES}>All release files, notes, and checksums</a>
-      <section className="downloads-notes"><h2>Code signing policy</h2><p>SignPath Foundation approval is pending. Current automated desktop releases are unsigned; automatic installation of updates remains disabled. Read the <Link href="/code-signing">Code signing policy</Link> for signing status, release approval, and desktop privacy details.</p></section>
+      <section className="downloads-notes"><h2>Code signing policy</h2><p>SignPath Foundation approval is pending. Current automated desktop releases are unsigned. Windows installers support user-approved updates; unsigned Mac and portable builds require manual updates. Read the <Link href="/code-signing">Code signing policy</Link> for signing status, release approval, and desktop privacy details.</p></section>
       <section className="downloads-notes"><h2>Before you start</h2><p>Keep a separate backup of your project files. Review the release notes and independently verify engineering criteria, inputs, calculations, and deliverables.</p><p>Updates and downloads need an internet connection. Engineering calculations run locally. The app keeps local recovery snapshots and support logs; diagnostic reports are exported only when you choose.</p><p>Prefer the browser? <Link href="/calculators/superelevation">Open Superelevation online</Link>.</p></section>
     </section>
     <SiteFooter />

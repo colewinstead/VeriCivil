@@ -1,5 +1,9 @@
 const { EventEmitter } = require('node:events');
 
+function canInstallUpdates(config, platform) {
+  return config.signedUpdates === true || (platform === 'win32' && config.updatesEnabled === true);
+}
+
 function availableVersion(release, currentVersion) {
   if (!release || release.draft || release.prerelease || !/^v\d+\.\d+\.\d+$/.test(release.tag_name) || !/^\d+\.\d+\.\d+$/.test(currentVersion)) throw new Error('Invalid release version.');
   const next = release.tag_name.slice(1).split('.').map(Number), current = currentVersion.split('.').map(Number);
@@ -29,7 +33,7 @@ class Updates extends EventEmitter {
     this.record = record;
     this.enabled = enabled;
     this.discover = discover;
-    this.state = { status: enabled ? 'idle' : 'disabled', version, message: enabled ? 'Updates are checked automatically.' : 'Automatic installation requires a signed production build. Get the latest download at vericivil.com/downloads.' };
+    this.state = { status: enabled ? 'idle' : 'disabled', version, message: enabled ? 'Updates are checked automatically. Download and restart require your approval.' : 'This Mac or portable build requires manual updates. Get the latest download at vericivil.com/downloads.' };
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
     updater.allowPrerelease = false;
@@ -50,7 +54,7 @@ class Updates extends EventEmitter {
         this.publish({ status: 'checking', message: 'Checking for a newer desktop download…' });
         try {
           const nextVersion = await this.discover();
-          this.publish({ status: nextVersion ? 'manual' : 'disabled', nextVersion: nextVersion || '', message: nextVersion ? `Version ${nextVersion} is available. This unsigned build requires a manual download.` : 'No newer desktop release was found. Automatic installation requires a signed production build.' });
+          this.publish({ status: nextVersion ? 'manual' : 'disabled', nextVersion: nextVersion || '', message: nextVersion ? `Version ${nextVersion} is available. This Mac or portable build requires a manual download.` : 'No newer desktop release was found. This Mac or portable build requires manual updates.' });
         } catch { this.publish({ status: 'disabled', message: 'Could not check for updates. You can keep working offline or visit vericivil.com/downloads.' }); }
       }
       return this.state;
@@ -78,4 +82,4 @@ class Updates extends EventEmitter {
     return this.state;
   }
 }
-module.exports = { Updates, availableVersion, closeForUpdate };
+module.exports = { Updates, availableVersion, closeForUpdate, canInstallUpdates };

@@ -1,4 +1,5 @@
 import hashlib
+import base64
 import json
 import plistlib
 import subprocess
@@ -15,7 +16,7 @@ from scripts.stage_desktop_installers import stage_installers
 
 
 class ElectronReleaseTests(unittest.TestCase):
-    def test_installer_staging_excludes_update_feeds_and_stale_versions(self):
+    def test_installer_staging_builds_unsigned_feed_from_current_bytes_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "desktop/installers/win32-x64"
@@ -26,9 +27,26 @@ class ElectronReleaseTests(unittest.TestCase):
             staged = stage_installers(root, "win32", "x64", "1.7.0")
             self.assertEqual(staged[0].read_bytes(), installer.read_bytes())
             self.assertFalse((root / "desktop/release-assets/latest-win32-x64.yml").exists())
+            feed = json.loads(staged[1].read_text())
+            self.assertEqual(staged[1].name, "latest-unsigned-win32-x64.yml")
+            self.assertEqual(feed["version"], "1.7.0")
+            self.assertEqual(feed["files"], [{"url": installer.name, "sha512": base64.b64encode(hashlib.sha512(installer.read_bytes()).digest()).decode("ascii"), "size": installer.stat().st_size}])
+            self.assertEqual(feed["path"], installer.name)
+            self.assertEqual(feed["sha512"], feed["files"][0]["sha512"])
             self.assertIn(hashlib.sha256(installer.read_bytes()).hexdigest(), (root / "desktop/release-assets/SHA256SUMS-installers-win32-x64.txt").read_text())
             with self.assertRaisesRegex(ValueError, "missing"):
                 stage_installers(root, "win32", "x64", "1.7.1")
+
+    def test_unsigned_mac_staging_has_no_update_feed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "desktop/installers/darwin-arm64"
+            source.mkdir(parents=True)
+            for extension in ("dmg", "zip"):
+                (source / f"VeriCivil-Superelevation-1.7.2-mac-arm64-unsigned.{extension}").write_bytes(b"mac")
+            staged = stage_installers(root, "darwin", "arm64", "1.7.2")
+            self.assertEqual(len(staged), 2)
+            self.assertEqual(list((root / "desktop/release-assets").glob("*.yml")), [])
 
     def test_native_icons_have_multiple_resolutions_and_transparency(self):
         icons = Path(__file__).resolve().parent / "desktop/icons"

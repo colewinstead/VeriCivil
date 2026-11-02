@@ -30,7 +30,7 @@ test("desktop downloads show trusted release files and unsigned status", async (
     assert.match(html, /Windows installer/);
     assert.match(html, /1.7.0-win-x64-unsigned.exe/);
     assert.match(html, /Current desktop tools are free/);
-    assert.match(html, /Automatic installation of updates is disabled/);
+    assert.match(html, /Windows installers support updates with your approval/);
     assert.match(html, /href="\/code-signing"/);
   } finally { globalThis.fetch = originalFetch; }
 });

@@ -15,7 +15,8 @@ if (signed) {
 } else process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
 const config = JSON.parse(await readFile(new URL('../../desktop/electron-builder.json', import.meta.url)));
 const { version: electronVersion } = JSON.parse(await readFile(new URL('../node_modules/electron/package.json', import.meta.url)));
-const channel = `latest-${platform}-${arch}`;
+const updatesEnabled = signed || platform === 'win32';
+const channel = `latest-${signed ? '' : 'unsigned-'}${platform}-${arch}`;
 config.electronVersion = electronVersion;
 config.forceCodeSigning = signed;
 config.artifactName = `VeriCivil-Superelevation-\${version}-\${os}-\${arch}${signed ? '' : '-unsigned'}.\${ext}`;
@@ -27,12 +28,15 @@ if (upgradeTest) {
   config.extraMetadata = { version: parts.join('.') };
   config.directories.output = 'installer-tests';
 }
-if (signed) {
+if (updatesEnabled) {
   config.publish = { provider: 'github', owner: 'colewinstead', repo: 'VeriCivil', channel };
-  if (platform === 'win32') config.win.publisherName = process.env.VERICIVIL_WINDOWS_PUBLISHER;
-  else config.mac.notarize = true;
-} else config.mac.notarize = false;
-await writeFile(new URL('../../desktop/app/desktop-config.json', import.meta.url), JSON.stringify({ signedUpdates: signed, updateChannel: channel }));
+}
+if (platform === 'win32') {
+  config.win.verifyUpdateCodeSignature = signed;
+  if (signed) config.win.publisherName = process.env.VERICIVIL_WINDOWS_PUBLISHER;
+}
+config.mac.notarize = signed;
+await writeFile(new URL('../../desktop/app/desktop-config.json', import.meta.url), JSON.stringify({ signedUpdates: signed, updatesEnabled, updateChannel: channel }));
 try {
   const targets = (platform === 'win32' ? Platform.WINDOWS : Platform.MAC).createTarget(undefined, arch === 'arm64' ? Arch.arm64 : Arch.x64);
   const artifacts = await build({ projectDir: fileURLToPath(new URL('../../desktop/', import.meta.url)), targets, config, publish: 'never' });
