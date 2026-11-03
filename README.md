@@ -60,7 +60,7 @@ Use the [live VeriCivil browser calculator](https://vericivil.com), the current 
 
 Open [vericivil.com](https://vericivil.com) to use the calculator in your browser. No local Python installation is required to use the live app.
 
-To run the browser app from source, install Python 3.11+ and Node.js 22.13+. Python stages the shared engine files; the browser installs its own calculation packages through Pyodide. Installing `requirements-lock.txt` is only needed for native Python calculations and tests.
+To run or build from source, use Python 3.11+ and a standalone Node.js installation, version 22.13 or newer. Python stages the shared engine files; the browser and Electron app use Pyodide for calculations. Installing `requirements-lock.txt` is only needed for native Python calculations and tests.
 
 Clone the repository once if you do not already have it, then enter its root directory:
 
@@ -69,16 +69,39 @@ git clone https://github.com/colewinstead/VeriCivil.git
 cd VeriCivil
 ```
 
-Run these commands from the repository root on macOS/Linux or Windows (PowerShell):
+All commands below run from the **repository root**, the folder containing this README and the `web` and `desktop` folders. If your terminal is already there, skip cloning and `cd VeriCivil`.
 
-```bash
+### Check the tools
+
+```sh
+node --version
+node -p "process.execPath"
+python3 --version
+```
+
+On Windows, use `python --version` instead. The Python executable must be on PATH; a shell alias alone is not sufficient for npm. On this Apple Silicon Mac, the configured default is standalone Homebrew Node 22 at `/opt/homebrew/opt/node@22/bin/node`. Normal `npm` commands use it without a PATH override. Node should not resolve inside `ChatGPT.app`; see [Troubleshooting](#troubleshooting) if it does.
+
+### Install dependencies
+
+Run once after cloning, or again when `web/package-lock.json` changes:
+
+```sh
 npm --prefix web ci --ignore-scripts
+```
+
+### Run the browser calculator
+
+```sh
 npm --prefix web run dev
 ```
 
-If your terminal is already in the repository root, skip the clone and `cd VeriCivil` commands. The `--prefix web` option targets the browser app's `package.json` and `package-lock.json` while keeping your terminal in the repository root. Keep the terminal running and open the local URL printed by the development server.
+Keep that terminal running. Open [http://localhost:3000/calculators/superelevation](http://localhost:3000/calculators/superelevation); if port 3000 is busy, use the port printed by the server. Press **Ctrl+C** in the terminal to stop it. To choose another port explicitly:
 
-Startup uses `python3` on macOS/Linux and `python` on Windows; the selected executable must be on PATH. A shell alias alone is not sufficient for npm.
+```sh
+npm --prefix web run dev -- --port 3001
+```
+
+Enter curve inputs or open a saved project, then select **Cross Section** in the results. AASHTO shows recorded lane geometry and fixed pivots; MDOT/TDOT show labeled slope schematics. See the [cross-section controls and roadway support audit](docs/CROSS_SECTION_VIEW.md).
 
 ## Electron desktop preview
 
@@ -86,15 +109,63 @@ The desktop app shares the React interface and Python engine with the browser ca
 
 Code signing policy: [vericivil.com/code-signing](https://vericivil.com/code-signing). SignPath approval is pending; prepared signing-review artifacts are not production releases. [Onboarding instructions](docs/signpath-onboarding.md) describe the remaining setup and verification.
 
-From the repository root, install and package the app:
+Complete the dependency installation above first. The first desktop build needs internet access to download the pinned runtime and export packages; the built desktop app processes calculations offline.
+
+### Run the desktop app from source
+
+Download Electron after `npm ci --ignore-scripts` (repeat this step after running that install command again), then build and launch the desktop app:
 
 ```sh
-npm --prefix web ci --ignore-scripts
 node web/node_modules/electron/install.js
+npm --prefix web run desktop:dev
+```
+
+`desktop:dev` rebuilds the app and opens its native window. It does not start the browser development server or watch files for changes; close the app and rerun the command after editing source.
+
+### Build without launching
+
+```sh
+npm --prefix web run desktop:build
+```
+
+The generated application source and bundled offline runtime are in `desktop/app/`. This is the staging folder used by the packaging commands below.
+
+### Package a standalone app
+
+```sh
 npm --prefix web run desktop:package
 ```
 
-This builds the host platform (Apple Silicon or Intel on Mac, x64 on Windows). On a Mac, `npm --prefix web run desktop:package:windows` also packages Windows x64. App folders are written to `desktop/releases/`. See [desktop build, archive, and validation instructions](desktop/README.md) for DMG/portable ZIP creation and runtime details.
+This rebuilds and packages the current platform:
+
+| Build computer | Output |
+| --- | --- |
+| Apple Silicon Mac | `desktop/releases/VeriCivil Desktop Preview-darwin-arm64/VeriCivil Desktop Preview.app` |
+| Intel Mac | `desktop/releases/VeriCivil Desktop Preview-darwin-x64/VeriCivil Desktop Preview.app` |
+| Windows x64 | `desktop/releases/VeriCivil Desktop Preview-win32-x64/VeriCivil Desktop Preview.exe` |
+
+On this Apple Silicon Mac, open the packaged app with:
+
+```sh
+open "desktop/releases/VeriCivil Desktop Preview-darwin-arm64/VeriCivil Desktop Preview.app"
+```
+
+### Build an installer or disk image
+
+```sh
+npm --prefix web run desktop:installer
+```
+
+This rebuilds the app, then creates unsigned installer artifacts for the current platform. On a Mac it creates a DMG and ZIP in `desktop/installers/darwin-arm64/` (Apple Silicon) or `desktop/installers/darwin-x64/` (Intel). On Windows it creates an NSIS `.exe` installer in `desktop/installers/win32-x64/`. Filenames include the application version and `unsigned`. These local commands do not publish a release or deploy the website.
+
+To build a portable Windows x64 ZIP from a Mac:
+
+```sh
+npm --prefix web run desktop:package:windows
+python3 scripts/package_electron_release.py --platform win32 --arch x64
+```
+
+The Windows app folder is in `desktop/releases/`; its ZIP and SHA-256 checksum are in `desktop/release-assets/`. Extract the entire ZIP before launching the EXE on Windows. For signed releases and other archive formats, see the [desktop build and distribution guide](desktop/README.md).
 
 Version-bumped PRs build all three targets automatically and expose downloads under the **Full Release** Actions run. PR runs do not publish a GitHub Release. After merge to `main`, successful release builds attach both Mac DMGs, the Windows portable ZIP, and SHA-256 checksums to the versioned GitHub Release alongside the browser build.
 
@@ -104,7 +175,13 @@ The browser app runs the shared Python calculation and export modules locally th
 
 Local development defaults to Pro without an account or URL parameter. The calculator's Local test plan selector can switch to Free or Team for testing; explicit `?entitlement=free` overrides remain supported. The hosted website continues to use account entitlements.
 
-Create a production build with `npm --prefix web run build` from the repository root. The output is written to `web/dist`, including browser assets and a Cloudflare Workers-compatible server runtime for the hosted account and billing routes. The build stages the authoritative shared Python modules from the repository; do not edit the staged copies.
+### Build the browser app for production
+
+```sh
+npm --prefix web run build
+```
+
+The output is written to `web/dist`, including browser assets and a Cloudflare Workers-compatible server runtime for the hosted account and billing routes. Use `npm --prefix web run dev` for local testing; the production server bundle uses Cloudflare bindings and cannot be launched with plain Node through `npm --prefix web start` in this configuration. The build stages the authoritative shared Python modules from the repository; do not edit the staged copies. Website publishing remains the separate [Ship main workflow](#browser-and-desktop-releases).
 
 The first browser visit downloads the Python runtime and scientific/export packages. After that initial load, calculations and file exports occur on the user's device. Save and reopen `.superelevation.json` project files locally through the browser interface.
 
@@ -222,7 +299,9 @@ Schema v4 introduced embedded LandXML text, original filename, and SHA-256 integ
 
 For local startup, `ENOENT ... package.json` or an `npm ci` missing-lockfile error usually means npm is targeting the wrong directory. From the repository root, use `npm --prefix web ci --ignore-scripts` and `npm --prefix web run dev` as shown above.
 
-If a macOS native-binding error includes “different Team IDs,” check `command -v node`. A Node executable embedded in another signed application can reject the bundler's native module. Use a standard Node installation. On Apple Silicon Macs with Node already installed by Homebrew, run `PATH="/opt/homebrew/bin:$PATH" npm --prefix web run dev` from the repository root to select it for that command.
+If a macOS native-binding error includes “different Team IDs,” check `node -p "process.execPath"`. A Node executable embedded in another signed application can reject the bundler's native module even when the dependency is installed. Configure a standalone Node installation as the terminal's default, then open a new terminal tab and rerun the normal command. On the development Mac, the user-local `~/.local/bin/node` link and Zsh startup files now select the installed Homebrew Node 22 instead of ChatGPT's private runtime. Reinstalling npm dependencies does not correct a mismatched Node executable.
+
+If Electron reports that it failed to install correctly after `npm ci --ignore-scripts`, run `node web/node_modules/electron/install.js`, then retry `npm --prefix web run desktop:dev`. If a desktop launch behaves like a Node process instead of opening a window, check that `ELECTRON_RUN_AS_NODE` is not set in that terminal; remove that environment setting before launching Electron.
 
 When reporting a problem, include the browser and operating system, application and engine versions, selected criteria profile, expected behavior, and a minimal reproduction using non-sensitive data. Browser developer-console messages can help diagnose loading and export errors. Review any console output before sharing it.
 
