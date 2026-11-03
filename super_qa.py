@@ -6,6 +6,7 @@ from typing import Any
 import Super
 import super_batch
 import super_exports
+import super_cross_section
 import super_landxml
 from app_info import CALCULATION_ENGINE_VERSION
 from super_lane import lane_profile_points, slope_at_station
@@ -248,6 +249,7 @@ def curve_diagram(results: dict, direction: str) -> dict[str, Any]:
     ]
     return {
         "profiles": profiles,
+        "cross_section": super_cross_section.section_model(results, direction),
         "section_profiles":[{"key":f"Lane{i}","name":lane["lane_name"],"side":lane["side"],"points":lane["events"]} for i,lane in enumerate(results.get("section_lanes",[]))],
         "intervals": intervals,
         "markers": sorted(markers, key=lambda marker: (marker["station_ft"], marker["label"])),
@@ -529,7 +531,8 @@ def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, A
             pair=next(((a,b) for a,b in zip(events,events[1:]) if a["station_ft"]<=station<=b["station_ft"]),None)
             criterion=_criterion_for_segment(results,*pair) if pair else {"component":"Initial section","reference":"Recorded fixed-pivot section","mode":"calculated","phase":"Transition endpoint"}
             lanes[lane["lane_name"]]={"slope_pct":slope,"slope_label":super_exports.format_slope_label(slope),"slope_decimal":super_exports.slope_decimal(slope),"phase":criterion["phase"],"criterion":criterion}
-        return {"station_ft":float(station),"station":Super.format_result_station(results,station,True),"lanes":lanes}
+        return {"station_ft":float(station),"station":Super.format_result_station(results,station,True),"lanes":lanes,
+                "cross_section": super_cross_section.section_at_station(results, direction, station, lanes, diagram["cross_section"], diagram["domain"])}
     points = lane_profile_points(results, direction)
     lanes: dict[str, dict] = {}
     for lane in ("left", "right"):
@@ -597,6 +600,7 @@ def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, A
         "station_ft": float(station),
         "station": Super.format_result_station(results, station, True),
         "lanes": lanes,
+        "cross_section": super_cross_section.section_at_station(results, direction, station, lanes, diagram["cross_section"], diagram["domain"]),
     }
 
 

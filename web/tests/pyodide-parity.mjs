@@ -77,6 +77,25 @@ for (const curves of [[], spacingCurves]) {
 }
 // Run the public synthetic boundary/selection cases in the browser engine too.
 pyodide.FS.writeFile("/app/test_aashto_criteria.py", await readFile(new URL("../../test_aashto_criteria.py", import.meta.url), "utf8"), { encoding: "utf8" });
+pyodide.FS.writeFile("/app/test_super_cross_section.py", await readFile(new URL("../../test_super_cross_section.py", import.meta.url), "utf8"), { encoding: "utf8" });
+pyodide.runPython(`
+import unittest
+from test_super_cross_section import CrossSectionTests
+section_checks = unittest.TestResult()
+unittest.defaultTestLoader.loadTestsFromTestCase(CrossSectionTests).run(section_checks)
+assert section_checks.wasSuccessful(), repr(section_checks.errors + section_checks.failures)
+`);
+for (const overrides of [{}, { rotation_axis: "left_edge", curve_direction: "right" },
+  { roadway: "one_way", initial_section: "single_slope", initial_slope: "0.02", lane_widths: "11,11,11", rotation_axis: "right_edge" }]) {
+  const request = { entitlement: proEntitlement, inputs: { ...aashtoInputs, ...overrides } };
+  const { results } = browser("calculate", request);
+  const diagramRequest = { entitlement: proEntitlement, results, direction: overrides.curve_direction || "left" };
+  assert.deepEqual(browser("curve_diagram", diagramRequest), native("curve_diagram", diagramRequest));
+  for (const station of [results.pnc_ft, results.zero_crown_ft, results.full_super_ft, (results.zero_crown_ft + results.full_super_ft) / 2]) {
+    const inspection = { ...diagramRequest, station };
+    assert.deepEqual(browser("diagram_lookup", inspection), native("diagram_lookup", inspection));
+  }
+}
 pyodide.runPython(`
 import unittest
 from test_aashto_criteria import TableSelectionTests, AASHTOTests

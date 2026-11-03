@@ -5,6 +5,7 @@ import type { DesktopHost, DesktopProject } from "../lib/desktop";
 import DesktopUpdates from "./DesktopUpdates";
 import { requiresCompoundCalculation } from "../lib/qa-findings";
 import { curveInputValues, editLandxmlInputs, type LandxmlInputs } from "../lib/curve-inputs";
+import { createStationInspection } from "../lib/station-inspection";
 
 /* Browser worker responses mirror dynamically typed Python dictionaries. */
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-html-link-for-pages */
@@ -199,6 +200,8 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
   const [lookupResult, setLookupResult] = useState<Dict | null>(null);
   const [corridorDiagram, setCorridorDiagram] = useState<Dict | null>(null);
   const [diagramInspector, setDiagramInspector] = useState<Dict | null>(null);
+  const [inspectionPending, setInspectionPending] = useState(false);
+  const [inspectionError, setInspectionError] = useState("");
   const [corridorQa, setCorridorQa] = useState<Dict | null>(null);
   const [blockedFindings, setBlockedFindings] = useState<Dict[]>([]);
   const [planView, setPlanView] = useState<Dict | null>(null);
@@ -501,7 +504,22 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     return curves;
   }, [curves, calculation?.results, meta]);
 
+  const stationInspection = useMemo(() => createStationInspection(async ({ station, curveIndex }) => {
+    const curve = diagramCurves[curveIndex];
+    if (!curve?.results) throw new Error("Calculate this curve before inspecting stations.");
+    const value = await call("diagram_lookup", { results: curve.results,
+      direction: curve.meta?.curve_direction || "left", station });
+    return { ...value, curve_index: curveIndex, curve_name: curve.meta?.curve_name || `Curve ${curveIndex + 1}` };
+  }, setDiagramInspector, setInspectionError, setInspectionPending), [diagramCurves, call]);
+
+  useEffect(() => () => stationInspection.cancel(), [stationInspection, selectedCurve]);
+
+  const diagramSource = useRef(diagramCurves);
   useEffect(() => {
+    if (diagramSource.current !== diagramCurves) {
+      diagramSource.current = diagramCurves;
+      setDiagramInspector(null);
+    }
     if (!diagramCurves.length || runtime !== "ready") {
       setCorridorDiagram(null);
       setDiagramInspector(null);
@@ -509,7 +527,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     }
     let active = true;
     call("corridor_diagram", { curves: diagramCurves })
-      .then((value) => { if (active) { setCorridorDiagram(value); setDiagramInspector(null); } })
+      .then((value) => { if (active) setCorridorDiagram(value); })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
   }, [diagramCurves, runtime, call]);
@@ -958,16 +976,9 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     if (result) setLookupResult(result);
   };
 
-  const inspectDiagramStation = async (station: number, curveIndex: number) => {
-    const curve = diagramCurves[curveIndex];
-    if (!curve?.results) return;
-    const value = await run("Inspecting station", () => call("diagram_lookup", {
-      results: curve.results,
-      direction: curve.meta?.curve_direction || "left",
-      station,
-    }));
-    if (value) setDiagramInspector({ ...value, curve_index: curveIndex, curve_name: curve.meta?.curve_name || `Curve ${curveIndex + 1}` });
-  };
+  const inspectDiagramStation = useCallback((station: number | string, curveIndex: number) => {
+    stationInspection.request({ station, curveIndex });
+  }, [stationInspection]);
 
   const openQaFinding = async (finding: Dict) => {
     const sourceIndex = finding.curve_indexes?.[0];
@@ -1290,7 +1301,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
             <p className="helper">{lengthCheckResult.scope_note}</p>
             <div className="criteria-reference"><p>Calculation sources</p><ul>{criteriaSources.map((source:Dict,index:number)=><li key={index}><span>{source.component}</span><b>{source.reference}</b><em>{String(source.mode).replaceAll("_"," ")}</em></li>)}</ul>{lengthCheckResult.e_note && <p className="helper">{lengthCheckResult.e_note}</p>}</div>
             {lengthCheckResult.warnings.length > 0 && <div className="result-warning"><strong>Engineering review</strong><ul>{lengthCheckResult.warnings.map((warning:string,index:number)=><li key={index}>{warning}</li>)}</ul></div>}
-          </> : <div className="results-empty"><h3>Ready to check spiral lengths</h3><p>Select speed and enter radius. The check uses your selected maximum superelevation and roadway section; TS/ST are not required.</p></div> : !result ? <><div className="results-empty"><div className="road-crown"><i></i><i></i></div><h3>{blockedFindings.length ? "Calculation blocked" : "Ready for curve inputs"}</h3><p>{blockedFindings.length ? "Review the findings below. Diagnostics can be saved in the project and PDF." : "Enter PC, speed, and radius to calculate transition stations and signed lane slopes."}</p></div>{(desktop || landxml || reviewQa) && <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />}</> : <>
+          </> : <div className="results-empty"><h3>Ready to check spiral lengths</h3><p>Select speed and enter radius. The check uses your selected maximum superelevation and roadway section; TS/ST are not required.</p></div> : !result ? <><div className="results-empty"><div className="road-crown"><i></i><i></i></div><h3>{blockedFindings.length ? "Calculation blocked" : "Ready for curve inputs"}</h3><p>{blockedFindings.length ? "Review the findings below. Diagnostics can be saved in the project and PDF." : "Enter PC, speed, and radius to calculate transition stations and signed lane slopes."}</p></div>{(desktop || landxml || reviewQa) && <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} inspectionPending={inspectionPending} inspectionError={inspectionError} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />}</> : <>
             <div className="metric-grid"><article><span>{result.section_transition ? "Curve cross slope" : "Rate e"}</span><strong>{result.section_transition?.target_slope_label || Number(result.e || 0).toFixed(4)}</strong><small>{result.e_source || "automatic"}</small></article><article><span>Runoff Lr</span><strong>{Number(result.Lr || 0).toFixed(2)}′</strong><small>{inputs.Lr_manual ? "override" : "automatic"}</small></article><article><span>Runout Lt</span><strong>{Number(result.Lt || 0).toFixed(2)}′</strong><small>{inputs.Lt_manual ? "override" : "automatic"}</small></article></div>
             {result.section_transition && <p className="helper">{result.section_transition.note}</p>}
             <div className="criteria-reference">
@@ -1300,7 +1311,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
               {isAashto && result.e_note && <p className="helper">{result.e_note}</p>}
             </div>
             {(result.warnings || []).length > 0 && <div className="result-warning"><strong>Engineering review</strong><ul>{result.warnings.map((warning: string, index: number) => <li key={index}>{warning}</li>)}</ul></div>}
-            <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />
+            <SuperelevationAnalysis corridor={corridorDiagram} plan={planView} activeCurveIndex={selectedCurve} qa={reviewQa} inspector={diagramInspector} inspectionPending={inspectionPending} inspectionError={inspectionError} highlights={qaHighlights} onChartStation={inspectDiagramStation} onFinding={openQaFinding} />
             <div className="result-tabs"><h3>Lane events</h3><label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station labels</label></div>
             {calculation?.section_lanes?.length > 0 && <p className="helper">Slope signs follow the recorded lane side, outward from alignment. Left/right edge heights are relative to the fixed pivot.</p>}<div className="lane-tables">{(calculation?.section_lanes?.length ? calculation.section_lanes.map((lane:Dict)=>({name:lane.lane_name,rows:lane.events})) : ["left","right"].map(lane=>({name:`${lane} lane`,rows:lanes[lane] || []}))).map((lane:Dict) => <div key={lane.name}><h4>{lane.name}</h4><table><thead><tr><th>Point</th><th>Station</th><th>Slope</th>{calculation?.section_lanes?.length > 0 && <><th>Left edge (ft)</th><th>Right edge (ft)</th></>}</tr></thead><tbody>{lane.rows.map((row: Dict, index: number) => <tr key={index}><td>{row.label}</td><td>{row.station}</td><td className={String(row.slope_label).startsWith("+") ? "positive" : ""}>{row.slope_label}</td>{row.left_elevation_ft !== undefined && <><td>{Number(row.left_elevation_ft).toFixed(4)}</td><td>{Number(row.right_elevation_ft).toFixed(4)}</td></>}</tr>)}</tbody></table></div>)}</div>
             <div className="lookup"><h3>Engineering lookup</h3><div><input aria-label="Lookup station" placeholder="Station" value={lookupStation} onChange={(e) => setLookupStation(e.target.value)} /><input aria-label="Lookup superelevation" placeholder="Super (2%, 2, or 0.02)" value={lookupSlope} onChange={(e) => setLookupSlope(e.target.value)} /><button onClick={performLookup}>Lookup</button></div>{lookupResult && <div className="lookup-output">

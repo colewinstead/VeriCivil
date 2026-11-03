@@ -149,6 +149,8 @@ The DXF is a graphics handoff, not a native Bentley civil model.
 
 ## Engineering notes
 
+The **Cross Section** analysis tab provides station-by-station pavement rotation review in the browser and Electron workspace. AASHTO sections show recorded lane geometry and fixed pivots; MDOT/TDOT show explicitly labeled slope schematics where physical layouts are unspecified. See the [cross-section guide and roadway support audit](docs/CROSS_SECTION_VIEW.md).
+
 The authoritative application and calculation-engine versions are defined in [`app_info.py`](app_info.py). The engine centralizes each MDOT lane transition as one piecewise-linear profile used by diagrams, lookup, QA, and exports. The outside lane runs from zero cross slope to full super, while the inside lane holds normal crown until the SE-3A `X1 = Lr(NC/e)` breakpoint and then rotates linearly to full super. Explicit reverse-curve pairs remove only the intervening tangent runout and require `Tmin = 0.7Lr(exit) + 0.7Lr(entry)`. Each lane retains the applicable standard `e/Lr` rate, joins continuously at an intersection when needed, or holds normal crown until the incoming transition begins. A valid unequal-rate intersection may occur just before PT or just after PC because both points lie within the recorded runoffs; the unchanged full-super stations bound the coordinated profile. A normal-crown hold records only its real start and end control points. A short or invalid pair blocks coordination without changing the independent curve results. See [`docs/MDOT_TRANSITION_MODEL.md`](docs/MDOT_TRANSITION_MODEL.md). These identifiers are defined once in `app_info.py` and are recorded in new project files and PDF reports.
 
 > [!CAUTION]
