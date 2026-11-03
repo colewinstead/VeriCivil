@@ -11,7 +11,7 @@
     "prebuild": "node build/prepare-python-runtime.mjs",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && npm run test:billing && node --experimental-strip-types --test tests/qa-findings.test.mjs tests/curve-inputs.test.mjs && node --test tests/runtime-staging.test.mjs tests/rendered-html.test.mjs && node tests/pyodide-parity.mjs",
+    "test": "npm run build && npm run test:billing && node --experimental-strip-types --test tests/qa-findings.test.mjs tests/curve-inputs.test.mjs tests/station-inspection.test.mjs && node --test tests/runtime-staging.test.mjs tests/rendered-html.test.mjs && node tests/pyodide-parity.mjs",
     "test:billing": "node --experimental-strip-types --test tests/billing-entitlement.test.mjs tests/analytics-policy.test.mjs tests/engineering-analytics.test.mjs tests/pro-price.test.mjs tests/desktop-downloads.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-pages --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
@@ -21,7 +21,8 @@
     "desktop:test": "node --test ../desktop/tests/*.test.cjs",
     "desktop:installer": "npm run desktop:build && node desktop/installer.mjs",
     "desktop:package:windows": "npm run desktop:build && node desktop/package.mjs win32",
-    "desktop:test:offline": "node ../desktop/tests/run-offline.cjs"
+    "desktop:test:offline": "node ../desktop/tests/run-offline.cjs",
+    "desktop:test:cross-section": "electron ../desktop/tests/cross-section-smoke.cjs"
   },
   "dependencies": {
     "@workos-inc/authkit-nextjs": "^4.2.0",

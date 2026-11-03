@@ -25,6 +25,7 @@ _SUPER_MODULES = [
     "super_exports.py",
     "super_landxml.py",
     "super_lane.py",
+    "super_cross_section.py",
     "super_pdf.py",
     "super_project.py",
     "super_qa.py",

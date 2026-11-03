@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -376,8 +377,15 @@ def corridor_diagram(curves: list[dict]) -> dict[str, Any]:
     return super_qa.corridor_diagram(curves)
 
 
-def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, Any]:
-    return super_qa.diagram_lookup(results, direction, float(station))
+def diagram_lookup(results: dict, direction: str, station: float | str) -> dict[str, Any]:
+    internal = Super.parse_station_reference(station, results.get("station_equations"), results.get("alignment_station_range")) if isinstance(station, str) else float(station)
+    if not math.isfinite(internal):
+        raise ValueError("Enter a finite station within the calculated profile range.")
+    if isinstance(station, str):
+        domain = super_qa.curve_diagram(results, direction)["domain"]
+        if not domain["start_ft"] <= internal <= domain["end_ft"]:
+            raise ValueError("Choose a station within this curve's calculated profile range.")
+    return super_qa.diagram_lookup(results, direction, internal)
 
 
 def corridor_qa(content: str, filename: str, curves: list[dict], excluded_curve_indexes: list[int] | None = None,

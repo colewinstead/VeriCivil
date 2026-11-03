@@ -18,10 +18,11 @@ import {
 } from "recharts";
 import SuperelevationPlanView from "./SuperelevationPlanView";
 import ControlIcon from "./ControlIcon";
+import SuperelevationCrossSection from "./SuperelevationCrossSection";
 import { groupQaFindings } from "../lib/qa-findings";
 
 type Dict = Record<string, any>;
-type AnalysisView = "diagram" | "plan" | "qa";
+type AnalysisView = "diagram" | "section" | "plan" | "qa";
 
 function interpolate(points: Dict[], station: number) {
   if (!points.length) return 0;
@@ -81,6 +82,8 @@ export default function SuperelevationAnalysis({
   activeCurveIndex,
   qa,
   inspector,
+  inspectionPending,
+  inspectionError,
   highlights,
   onChartStation,
   onFinding,
@@ -90,8 +93,10 @@ export default function SuperelevationAnalysis({
   activeCurveIndex: number;
   qa: Dict | null;
   inspector: Dict | null;
+  inspectionPending: boolean;
+  inspectionError: string;
   highlights: Dict[];
-  onChartStation: (station: number, curveIndex: number) => void;
+  onChartStation: (station: number | string, curveIndex: number) => void;
   onFinding: (finding: Dict) => void;
 }) {
   const [view, setView] = useState<AnalysisView>("diagram");
@@ -158,7 +163,7 @@ export default function SuperelevationAnalysis({
     };
     frame.addEventListener("wheel", wheelZoom, { passive: false });
     return () => frame.removeEventListener("wheel", wheelZoom);
-  }, [corridor, zoom]);
+  }, [corridor, zoom, view]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -229,6 +234,7 @@ export default function SuperelevationAnalysis({
   return <section className={`analysis-workspace${expanded ? " analysis-expanded" : ""}`}>
     <div className="analysis-tabs" role="tablist" aria-label="Engineering analysis">
       <button role="tab" aria-selected={view === "diagram"} className={view === "diagram" ? "active" : ""} onClick={() => setView("diagram")}>Diagram</button>
+      <button role="tab" aria-selected={view === "section"} className={view === "section" ? "active" : ""} onClick={() => setView("section")}>Cross Section</button>
       <button role="tab" aria-selected={view === "plan"} className={view === "plan" ? "active" : ""} onClick={() => setView("plan")}>Plan View</button>
       <button role="tab" aria-selected={view === "qa"} className={view === "qa" ? "active" : ""} onClick={() => setView("qa")}>Corridor QA{qa && <span className={`status-dot ${qa.status}`} />}</button>
       <button className="expand-analysis" title={expanded ? "Close large analysis view" : "Open large analysis view"} onClick={() => setExpanded(!expanded)}>{expanded ? "Close" : "Expand"}</button>
@@ -260,7 +266,8 @@ export default function SuperelevationAnalysis({
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="diagram-inspector">
+        <div className="diagram-inspector" aria-busy={inspectionPending}>
+          {inspectionError && <p className="cross-section-error" role="alert">{inspectionError}</p>}
           <div className="inspector-heading"><span>{inspector?.curve_name || "Selected station"}</span><strong>{inspector?.station || "Select the plot"}</strong>{inspector && <small>{Number(inspector.station_ft).toFixed(3)} internal ft</small>}</div>
           {inspector ? <div className="inspector-lanes">{Object.keys(inspector.lanes).map((lane) => <article key={lane}>
             <div><span>{lane}</span><strong>{inspector.lanes[lane].slope_label}</strong></div>
@@ -271,6 +278,8 @@ export default function SuperelevationAnalysis({
         </div>
       </>}
     </div>}
+
+    {view === "section" && <SuperelevationCrossSection key={selectedCurveIndex} diagrams={diagrams} activeCurveIndex={selectedCurveIndex} inspector={inspector} pending={inspectionPending} error={inspectionError} onStation={onChartStation} />}
 
     {view === "plan" && (plan ? <SuperelevationPlanView plan={plan} /> : <div className="analysis-empty">Load LandXML to view the alignment plan.</div>)}
 

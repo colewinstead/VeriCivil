@@ -190,6 +190,14 @@ Preview status is plain secondary text alongside the product name. Criteria iden
 
 The profile is a data graphic, not decorative artwork. Teal and amber differentiate the single curve's lane profiles, and the right side is also dashed (`7 4`). The station cursor follows the appearance's reading ink. Inline SVG controls use inherited text color and accessible button labels; icon paths are authored in `ControlIcon.tsx`. Keep axis labels, legend, engineering warnings, source criteria, and station inspection available alongside the plot.
 
+### Cross Section
+
+An ordinary extension of the existing review desk, shared with the browser through the **Cross Section** tab in `SuperelevationAnalysis.tsx`. `SuperelevationCrossSection.tsx` renders ordered Python geometry packets from `super_cross_section.py`; retain the incumbent controls, teal/amber lane roles, system appearance, and shared station inspector. Choose a curve, scrub or enter a station, or step to exact calculated events. Arrow keys move one internal foot; wheel/trackpad station movement applies only while the slider has focus. Invalid entry remains recoverable through the field or slider.
+
+Look ahead along increasing station. Physical AASHTO sections show recorded lanes, widths, a fixed pivot, and relative edge heights; they default to 5× vertical exaggeration and offer 1× true scale. Preserve framing across stations within the selected curve so pavement rotation remains legible. MDOT/TDOT output remains an explicitly labeled left/right slope schematic without invented physical lane distribution, dimensions, or pivot. Its accessible SVG description includes the slope values. This presentation does not add roadway models or expand export support; keep the support audit in `docs/CROSS_SECTION_VIEW.md` authoritative.
+
+On browser widths up to `600px`, reflow lane names, slopes, widths, and pivot labels into readable HTML below the SVG rather than shrinking SVG labels. Preserve left-to-right order, units, warnings, and the physical edge-height table. Shared styles live in `web/app/globals.css`; `web/desktop/desktop.css` supplies the existing desktop appearance overrides. Do not extend desktop-only layout rules to the phone browser.
+
 ## Do's and Don'ts
 
 ### Do:
