@@ -63,7 +63,7 @@ def application_manifest() -> dict[str, Any]:
             "profiles": {
                 AASHTO_PROFILE_ID: {"facility":["centerline","left_edge","right_edge"],"area":["rural","urban_freeway","urban_high_speed"],
                     "speed":[str(v) for v in range(15,86,5)], "max_superelevation":[4,6,8,10,12],
-                    "roadway":["two_way","one_way"], "rotation_axis":["centerline","left_edge","right_edge"],
+                    "roadway":["two_way","one_way","divided_case_ii"], "rotation_axis":["centerline","left_edge","right_edge"],
                     "one_way_rotation_axis":["left_edge","right_edge"], "lane_counts":[1,2,3,4,5,6,7], "equal_lane_widths_required":True,
                     "initial_section":["crowned","single_slope"],"runout_placement":["on_tangent","in_spiral"],
                     "circular_placement_basis":["runoff","runoff_runout"],
@@ -138,6 +138,9 @@ def calculate_curve(inputs: dict[str, Any], curves: list[dict] | None = None, cu
         raise ValueError("Spiral transition calculations are currently supported only by the AASHTO profile.")
     if profile_id==AASHTO_PROFILE_ID and values.get("linear_unit") not in (None,"","foot","Foot","USSurveyFoot","internationalFoot"):
         raise ValueError("AASHTO calculations require foot-based stationing; metric LandXML geometry may be inspected but not used for this US-unit profile.")
+    if values.get("roadway") == "divided_case_ii" and profile_id != AASHTO_PROFILE_ID:
+        raise ValueError("Case II requires the AASHTO 2018 criteria profile.")
+    values["criteria_profile"] = profile_id
     area = str(values.get("area", "rural"))
     facility = (
         "centerline"
@@ -165,6 +168,10 @@ def calculate_curve(inputs: dict[str, Any], curves: list[dict] | None = None, cu
     )
     context = None
     compound_sides = []
+    if values.get("roadway") == "divided_case_ii":
+        from aashto_divided import calculate
+        results = calculate(values, arguments[14], arguments[15])
+        return present_results(results, values.get("curve_direction", "left"), bool(values.get("station_format", True)))
     if curves and type(curve_index) is int and 0 <= curve_index < len(curves):
         import copy
         context = copy.deepcopy(curves)
@@ -222,9 +229,12 @@ def present_results(results: dict, direction: str = "left", station_format: bool
                "slope_label":super_exports.format_slope_label(event["slope_pct"])} for event in lane["events"]]
         section_lanes.append({**lane,"events":rows})
     return {
+        **({"case_ii_stations": {side: {key: Super.format_result_station(child, child[key], station_format)
+                                      for key in ("pnc_ft", "full_super_ft", "full_super_out_ft", "pnc_out_ft")}
+                                for side, child in results["carriageways"].items()}} if results.get("carriageways") else {}),
         "results": results,
         "baseline": results,
-        "formatted_results": Super.format_results(results, station_format),
+        "formatted_results": {} if results.get("carriageways") else Super.format_results(results, station_format),
         "lanes": {"left": left_rows, "right": right_rows},
         "section_lanes": section_lanes,
     }

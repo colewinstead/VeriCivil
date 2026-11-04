@@ -13,6 +13,16 @@ def _unavailable(message: str) -> dict:
 
 def section_model(results: dict, direction: str) -> dict:
     """Stable drawing bounds and geometry provenance for the entire curve."""
+    if results.get("transition_method") == "aashto_case_ii":
+        lanes = results["section_lanes"]
+        coords = [float(lane[key]) for lane in lanes for key in ("left_offset_ft", "right_offset_ft")]
+        heights = [float(event[key]) for lane in lanes for event in lane["events"] for key in ("left_elevation_ft", "right_elevation_ft")]
+        if not coords or not all(math.isfinite(value) for value in coords + heights):
+            return _unavailable("Invalid Case II geometry; recalculate both carriageways.")
+        return {"mode": "physical", "title": "Divided roadway — Case II", "pivots": list(results["pivots"].values()),
+                "median_gap_ft": results["median_gap_ft"], "initial_section": "Single slope per carriageway",
+                "bounds": {"x_min": min(coords), "x_max": max(coords), "y_min": min(0, *heights), "y_max": max(0, *heights)},
+                "message": results["scope_note"]}
     if results.get("section_lanes") or results.get("transition_method") == "aashto_fixed_pivot":
         if results.get("transition_method") != "aashto_fixed_pivot":
             return _unavailable("This section model does not yet provide cross-section geometry.")
@@ -70,7 +80,7 @@ def section_at_station(results: dict, direction: str, station: float, slopes: di
             events = lane["events"]
             def height(edge):
                 return slope_at_station([(event["station_ft"], event[edge]) for event in events], station)
-            segments.append({"name": lane["lane_name"], "side": lane["side"], "width_ft": lane["width_ft"],
+            segments.append({"name": lane["lane_name"], "display_label": lane.get("display_label", lane["lane_name"]), "side": lane["side"], "width_ft": lane["width_ft"],
                              "left": {"x": lane["left_offset_ft"], "y": height("left_elevation_ft")},
                              "right": {"x": lane["right_offset_ft"], "y": height("right_elevation_ft")},
                              "slope_label": slopes[lane["lane_name"]]["slope_label"]})

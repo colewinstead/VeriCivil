@@ -19,6 +19,7 @@ _SUPER_MODULES = [
     "aashto_criteria.py",
     "aashto_tables.py",
     "aashto_superelevation.py",
+    "aashto_divided.py",
     "super_spiral.py",
     "super_batch.py",
     "super_dxf.py",

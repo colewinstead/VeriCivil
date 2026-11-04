@@ -22,13 +22,15 @@ const launch = browserUrl ? app.whenReady().then(async () => {
 }) : require('../app/main.cjs').start();
 launch.then(async window => {
   window.webContents.setBackgroundThrottling(false);
+  window.webContents.on("console-message", event => { if (event.level === "error") console.error("Renderer:", event.message); });
   const js = code => window.webContents.executeJavaScript(code);
   const wait = async code => {
     for (let attempt = 0; attempt < 250; attempt++) {
       if (await js(code)) return;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    console.error(await js("document.querySelector('.cross-section-view')?.innerText || document.body.innerText.slice(-1200)"));
+    console.error(await js("document.querySelector('.cross-section-view')?.outerHTML.slice(0,2500) || document.body.innerText.slice(-1200)"));
+    if (capture) writeFileSync(path.join(capture, "smoke-failure.png"), (await window.capturePage()).toPNG());
     console.error(await js('JSON.stringify({requests:window.sectionRequests,input:document.querySelector(".cross-section-station input")?.value,active:document.activeElement?.tagName})'));
     throw new Error(`Timed out: ${code}`);
   };
@@ -40,7 +42,9 @@ values = {"criteria_profile":"aashto-green-book-2018-2019-10","project_name":"Sy
 result = super_service.calculate_curve(values)["results"]
 ramp_values = {**values,"pc":"5000","pt":"6000","roadway":"one_way","initial_section":"single_slope","initial_slope":"0.02","lane_widths":"11,11,11","rotation_axis":"right_edge","curve_direction":"right"}
 ramp = super_service.calculate_curve(ramp_values)["results"]
-curves = [{"results":result,"meta":{"curve_direction":"left","curve_name":"Synthetic four-lane undivided"}}, {"results":ramp,"meta":{"curve_direction":"right","curve_name":"Synthetic three-lane ramp"}}]
+case_values={**values,"roadway":"divided_case_ii","pc":"7000","pt":"9000","case_ii":{side:{"speed":65,"radius":3000,"lane_count":4,"lane_width":12,"pivot_offset":offset,"initial_slope":slope,"runoff_tangent_percent":70} for side,offset,slope in [("left",-20,-.02),("right",20,.02)]}}
+case_result=super_service.calculate_curve(case_values)["results"]
+curves = [{"results":result,"meta":{"curve_direction":"left","curve_name":"Synthetic four-lane undivided"}}, {"results":ramp,"meta":{"curve_direction":"right","curve_name":"Synthetic three-lane ramp"}}, {"results":case_result,"meta":{"curve_direction":"left","curve_name":"Synthetic Case II"}}]
 content = super_service.project_save({"version":5,"vars":values,"curves":curves,"last_results":result,"last_meta":curves[0]["meta"]})
 print(json.dumps({"content":content,"full":result["full_super_ft"]}))
 `], { cwd: root, encoding: 'utf8' }));
@@ -121,6 +125,45 @@ print(json.dumps({"content":content,"full":result["full_super_ft"]}))
   await js("document.querySelector('.expand-analysis').click(); Array.from(document.querySelectorAll('[role=tab]')).find(button=>button.textContent==='Diagram').click()");
   await wait("!!document.querySelector('.chart-canvas')");
   assert.equal(await js("!!document.querySelector('.diagram-inspector .inspector-lanes')"), true, 'section station is shared with diagram');
+  window.setSize(1440, 960);
+  await js("document.querySelectorAll('.curve-list-item > button')[2].click()");
+  await wait("document.querySelectorAll('.case-ii-side').length===2 && document.querySelectorAll('.case-ii-results section').length===2");
+  assert.equal(await js('document.querySelector(\'[aria-label="left carriageway Pivot baseline offset (ft)"]\').value'), '-20');
+  assert.equal(await js('document.querySelector(\'[aria-label="right carriageway Pivot baseline offset (ft)"]\').value'), '20');
+  assert.equal(await js("Array.from(document.querySelectorAll('.case-ii-side input')).every(input=>input.getBoundingClientRect().height<100)"), true, 'offset guidance does not stretch input rows');
+  if (capture) {
+    for (const theme of ['light', 'dark']) {
+      nativeTheme.themeSource = theme;
+      await js("document.querySelector('.case-ii-inputs').scrollIntoView({block:'start'})");
+      await new Promise(resolve=>setTimeout(resolve,100));
+      writeFileSync(path.join(capture, `case-ii-inputs-${browserUrl ? 'browser' : 'electron'}-${theme}.png`), (await window.capturePage()).toPNG());
+    }
+  }
+  assert.match(await js("document.querySelector('[aria-label=\"left carriageway results\"]').textContent"), /216.00/);
+  assert.match(await js("document.querySelector('[aria-label=\"right carriageway results\"]').textContent"), /336.00/);
+  await js("Array.from(document.querySelectorAll('[role=tab]')).find(button=>button.textContent==='Cross Section').click()");
+  await js("var curve=document.querySelector('[aria-label=\"Cross-section curve\"]'); curve.value='2'; curve.dispatchEvent(new Event('change',{bubbles:true}));");
+  await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===8 && document.querySelectorAll('.section-pivot').length===2 && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'");
+  assert.match(await js("document.querySelector('.section-median-gap').textContent"), /40.0 ft/);
+  await enter('7300');
+  await wait("document.querySelector('.cross-section-readout strong').textContent==='73+00.000'");
+  await js("document.querySelector('.expand-analysis').click()");
+  for (const theme of browserUrl ? ['desktop', 'mobile'] : ['light', 'dark']) {
+    if (!browserUrl) nativeTheme.themeSource = theme;
+    window.setSize(theme === 'mobile' ? 414 : 1440, theme === 'mobile' ? 896 : 960);
+    await new Promise(resolve=>setTimeout(resolve,200));
+    assert.equal(await js('document.documentElement.scrollWidth<=innerWidth'), true, 'Case II fits viewport');
+    if (capture) writeFileSync(path.join(capture, `case-ii-${browserUrl ? 'browser' : 'electron'}-${theme}.png`), (await window.capturePage()).toPNG());
+  }
+  window.setSize(1440, 960);
+  await js("document.querySelector('.expand-analysis').click()");
+  await js("var radius=document.querySelector('[aria-label=\"left carriageway Design radius (ft)\"]'); radius.focus(); radius.select();");
+  window.webContents.sendInputEvent({type:'keyDown',keyCode:'Backspace'});
+  window.webContents.sendInputEvent({type:'keyUp',keyCode:'Backspace'});
+  for (const character of '4000') window.webContents.sendInputEvent({type:'char',keyCode:character});
+  await wait("document.querySelector('[aria-label=\"left carriageway results\"]')?.textContent.includes('144.00')");
+  assert.match(await js("document.querySelector('[aria-label=\"right carriageway results\"]').textContent"), /336.00/);
+  console.log('Case II: paired native inputs, independent recomputation, eight lanes, level pivots and median interval passed.');
   await js('window.confirm=()=>true;undefined;');
   if (browserUrl) {
     writeFileSync(project, execFileSync(python, ['-c', `

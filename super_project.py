@@ -11,7 +11,7 @@ from app_info import APP_VERSION, CALCULATION_ENGINE_VERSION
 from criteria_info import criteria_metadata
 
 
-PROJECT_VERSION = 5
+PROJECT_VERSION = 6
 
 
 class ProjectFormatError(ValueError):

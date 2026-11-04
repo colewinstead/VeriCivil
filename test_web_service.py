@@ -82,7 +82,7 @@ class WebServiceTests(unittest.TestCase):
             "reverse_curve_pairs": [[0, 1]],
         })
         loaded = super_service.project_load(serialized)
-        self.assertEqual(loaded["project"]["version"], 5)
+        self.assertEqual(loaded["project"]["version"], super_project.PROJECT_VERSION)
         self.assertEqual(loaded["project"]["landxml_source"]["sha256"], source["sha256"])
         self.assertEqual(loaded["landxml"]["source"]["content"], content)
         self.assertEqual(loaded["project"]["excluded_landxml_curve_indexes"], [1])
@@ -110,7 +110,7 @@ class WebServiceTests(unittest.TestCase):
                 {"results": {"recorded_value": 123.456}},
             ],
         })
-        self.assertEqual(loaded["version"], 5)
+        self.assertEqual(loaded["version"], super_project.PROJECT_VERSION)
         self.assertEqual(loaded["source_version"], 4)
         self.assertEqual(loaded["reverse_curve_pairs"], [[0, 1]])
         self.assertNotIn("coordinate_reverse_curves", loaded["vars"])

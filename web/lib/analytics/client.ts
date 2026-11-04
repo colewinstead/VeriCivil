@@ -21,15 +21,19 @@ function sessionToken() {
 
 export function trackEngineeringCalculation(inputs: Record<string, unknown>) {
   if (typeof window === "undefined" || navigator.doNotTrack === "1" || window.vericivilDesktop) return;
-  const sample: EngineeringSample = {
-    kind: "calculation", standard: String(inputs.criteria_profile || ""),
-    speed: Number(inputs.speed), radius: Number(inputs.radius),
-    pc: String(inputs.pc ?? "").trim(), pt: String(inputs.pt ?? "").trim(),
-  };
-  void fetch("/api/analytics/engineering", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sample), credentials: "same-origin", keepalive: true,
-  }).catch(() => undefined);
+  const carriageways = inputs.case_ii as Record<string, Record<string, unknown>> | undefined;
+  const sections = inputs.roadway === "divided_case_ii" ? [carriageways?.left, carriageways?.right] : [inputs];
+  for (const section of sections) {
+    const sample: EngineeringSample = {
+      kind: "calculation", standard: String(inputs.criteria_profile || ""),
+      speed: Number(section?.speed), radius: Number(section?.radius),
+      pc: String(inputs.pc ?? "").trim(), pt: String(inputs.pt ?? "").trim(),
+    };
+    void fetch("/api/analytics/engineering", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sample), credentials: "same-origin", keepalive: true,
+    }).catch(() => undefined);
+  }
 }
 
 export async function retainLandxml(content: string, allowed: boolean): Promise<"stored" | "skipped" | "unavailable"> {

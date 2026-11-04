@@ -18,7 +18,7 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
   const start = Number(diagram?.domain.start_ft ?? 0);
   const end = Number(diagram?.domain.end_ft ?? 0);
   const [target, setTarget] = useState<{ diagram: Dict; inspector: Dict | null; station: number } | null>(null);
-  const station = target?.diagram === diagram && target.inspector === inspector ? target.station
+  const station = target && target.diagram === diagram && target.inspector === inspector ? target.station
     : Math.max(start, Math.min(end, inspector?.curve_index === curveIndex ? inspector.station_ft : start));
   const [draft, setDraft] = useState<{ curveIndex: number; text: string } | null>(null);
   const stationText = draft?.curveIndex === curveIndex ? draft.text
@@ -100,7 +100,7 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
     <div className="cross-section-readout"><strong>{selected?.station || "Selecting station…"}</strong><span>{station.toFixed(3)} internal ft · Focus the slider to scroll by station</span></div>
     {error && <p className="cross-section-error" role="alert">{error}</p>}
     <div className="cross-section-drawing" aria-busy={pending}>
-      {!selected ? <div className="analysis-empty" role="status">{error ? "Correct the station or select the slider to continue." : "Loading cross section…"}</div> : section?.mode === "unavailable" || !bounds ? <div className="analysis-empty">{section?.message || model?.message || "Section geometry is unavailable. Recalculate this curve."}</div> : <svg viewBox={`0 ${top} 900 ${bottom - top}`} role="img" aria-label={`${section.title} at ${selected.station}, ${exaggeration} times vertical scale. Looking ahead along increasing station. Left to right: ${section.segments.map((segment: Dict) => `${segment.name}: ${segment.slope_label}${physical ? `, ${segment.width_ft} ft wide` : ""}`).join("; ")}. ${section.pivot ? `Fixed ${section.pivot.label} pivot; heights are relative to this pivot.` : section.message}`}>
+      {!selected ? <div className="analysis-empty" role="status">{error ? "Correct the station or select the slider to continue." : "Loading cross section…"}</div> : section?.mode === "unavailable" || !bounds ? <div className="analysis-empty">{section?.message || model?.message || "Section geometry is unavailable. Recalculate this curve."}</div> : <svg viewBox={`0 ${top} 900 ${bottom - top}`} role="img" aria-label={`${section.title} at ${selected.station}, ${exaggeration} times vertical scale. Looking ahead along increasing station. Left to right: ${section.segments.map((segment: Dict) => `${segment.name}: ${segment.slope_label}${physical ? `, ${segment.width_ft} ft wide` : ""}`).join("; ")}. ${section.pivots ? `Two level median-side pivots; ${section.median_gap_ft} ft median interval; heights relative to the common profile.` : section.pivot ? `Fixed ${section.pivot.label} pivot; heights are relative to this pivot.` : section.message}`}>
         <line className="section-datum" x1="45" x2="855" y1={y(0)} y2={y(0)} />
         <text className="section-orientation" x="45" y={top + 24}>LEFT</text><text className="section-orientation" x="855" y={top + 24} textAnchor="end">RIGHT</text>
         {section.segments.map((segment: Dict) => {
@@ -110,12 +110,13 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
             <title>{segment.name}: {segment.slope_label}{physical ? `, ${segment.width_ft} ft wide. Left edge ${segment.left.y.toFixed(4)} ft; right edge ${segment.right.y.toFixed(4)} ft relative to pivot.` : ". Schematic span; physical width is unspecified."}</title>
             <line x1={x(segment.left.x)} y1={y(segment.left.y)} x2={x(segment.right.x)} y2={y(segment.right.y)} />
             <circle cx={x(segment.left.x)} cy={y(segment.left.y)} r="3" /><circle cx={x(segment.right.x)} cy={y(segment.right.y)} r="3" />
-            <text x={midX} y={midY - 34} textAnchor="middle">{segment.name}</text>
+            <text x={midX} y={midY - 34} textAnchor="middle">{segment.display_label || segment.name}</text>
             <text className="section-slope" x={midX} y={midY - 13} textAnchor="middle">{segment.slope_label}</text>
             {physical && <text x={midX} y={midY + 28} textAnchor="middle">{Number(segment.width_ft).toFixed(1)} ft</text>}
           </g>;
         })}
-        {section.pivot && <g className="section-pivot"><circle cx={x(section.pivot.x)} cy={y(0)} r="7" /><line x1={x(section.pivot.x)} x2={x(section.pivot.x)} y1={y(0) + 10} y2={bottom - 38} /><text x={x(section.pivot.x)} y={bottom - 18} textAnchor="middle">Fixed pivot · {section.pivot.label}</text></g>}
+        {section.pivots && <g className="section-median-gap"><line className="section-datum" x1={x(section.pivots[0].x)} x2={x(section.pivots[1].x)} y1={y(0) - 60} y2={y(0) - 60} /><text x={(x(section.pivots[0].x) + x(section.pivots[1].x)) / 2} y={y(0) - 70} textAnchor="middle">Median interval · {Number(section.median_gap_ft).toFixed(1)} ft</text></g>}
+        {(section.pivots || (section.pivot ? [section.pivot] : [])).map((pivot: Dict) => <g key={pivot.label} className="section-pivot"><circle cx={x(pivot.x)} cy={y(0)} r="7" /><line x1={x(pivot.x)} x2={x(pivot.x)} y1={y(0) + 10} y2={bottom - 38} /><text x={x(pivot.x)} y={bottom - 18} textAnchor={section.pivots ? pivot.label.startsWith("Left") ? "end" : "start" : "middle"}>Fixed pivot · {section.pivots ? pivot.label.replace(" median-side travel-lane edge", " carriageway") : pivot.label}</text></g>)}
       </svg>}
     </div>
     {section?.segments?.length > 0 && <div className="cross-section-mobile-labels"><p>Slopes, left to right</p><dl>{section.segments.map((segment: Dict) => <div key={segment.name} className={`section-segment section-${segment.side}`}><dt>{segment.name}</dt><dd><strong>{segment.slope_label}</strong>{physical && <span> · {Number(segment.width_ft).toFixed(1)} ft</span>}</dd></div>)}</dl>{section.pivot && <p>Fixed pivot · {section.pivot.label}</p>}</div>}

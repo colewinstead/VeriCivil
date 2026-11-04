@@ -14,7 +14,8 @@ def compound_pairs(curves: list[dict]) -> list[tuple[int, int]]:
     pairs = []
     for index, (prior, following) in enumerate(zip(curves, curves[1:])):
         a, b = prior.get("results", {}), following.get("results", {})
-        if (a.get("pt_ft") is not None and b.get("pc_ft") is not None
+        if (a.get("transition_method") != "aashto_case_ii" and b.get("transition_method") != "aashto_case_ii" and not a.get("case_ii_side") and not b.get("case_ii_side")
+                and a.get("pt_ft") is not None and b.get("pc_ft") is not None
                 and math.isclose(float(a["pt_ft"]), float(b["pc_ft"]), rel_tol=0, abs_tol=1e-7)
                 and prior.get("meta", {}).get("curve_direction", "left") == following.get("meta", {}).get("curve_direction", "left")
                 and prior.get("meta", {}).get("alignment_name", "") == following.get("meta", {}).get("alignment_name", "")
@@ -366,7 +367,7 @@ def build_curve_from_preset(preset: dict, shared_inputs: dict[str, str], *, comp
         preset.get("station_equations"),
         preset.get("alignment_station_range"),
         str(shared_inputs.get("criteria_profile", "mdot-rdsd-2026-04-22")),
-        profile_options={**shared_inputs,"curve_direction":preset.get("curve_direction","left"),
+        profile_options={**shared_inputs,"radius":preset["radius_ft"], "speed":shared_inputs.get("speed", ""), "curve_direction":preset.get("curve_direction","left"),
                          "alignment_type":preset.get("alignment_type","circular"),
                          "ts":preset.get("ts_station_label",""), "st":preset.get("st_station_label",""),
                          "linear_unit":preset.get("linear_unit"),

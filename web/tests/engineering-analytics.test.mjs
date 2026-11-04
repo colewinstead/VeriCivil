@@ -102,6 +102,11 @@ test("opted-out imports and Do Not Track transmit no file contents; permitted up
     trackEngineeringCalculation({ criteria_profile: "mdot", speed: 55, radius: 1000, pc: "100+00" });
     assert.equal(requests[1].options.credentials, "same-origin");
     assert.deepEqual(JSON.parse(requests[1].options.body), { kind: "calculation", standard: "mdot", speed: 55, radius: 1000, pc: "100+00", pt: "" });
+    trackEngineeringCalculation({ criteria_profile: "aashto", roadway: "divided_case_ii", pc: "100+00", case_ii: { left: { speed: 65, radius: 3000, pivot_offset: -12 }, right: { speed: 60, radius: 3200, pivot_offset: 12 } } });
+    assert.deepEqual(requests.slice(2).map(request => JSON.parse(request.options.body)), [
+      { kind: "calculation", standard: "aashto", speed: 65, radius: 3000, pc: "100+00", pt: "" },
+      { kind: "calculation", standard: "aashto", speed: 60, radius: 3200, pc: "100+00", pt: "" },
+    ]);
     globalThis.fetch = async () => new Response(null, { status: 204 });
     assert.equal(await retainLandxml(content, true), "skipped");
     globalThis.fetch = async () => new Response(null, { status: 503 });

@@ -64,7 +64,10 @@ def _station(values, key, label, equations, alignment_range):
     return station
 
 
-def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False, compound_sides=()) -> dict:
+def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False, compound_sides=(), _case_ii=False) -> dict:
+    if values.get("roadway") == "divided_case_ii":
+        from aashto_divided import calculate as calculate_divided
+        return calculate_divided(values, station_equations, alignment_range, lengths_only=lengths_only)
     import Super
     from app_info import CALCULATION_ENGINE_VERSION
     from criteria_info import criteria_metadata
@@ -230,7 +233,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "initial_drainage_direction": "left" if initial_bank < 0 else "right",
             "target_drainage_direction": target_drainage,
             "no_transition_required": no_transition,
-            "basis": "AASHTO §§3.3.5.1 and 10.9.6.2.14",
+            "basis": "AASHTO §3.3.8.8.2; Figure 3-8" if _case_ii else "AASHTO §§3.3.5.1 and 10.9.6.2.14",
             "note": (
                 "Initial single slope is retained; no superelevation runoff or runout is required. This does not establish a zero minimum for horizontal spiral design."
                 if no_transition else
@@ -245,7 +248,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     n = farthest / widths[0]
     # Table 3-15 is directly applicable to undivided highways. For one-way
     # ramps use the unadjusted Eq. 3-23 gradient, avoiding an unverified discount.
-    bw = criteria.lane_factor(n) if roadway == "two_way" else 1.0
+    bw = criteria.lane_factor(n, case_ii=_case_ii) if _case_ii or roadway == "two_way" else 1.0
     allowed_gradient = gradient / bw
 
     def profile_height(x, bank):
@@ -306,7 +309,9 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         {
             "component": "Lane adjustment",
             "reference": (
-                "Table 3-15 unrounded footnote"
+                ("Case II §3.3.8.8.2; Table 3-15 unrounded footnote"
+                 + ("; formula-derived beyond printed 3.5-lane range" if n > 3.5 else ""))
+                if _case_ii else "Table 3-15 unrounded footnote"
                 if roadway == "two_way"
                 else "Unadjusted gradient for one-way carriageway; no Table 3-15 discount"
             ),
@@ -934,6 +939,9 @@ def validate_export_curves(curves: list[dict]) -> None:
     """Recheck saved engineering results and overlaps before affected exports."""
     import copy
     import super_batch
+    from aashto_divided import is_case_ii, validate_curves
+    validate_curves(curves)
+    curves = [curve for curve in curves if not is_case_ii(curve.get("results", {}))]
     pairs = super_batch.compound_pairs(curves)
     sides = {}
     for i, j in pairs:

@@ -18,7 +18,7 @@ class PilotOperationsTests(unittest.TestCase):
 
             self.assertEqual(identity["application_version"], APP_VERSION)
             self.assertEqual(identity["calculation_engine_version"], CALCULATION_ENGINE_VERSION)
-            self.assertEqual(identity["project_schema_version"], 5)
+            self.assertEqual(identity["project_schema_version"], 6)
             self.assertEqual(identity["approval_status"], "unapproved")
             self.assertIsInstance(identity["tracked_worktree_clean"], bool)
             self.assertIsInstance(identity["untracked_files_present"], bool)

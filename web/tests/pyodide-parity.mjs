@@ -43,6 +43,19 @@ const browser = (operation, input) => {
   pyodide.globals.set("aashto_operation", operation);
   return JSON.parse(pyodide.runPython("__import__('json').dumps(super_service.dispatch(aashto_operation,aashto_payload),default=list)"));
 };
+for (const direction of ["left", "right"]) {
+  const request = { entitlement: proEntitlement, inputs: {
+    criteria_profile: "aashto-green-book-2018-2019-10", roadway: "divided_case_ii", pc: "1000", pt: "3000", curve_direction: direction,
+    case_ii: { left: { speed: 65, radius: 3000, lane_count: 4, lane_width: 12, pivot_offset: -20, runoff_tangent_percent: 70 },
+      right: { speed: 65, radius: 3000, lane_count: 4, lane_width: 12, pivot_offset: 20, runoff_tangent_percent: 70 } },
+  } };
+  const result = browser("calculate", request);
+  assert.deepEqual(result, native("calculate", request));
+  assert.deepEqual(browser("required_spiral_lengths", request), native("required_spiral_lengths", request));
+  const inspection = { entitlement: proEntitlement, results: result.results, direction, station: 1000 };
+  assert.deepEqual(browser("diagram_lookup", inspection), native("diagram_lookup", inspection));
+  assert.equal(browser("diagram_lookup", inspection).cross_section.pivots.length, 2);
+}
 const spacingXml = await readFile(new URL("../../tests/fixtures/reverse_spacing_synthetic.xml", import.meta.url), "utf8");
 const spacingInputs = { speed: "30", e_manual: "0.06", Lr_manual: "100", Lt_manual: "25" };
 const spacingCurves = browser("build_all_landxml_curves", { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs });
