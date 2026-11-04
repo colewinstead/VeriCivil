@@ -1759,14 +1759,18 @@ LandXML points are interpreted as Northing/Easting. DXF output uses X=Easting an
             return
         try:
             data = super_project.load_project(path)
+            self._apply_project(data)
         except (OSError, ValueError) as exc:
             self._show_operation_error("Load Project", "project_load", exc, path)
             return
-        self._apply_project(data)
         self.project_path = path
         messagebox.showinfo("Load Project", f"Loaded project from:\n{os.path.basename(path)}")
 
     def _apply_project(self, data: dict) -> None:
+        if (data.get("vars", {}).get("roadway") == "divided_case_ii"
+                or (data.get("last_results") or {}).get("transition_method") == "aashto_case_ii"
+                or any((curve.get("results") or {}).get("transition_method") == "aashto_case_ii" for curve in data.get("curves", []))):
+            raise ValueError("Open this Case II project in the browser or Electron app. Legacy Tkinter cannot edit or export the pair; your current workspace is unchanged.")
         self._suspend_auto = True
         vars_data = data.get("vars", {}) or {}
         self.vars["circular_placement_basis"].set(vars_data.get("circular_placement_basis", "runoff"))

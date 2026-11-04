@@ -55,7 +55,7 @@ def overlay_export_issues(
     curves=list(curves)
     warnings = list(dict.fromkeys(landxml.warnings))
 
-    if any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in curves):
+    if any(c.get("results",{}).get("transition_method") in {"aashto_fixed_pivot", "aashto_case_ii"} for c in curves):
         import super_qa
         report=super_qa.analyze_corridor(landxml,curves)
         errors.extend(f["message"] for f in report["findings"] if f["severity"]=="block" and f["code"]!="UNCALCULATED_CURVE")
@@ -352,6 +352,8 @@ def export_detail_dxf(path: str | Path, curves: Iterable[dict], config: dict | N
     from aashto_superelevation import validate_export_curves
     curves=list(curves)
     validate_export_curves(curves)
+    from aashto_divided import report_curves
+    curves = list(report_curves(curves))
     cfg = _cfg(config)
     writer = DxfWriter()
     warnings: list[str] = []

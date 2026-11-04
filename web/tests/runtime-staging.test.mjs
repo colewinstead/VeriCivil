@@ -5,6 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { runtimeVersionMatches } from "../lib/runtime-version.ts";
+
+test("a stale worker cannot accept Case II inputs as legacy shared-speed inputs", () => {
+  const expected = { application_version: "1.7.5", calculation_engine_version: "1.6.0" };
+  assert.equal(runtimeVersionMatches({ application_version: "1.7.4", calculation_engine_version: "1.5.1" }, expected), false);
+  assert.equal(runtimeVersionMatches({ ...expected, calculation_engine_version: "1.5.1" }, expected), false);
+  assert.equal(runtimeVersionMatches(undefined, expected), false);
+  assert.equal(runtimeVersionMatches(expected, expected), true);
+});
 
 const launcher = fileURLToPath(new URL("../build/prepare-python-runtime.mjs", import.meta.url));
 

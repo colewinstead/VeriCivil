@@ -250,6 +250,9 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
     ]
     from aashto_superelevation import validate_export_curves
     validate_export_curves(curve_list)
+    from aashto_divided import report_curves
+    original_curve_count = len(curve_list)
+    curve_list = list(report_curves(curve_list))
     diagram_b64, _ = _asset_constants()
     diagram_bytes = _decode_asset(diagram_b64)
     stamps = stamp_images()
@@ -326,7 +329,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
 
     summary_data = [
         [Paragraph("PROJECT", styles["Tiny"]), Paragraph("ROUTE", styles["Tiny"]), Paragraph("ALIGNMENT", styles["Tiny"]), Paragraph("CURVES", styles["Tiny"])],
-        [Paragraph(_text(_shared_meta(curve_list, "project_name")), styles["KpiValue"]), Paragraph(_text(_shared_meta(curve_list, "route_name")), styles["KpiValue"]), Paragraph(_text(_shared_meta(curve_list, "alignment_name")), styles["KpiValue"]), Paragraph(str(len(curve_list)), styles["KpiValue"])],
+        [Paragraph(_text(_shared_meta(curve_list, "project_name")), styles["KpiValue"]), Paragraph(_text(_shared_meta(curve_list, "route_name")), styles["KpiValue"]), Paragraph(_text(_shared_meta(curve_list, "alignment_name")), styles["KpiValue"]), Paragraph(str(original_curve_count), styles["KpiValue"])],
     ]
     summary = Table(summary_data, colWidths=[1.85 * inch, 1.7 * inch, 2.25 * inch, 0.95 * inch], splitByRow=1, splitInRow=1)
     summary.setStyle(TableStyle([
@@ -397,7 +400,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         inputs = results.get("inputs", {}) or {}
         meta = curve.get("meta", {}) or {}
         index_data.append([
-            Paragraph(str(index), styles["TableCell"]),
+            Paragraph(f"{meta['report_curve_number']}{meta['case_ii_side'][0].upper()}" if meta.get("case_ii_side") else str(meta.get("report_curve_number", index)), styles["TableCell"]),
             Paragraph(_text(meta.get("curve_name")), styles["TableCell"]),
             Paragraph(_text(meta.get("curve_direction", "left")).title(), styles["TableCell"]),
             Paragraph(f"{_text(inputs.get('pc'))} - {_text(inputs.get('pt'), 'N/A')}", styles["TableCell"]),
@@ -684,6 +687,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         criteria = criteria_for_result(results)
         profile_id = str(criteria.get("profile_id") or "legacy-unversioned")
         profile_name = str(criteria.get("profile_name") or "Legacy criteria")
+        curve_index_number = meta.get("report_curve_number", curve_index_number)
         curve_name = str(meta.get("curve_name") or f"Curve {curve_index_number}")
 
         story.extend([
@@ -740,7 +744,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ("CS station" if inputs.get("alignment_type")=="spiral" else "PT station", _text(inputs.get("pt"), "N/A")),
             ("Design speed", _number(inputs.get("speed_mph"), 0, " mph")),
             ("Curve radius", _number(inputs.get("radius_ft"), 2, " ft")),
-            ("Facility / area", f"{_text(inputs.get('facility'))} / {_text(inputs.get('area_type'))}"),
+            ("Facility / area", f"{'Median-side travel-lane edge' if results.get('case_ii_side') else _text(inputs.get('facility'))} / {_text(inputs.get('area_type'))}"),
             ("Lane configuration", f"{_number(inputs.get('lane_width_ft'), 2, ' ft')} / {_number(inputs.get('lanes_rotated'), 0, ' rotated')}"),
             ("Rate source", _text(results.get("e_source"))),
         ]
@@ -753,7 +757,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         elif results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
             station_rows=[(label,_station(results,results.get(key))) for label,key in [("Start transition","pnc_ft"),("Start runoff","reverse_crown_ft"),("Full super entry","full_super_ft"),("Full super exit","full_super_out_ft"),("End runoff","reverse_crown_out_ft"),("End transition","pnc_out_ft")]]
         if results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
-            input_rows.extend([("Roadway / section",_text(f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
+            input_rows.extend([("Roadway / section",_text("Divided Case II / uniform single slope" if results.get("case_ii_side") else f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
                                ("Rotation axis",_text(f"{inputs.get('rotation_axis',results.get('facility'))} / {results.get('pivot_relationship','')}")),
                                ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% {'runoff + runout' if inputs.get('circular_placement_basis') == 'runoff_runout' else 'runoff'} on tangent")),
                                ("Criteria",_text(profile_name))])
@@ -761,8 +765,11 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
                 if section_transition:
                     input_rows.extend([("Curve cross slope",_text(section_transition["target_slope_label"])),
                                        ("Initial drainage",_text(section_transition["initial_drainage_direction"])),
-                                       ("Left / right convention", "Looking ahead along increasing alignment station; ramp cross slope is positive when draining toward the left"),
+                                       ("Left / right convention", "Looking ahead along increasing alignment station; cross slope is positive when draining toward the left"),
                                        ("Section basis",_text(section_transition["basis"]))])
+                if results.get("case_ii_side"):
+                    input_rows.extend([("Pivot baseline offset", _number(results["baseline_pivot_offset_ft"], 3, " ft (right-positive)")),
+                                       ("Profile reference", "Both median-side pivots have equal relative elevation. Absolute elevations and median grading are not modeled.")])
                 lane_width = float(inputs["lane_width_ft"])
                 input_rows.extend([("Actual lanes",_text(len(results["section_lanes"]))),
                                    ("Rotated width (max)",_number(results["n1"] * lane_width, 2, " ft")),

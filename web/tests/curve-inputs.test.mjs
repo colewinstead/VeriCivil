@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { editLandxmlInputs, curveInputValues } from "../lib/curve-inputs.ts";
+import { editLandxmlInputs, curveInputValues, mergeCurveInputs } from "../lib/curve-inputs.ts";
 
 test("a blocked curve's draft edits stay isolated and survive JSON save/restore", () => {
   const original = { shared: { speed: "35", runoff_tangent_percent: "50" },
@@ -29,4 +29,19 @@ test("recorded curve inputs restore the editable speed and overrides", () => {
   assert.equal(inputs.Lr_manual, "");
   assert.equal(inputs.runoff_tangent_percent, "40");
   assert.equal(inputs.curve_name, "Curve 5");
+});
+
+test("Case II edits preserve the other carriageway and each curve's other inputs", () => {
+  const state = { shared: { case_ii: { left: { speed: "65", radius: "3000" }, right: { speed: "60", radius: "2000" } } },
+    curves: { 0: { case_ii: { left: { radius: "4000" }, right: { radius: "5000" } } }, 1: { case_ii: { right: { radius: "6000" } } } } };
+  const patch = { case_ii: { left: { speed: "70" } } };
+  const edited = editLandxmlInputs(state, patch, 0, "selected", [0]);
+  assert.deepEqual(edited.curves[0].case_ii, { left: { speed: "70", radius: "4000" }, right: { speed: "60", radius: "5000" } });
+  assert.deepEqual(edited.curves[1], state.curves[1]);
+  assert.equal(state.shared.case_ii.left.speed, "65");
+  assert.equal(mergeCurveInputs(state.shared, patch).case_ii.right.radius, "2000");
+  const restored = curveInputValues({ results: { inputs: { roadway: "divided_case_ii", radius: 500, area: "urban_freeway", case_ii: edited.curves[0].case_ii } }, meta: {} });
+  assert.deepEqual(restored.case_ii, edited.curves[0].case_ii);
+  assert.equal(restored.radius, "500");
+  assert.equal(restored.area, "urban_freeway");
 });

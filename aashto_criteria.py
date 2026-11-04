@@ -166,9 +166,11 @@ def relative_gradient(speed: float) -> float:
     return 1 / min(200, max(125, 200 - 2.5 * (50 - speed)))
 
 
-def lane_factor(rotated_lanes: float) -> float:
-    """Table 3-15 footnote, without rounding the published two-decimal factors."""
-    if not 1 <= rotated_lanes <= 3.5:
+def lane_factor(rotated_lanes: float, *, case_ii=False) -> float:
+    """Unrounded Table 3-15 footnote; Case II extends evaluation to 7 lanes."""
+    if case_ii and not 1 <= rotated_lanes <= 7:
+        raise ValueError("Case II supports 1–7 rotated lanes per carriageway.")
+    if not case_ii and not 1 <= rotated_lanes <= 3.5:
         raise ValueError(
             "Rotated lane count is outside verified Table 3-15 scope (1–3.5)."
         )

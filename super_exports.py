@@ -418,7 +418,7 @@ def build_normalized_rows(curves: Iterable[dict], station_format: bool = True) -
             section_lane=next((lane for lane in results.get("section_lanes",[]) if lane["lane_name"]==lane_name),None)
             pivot_about=None
             if section_lane:
-                pivot=float(results["pivot_offset_ft"])
+                pivot=float(results["pivots"][section_lane["carriageway"]]["x"] if results.get("carriageways") else results["pivot_offset_ft"])
                 if abs(pivot-section_lane["left_offset_ft"])<1e-8:pivot_about="LS"
                 elif abs(pivot-section_lane["right_offset_ft"])<1e-8:pivot_about="RS"
             for row in lane_rows:
@@ -475,6 +475,8 @@ def write_ord_csv(handle: TextIO, curves: Iterable[dict]) -> list[str]:
     curve_list = list(curves)
     from aashto_superelevation import validate_export_curves
     validate_export_curves(curve_list)
+    if any(curve.get("results", {}).get("transition_method") == "aashto_case_ii" for curve in curve_list):
+        raise ValueError("Case II ORD CSV is unsupported: multilane carriageway pivot mapping has not been validated. Use the PDF or DXF report.")
     rows=build_normalized_rows(curve_list)
     if any(row.get("fixed_pivot") and row.get("pivot_about") is None for row in rows):
         raise ValueError("ORD CSV cannot represent this fixed pivot with the verified lane-edge LS/RS mapping. Supported AASHTO CSV sections: two lanes about their common edge, or one single-slope lane about a pavement edge. PDF and geometry DXF remain available; real ORD validation is required for other pivots.")

@@ -199,7 +199,7 @@ def curve_diagram(results: dict, direction: str) -> dict[str, Any]:
             {
                 "start_ft": float(start["station_ft"]),
                 "end_ft": float(end["station_ft"]),
-                **_criterion_for_segment(results, start, end),
+                **_criterion_for_segment(results.get("carriageways", {}).get(lane, results), start, end),
             }
             for start, end in zip(usable, usable[1:])
             if float(end["station_ft"]) > float(start["station_ft"])
@@ -529,7 +529,7 @@ def diagram_lookup(results: dict, direction: str, station: float) -> dict[str, A
             events=lane["events"]
             slope=slope_at_station([(e["station_ft"],e["slope_pct"]) for e in events],station)
             pair=next(((a,b) for a,b in zip(events,events[1:]) if a["station_ft"]<=station<=b["station_ft"]),None)
-            criterion=_criterion_for_segment(results,*pair) if pair else {"component":"Initial section","reference":"Recorded fixed-pivot section","mode":"calculated","phase":"Transition endpoint"}
+            criterion=_criterion_for_segment(results.get("carriageways", {}).get(lane.get("carriageway"), results),*pair) if pair else {"component":"Initial section","reference":"Recorded fixed-pivot section","mode":"calculated","phase":"Transition endpoint"}
             lanes[lane["lane_name"]]={"slope_pct":slope,"slope_label":super_exports.format_slope_label(slope),"slope_decimal":super_exports.slope_decimal(slope),"phase":criterion["phase"],"criterion":criterion}
         return {"station_ft":float(station),"station":Super.format_result_station(results,station,True),"lanes":lanes,
                 "cross_section": super_cross_section.section_at_station(results, direction, station, lanes, diagram["cross_section"], diagram["domain"])}
@@ -627,7 +627,7 @@ def _curve_match(preset: dict, curve: dict, used: set[int], curve_index: int) ->
     return (
         str(meta.get("alignment_name", "")) == str(preset.get("alignment_name", ""))
         and math.isclose(float(results.get("pc_ft", -1)), float(preset.get("pc_station_ft", -2)), abs_tol=0.01)
-        and math.isclose(float(inputs.get("radius_ft", -1)), float(preset.get("radius_ft", -2)), abs_tol=0.01)
+        and math.isclose(float(results.get("baseline_radius_ft") or inputs.get("radius_ft", -1)), float(preset.get("radius_ft", -2)), abs_tol=0.01)
     )
 
 
@@ -722,6 +722,25 @@ def _zero_event(curve: dict, entering: bool) -> float | None:
 
 def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], excluded_curve_indexes: list[int] | None = None,
                      shared_inputs: dict | None = None) -> dict[str, Any]:
+    from aashto_divided import is_case_ii, report_curves
+    if any(is_case_ii(curve.get("results", {})) for curve in curves):
+        reports = []
+        for side in ("left", "right"):
+            projected = [next(item for item in report_curves([curve])
+                              if not is_case_ii(curve.get("results", {})) or item["meta"].get("case_ii_side") == side)
+                         for curve in curves]
+            reports.append(analyze_corridor(data, projected, excluded_curve_indexes, shared_inputs))
+        report = reports[0]
+        report["findings"] = [{**finding, "carriageway": side, "message": f"{side.title()} carriageway: {finding['message']}"}
+                              for side, entry in zip(("left", "right"), reports) for finding in entry["findings"]]
+        for item in report["curve_statuses"]:
+            relevant = [finding for finding in report["findings"] if item["curve_index"] in finding["curve_indexes"]]
+            if item["status"] != "excluded":
+                item["status"] = max((finding["severity"] for finding in relevant), key=lambda value: SEVERITY_RANK[value], default="pass")
+                item["finding_count"] = len(relevant)
+        report["status"] = max((finding["severity"] for finding in report["findings"]), key=lambda value: SEVERITY_RANK[value], default="pass")
+        report["counts"] = {severity: sum(item["status"] == severity for item in report["curve_statuses"]) for severity in ("pass", "review", "block")}
+        return report
     presets = data.curve_records()
     excluded = {int(index) for index in (excluded_curve_indexes or []) if 0 <= int(index) < len(presets)}
     findings: list[dict] = []
@@ -791,7 +810,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 expected={"TS":preset["ts_station_ft"],"SC":preset["sc_station_ft"],"CS":preset["cs_station_ft"],"ST":preset["st_station_ft"]}
             actual=results.get("alignment_anchors",{})
             valid=actual.keys()==expected.keys() and all(abs(float(actual.get(key,0))-value)<0.01 for key,value in expected.items())
-            valid=valid and abs(float(results.get("inputs",{}).get("radius_ft",0))-preset["radius_ft"])<0.01 and curve.get("meta",{}).get("curve_direction")==preset["curve_direction"]
+            valid=valid and abs(float(results.get("baseline_radius_ft") or results.get("inputs",{}).get("radius_ft",0))-preset["radius_ft"])<0.01 and curve.get("meta",{}).get("curve_direction")==preset["curve_direction"]
             if not valid:
                 findings.append(_finding("ESTABLISHED_GEOMETRY_MISMATCH","block",f"Curve {index+1} calculation does not match its established LandXML stations, radius, or direction.",[index],preset["pc_station_ft"],preset["pt_station_ft"],"Reapply the imported curve; horizontal geometry is not modified."))
             else:
@@ -800,7 +819,7 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 values={**results["inputs"],"linear_unit":data.linear_unit,
                         "geometry_provenance":{"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}}}
                 try:
-                    aashto_superelevation.calculate(values,data.station_equations,data.station_range(), compound_sides=tuple(compound_sides.get(index, [])))
+                    aashto_superelevation.calculate(values,data.station_equations,data.station_range(), compound_sides=tuple(compound_sides.get(index, [])), _case_ii=bool(results.get("case_ii_side")))
                 except ValueError as exc:
                     for item in getattr(exc,"findings",[]) or [{"code":"INVALID_IMPORTED_TRANSITION","severity":"block","message":str(exc)}]:
                         if item["severity"]=="block":
