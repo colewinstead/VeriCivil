@@ -11,7 +11,7 @@
     "prebuild": "node build/prepare-python-runtime.mjs",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && npm run test:billing && node --experimental-strip-types --test tests/qa-findings.test.mjs tests/curve-inputs.test.mjs tests/station-inspection.test.mjs && node --test tests/runtime-staging.test.mjs tests/rendered-html.test.mjs && node tests/pyodide-parity.mjs",
+    "test": "npm run build && npm run test:billing && node --experimental-strip-types --test tests/qa-findings.test.mjs tests/curve-inputs.test.mjs tests/station-inspection.test.mjs && node --test tests/runtime-staging.test.mjs tests/rendered-html.test.mjs tests/dependency-compatibility.test.mjs && node tests/pyodide-parity.mjs",
     "test:billing": "node --experimental-strip-types --test tests/billing-entitlement.test.mjs tests/analytics-policy.test.mjs tests/engineering-analytics.test.mjs tests/pro-price.test.mjs tests/desktop-downloads.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-pages --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
@@ -28,15 +28,15 @@
     "@workos-inc/authkit-nextjs": "^4.2.0",
     "@workos-inc/node": "^10.8.0",
     "drizzle-orm": "0.45.2",
-    "next": "16.2.6",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "next": "16.4.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "recharts": "^3.9.2",
     "stripe": "^22.1.1"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "^4.20260515.1",
+    "@cloudflare/vite-plugin": "1.67.0",
+    "@cloudflare/workers-types": "5.20261102.1",
     "@electron/packager": "20.3.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
@@ -44,21 +44,31 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "electron": "45.0.0",
     "electron-builder": "26.18.0",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.4.4",
     "pyodide": "0.29.4",
-    "react-server-dom-webpack": "19.2.6",
+    "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "vite": "8.3.5",
+    "wrangler": "4.156.2"
   },
   "overrides": {
-    "postcss": "8.5.14"
+    "postcss": "8.5.32",
+    "vinext": {
+      "image-size": "2.0.4"
+    },
+    "@vercel/og": {
+      "satori": "0.33.5"
+    },
+    "fflate@>=0.7.0 <0.7.5": "0.7.5",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
   },
   "type": "module"
 }
