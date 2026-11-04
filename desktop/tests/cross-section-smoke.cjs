@@ -1,11 +1,12 @@
 const assert = require('node:assert/strict');
 const { app, BrowserWindow, dialog, nativeTheme } = require('electron');
-const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require('node:fs');
+const { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '../..');
+const { application_version: applicationVersion } = JSON.parse(readFileSync(path.join(root, 'web/app/generated/release-info.json'), 'utf8'));
 const profile = mkdtempSync(path.join(tmpdir(), 'vericivil-section-'));
 app.setPath('userData', profile);
 const timer = setTimeout(() => app.exit(1), 120000);
@@ -31,7 +32,7 @@ launch.then(async window => {
     console.error(await js('JSON.stringify({requests:window.sectionRequests,input:document.querySelector(".cross-section-station input")?.value,active:document.activeElement?.tagName})'));
     throw new Error(`Timed out: ${code}`);
   };
-  await wait(browserUrl ? "document.querySelector('.privacy-strip .version')?.textContent.includes('1.7.3')" : "!!document.querySelector('.desktop-runtime.ready')");
+  await wait(browserUrl ? `document.querySelector('.privacy-strip .version')?.textContent.includes(${JSON.stringify(applicationVersion)})` : "!!document.querySelector('.desktop-runtime.ready')");
   const python = process.platform === 'win32' ? 'python' : 'python3';
   const fixture = JSON.parse(execFileSync(python, ['-c', `
 import json, super_service
