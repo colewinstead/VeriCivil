@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
+from scripts.create_neutral_desktop_icons import create_icons
 from scripts.package_electron_release import package_release
 from scripts.stage_desktop_installers import stage_installers
 
@@ -48,16 +49,67 @@ class ElectronReleaseTests(unittest.TestCase):
             self.assertEqual(len(staged), 2)
             self.assertEqual(list((root / "desktop/release-assets").glob("*.yml")), [])
 
+    def test_neutral_staging_isolates_feed_checksums_and_refuses_branded_fallback(self):
+        source = self.root / "desktop/installers/neutral/win32-x64"
+        source.mkdir(parents=True)
+        installer = source / "Superelevation-Calculator-1.2.3-win-x64-unsigned.exe"
+        installer.write_bytes(b"neutral installer")
+        branded_source = self.root / "desktop/installers/win32-x64"
+        branded_source.mkdir(parents=True)
+        branded = branded_source / "VeriCivil-Superelevation-1.2.3-win-x64-unsigned.exe"
+        branded.write_bytes(b"branded installer")
+        stage_installers(self.root, "win32", "x64", "1.2.3")
+        original = {path.name: path.read_bytes() for path in (self.root / "desktop/release-assets").iterdir()}
+        staged = stage_installers(self.root, "win32", "x64", "1.2.3", "neutral")
+        self.assertEqual(staged[1].name, "latest-neutral-unsigned-win32-x64.yml")
+        feed = json.loads(staged[1].read_text())
+        self.assertEqual(feed["path"], installer.name)
+        self.assertEqual(feed["sha512"], base64.b64encode(hashlib.sha512(installer.read_bytes()).digest()).decode("ascii"))
+        self.assertTrue((self.root / "desktop/release-assets/SHA256SUMS-installers-neutral-win32-x64.txt").is_file())
+        for name, contents in original.items():
+            self.assertEqual((self.root / "desktop/release-assets" / name).read_bytes(), contents)
+        installer.unlink()
+        with self.assertRaisesRegex(ValueError, "missing"):
+            stage_installers(self.root, "win32", "x64", "1.2.3", "neutral")
+
+    def test_neutral_preview_has_own_archive_executable_and_checksum(self):
+        app = self.root / "desktop/app-neutral"
+        app.mkdir(parents=True)
+        (app / "package.json").write_text(json.dumps({"version": "1.2.3"}))
+        folder = self.root / "desktop/releases/neutral/Superelevation Calculator Preview-win32-x64"
+        (folder / "resources").mkdir(parents=True)
+        (folder / "Superelevation Calculator Preview.exe").write_bytes(b"neutral executable")
+        (folder / "resources/app.asar").write_bytes(b"neutral runtime")
+        archive, checksum = package_release(self.root, "win32", "x64", "1.2.3", "neutral")
+        self.assertEqual(archive.name, "Superelevation-Calculator-Desktop-Preview-1.2.3-Windows-x64.zip")
+        self.assertEqual(checksum.name, "SHA256SUMS-electron-neutral-Windows-x64.txt")
+        with zipfile.ZipFile(archive) as contents:
+            self.assertEqual(contents.read(folder.name + "/Superelevation Calculator Preview.exe"), b"neutral executable")
+        self.assertEqual(checksum.read_text(), f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
+
+    def test_neutral_icon_generation_is_reproducible(self):
+        icons = self.root / "icons"
+        create_icons(icons)
+        checked_in = Path(__file__).resolve().parent / "desktop/icons"
+        for extension in ("png", "ico", "icns"):
+            with Image.open(icons / f"superelevation.{extension}") as generated, Image.open(checked_in / f"superelevation.{extension}") as original:
+                self.assertEqual(generated.size, original.size)
+                self.assertEqual(generated.convert("RGBA").tobytes(), original.convert("RGBA").tobytes())
+
     def test_native_icons_have_multiple_resolutions_and_transparency(self):
         icons = Path(__file__).resolve().parent / "desktop/icons"
-        with Image.open(icons / "vericivil.ico") as icon:
+        for name in ("vericivil", "superelevation"):
+            self.check_native_icon(icons, name)
+
+    def check_native_icon(self, icons, name):
+        with Image.open(icons / f"{name}.ico") as icon:
             self.assertEqual(icon.format, "ICO")
             self.assertEqual(icon.ico.sizes(), {(size, size) for size in (16, 24, 32, 48, 64, 128, 256)})
             for size in icon.ico.sizes():
                 frame = icon.ico.getimage(size)
                 self.assertEqual(frame.mode, "RGBA")
                 self.assertEqual(frame.getextrema()[3], (0, 255))
-        with Image.open(icons / "vericivil.icns") as icon:
+        with Image.open(icons / f"{name}.icns") as icon:
             self.assertEqual(icon.format, "ICNS")
             self.assertTrue({(size, size, 1) for size in (128, 256, 512)}.issubset(icon.info["sizes"]))
             icon.load()

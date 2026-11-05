@@ -6,6 +6,9 @@ const path = require('node:path');
 async function verify() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.platform !== 'win32') throw new Error('Run installed acceptance on the disposable Windows CI runner.');
   const executable = process.argv[2];
+  const edition = require('../edition.cjs').getEdition();
+  const companionExecutable = process.argv[3];
+  if (companionExecutable && !path.resolve(companionExecutable).toLowerCase().startsWith(path.resolve(process.env.RUNNER_TEMP).toLowerCase() + path.sep)) throw new Error('Companion app must be inside RUNNER_TEMP.');
   if (!executable || !path.resolve(executable).toLowerCase().startsWith(path.resolve(process.env.RUNNER_TEMP) .toLowerCase() + path.sep)) throw new Error('Installed app must be inside RUNNER_TEMP.');
   const reservation = net.createServer();
   await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
@@ -13,12 +16,14 @@ async function verify() {
   await new Promise(resolve => reservation.close(resolve));
   const application = spawn(executable, [`--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1'], { windowsHide: true, stdio: 'ignore' });
   const started = new Promise((resolve, reject) => { application.once('spawn', resolve); application.once('error', reject); });
+  const companion = companionExecutable ? spawn(companionExecutable, [], { windowsHide: true, stdio: 'ignore' }) : null;
+  const companionStarted = companion && new Promise((resolve, reject) => { companion.once('spawn', resolve); companion.once('error', reject); });
   let socket, timer;
   const requests = new Map();
   const inputs = { pc: '10+00', pt: '12+00', speed: '45', radius: '1200', facility: 'centerline', area: 'rural', lane_width: '12', lanes_rotated: '2', normal_crown: '0.02', curve_direction: 'right' };
   const entitlement = { plan: 'pro', status: 'active' };
   try {
-    await started;
+    await Promise.all([started, companionStarted]);
     await Promise.race([new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Installed runtime acceptance timed out.')), 120000); }), (async () => {
       let page;
       for (let attempt = 0; attempt < 300; attempt++) {
@@ -57,6 +62,11 @@ async function verify() {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       if (!ready) throw new Error('Installed workspace document did not finish loading.');
+      const branding = await command({ returnByValue: true, expression: "({ title: document.title, heading: document.querySelector('.desktop-toolbar h1').textContent, text: document.body.innerText })" });
+      assert.equal(branding.result.value.title, edition.windowTitle);
+      assert.equal(branding.result.value.heading, edition.headerTitle);
+      if (edition.id === 'neutral') assert.doesNotMatch(branding.result.value.text, /VeriCivil|CW Aerial/);
+      if (companion) assert.equal(companion.exitCode, null, 'both editions remain running');
       const result = await command({ awaitPromise: true, returnByValue: true, expression: `(async () => {
           const worker = new Worker('vericivil://app/pyodide-worker.js');
           try {
@@ -83,7 +93,7 @@ async function verify() {
   } finally {
     clearTimeout(timer);
     socket?.close();
-    if (application.pid) spawnSync('taskkill', ['/PID', String(application.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    for (const running of [application, companion]) if (running?.pid) spawnSync('taskkill', ['/PID', String(running.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
   }
 }
 verify().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -11,6 +11,20 @@ function availableVersion(release, currentVersion) {
   return difference > 0 ? release.tag_name.slice(1) : null;
 }
 
+function editionDownload(release, edition, platform, arch) {
+  availableVersion(release, '0.0.0');
+  const version = release.tag_name.slice(1);
+  const filename = `${edition.artifactPrefix}-${version}-${platform === 'win32' ? 'win' : 'mac'}-${arch}-unsigned.${platform === 'win32' ? 'exe' : 'dmg'}`;
+  const url = `https://github.com/colewinstead/VeriCivil/releases/download/${release.tag_name}/${filename}`;
+  return release.assets?.some(asset => asset.name === filename && asset.browser_download_url === url) ? { version, url } : null;
+}
+
+function isEditionUpdate(info, edition, platform, arch) {
+  if (!/^\d+\.\d+\.\d+$/.test(info?.version)) return false;
+  const filename = `${edition.artifactPrefix}-${info.version}-${platform === 'win32' ? 'win' : 'mac'}-${arch}-unsigned.exe`;
+  return Array.isArray(info.files) && info.files.length > 0 && info.files.every(file => file.url === filename);
+}
+
 function closeForUpdate(window) {
   if (!window || window.isDestroyed()) return Promise.resolve(true);
   return new Promise((resolve, reject) => {
@@ -25,7 +39,7 @@ function closeForUpdate(window) {
 }
 
 class Updates extends EventEmitter {
-  constructor(updater, { enabled, version, isDirty, closeWindows, record, discover }) {
+  constructor(updater, { enabled, version, isDirty, closeWindows, record, discover, validateUpdate = () => true, downloadHint = 'Get the latest download at vericivil.com/downloads.' }) {
     super();
     this.updater = updater;
     this.isDirty = isDirty;
@@ -33,7 +47,8 @@ class Updates extends EventEmitter {
     this.record = record;
     this.enabled = enabled;
     this.discover = discover;
-    this.state = { status: enabled ? 'idle' : 'disabled', version, message: enabled ? 'Updates are checked automatically. Download and restart require your approval.' : 'This Mac or portable build requires manual updates. Get the latest download at vericivil.com/downloads.' };
+    this.downloadHint = downloadHint;
+    this.state = { status: enabled ? 'idle' : 'disabled', version, message: enabled ? 'Updates are checked automatically. Download and restart require your approval.' : `This Mac or portable build requires manual updates. ${downloadHint}` };
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
     updater.allowPrerelease = false;
@@ -41,7 +56,14 @@ class Updates extends EventEmitter {
     updater.disableWebInstaller = true;
     updater.logger = null;
     for (const [event, status] of [['checking-for-update', 'checking'], ['update-available', 'available'], ['update-not-available', 'current'], ['update-downloaded', 'downloaded']]) {
-      updater.on(event, info => this.publish({ status, nextVersion: info?.version || '', message: '', notes: typeof info?.releaseNotes === 'string' ? info.releaseNotes.slice(0, 12000) : '' }));
+      updater.on(event, info => {
+        if (['available', 'downloaded'].includes(status) && !validateUpdate(info)) {
+          record('update_failed', 'ERR_UPDATE_EDITION');
+          this.publish({ status: 'error', message: 'The update does not match this desktop edition. Your current app is unchanged.' });
+          return;
+        }
+        this.publish({ status, nextVersion: info?.version || '', message: '', notes: typeof info?.releaseNotes === 'string' ? info.releaseNotes.slice(0, 12000) : '' });
+      });
     }
     updater.on('download-progress', progress => this.publish({ status: 'downloading', percent: Math.max(0, Math.min(100, Number(progress.percent) || 0)) }));
     updater.on('error', error => { record('update_failed', error.code); this.publish({ status: 'error', message: 'The update could not finish. Your current app is unchanged. Check your connection and retry.' }); });
@@ -55,7 +77,7 @@ class Updates extends EventEmitter {
         try {
           const nextVersion = await this.discover();
           this.publish({ status: nextVersion ? 'manual' : 'disabled', nextVersion: nextVersion || '', message: nextVersion ? `Version ${nextVersion} is available. This Mac or portable build requires a manual download.` : 'No newer desktop release was found. This Mac or portable build requires manual updates.' });
-        } catch { this.publish({ status: 'disabled', message: 'Could not check for updates. You can keep working offline or visit vericivil.com/downloads.' }); }
+        } catch { this.publish({ status: 'disabled', message: `Could not check for updates. You can keep working offline. ${this.downloadHint}` }); }
       }
       return this.state;
     }
@@ -82,4 +104,4 @@ class Updates extends EventEmitter {
     return this.state;
   }
 }
-module.exports = { Updates, availableVersion, closeForUpdate, canInstallUpdates };
+module.exports = { Updates, availableVersion, editionDownload, isEditionUpdate, closeForUpdate, canInstallUpdates };

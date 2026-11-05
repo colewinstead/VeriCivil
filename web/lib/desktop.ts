@@ -1,3 +1,9 @@
+export type DesktopBranding = {
+  headerTitle: string;
+  companyLabel: string;
+  legalDisclosure: string;
+  projectExtension: string;
+};
 export type DesktopProject = { name: string; content: string; token?: string };
 export type DesktopUpdate = {
   status: string;
