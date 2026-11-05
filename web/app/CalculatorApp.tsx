@@ -49,6 +49,7 @@ const INITIAL_INPUTS: Dict = {
   initial_slope: "-0.02", alignment_type: "circular", ts: "", st: "", runout_placement: "on_tangent",
   runoff_tangent_percent: "", circular_placement_basis: "runoff", override_standard_placement: false, acknowledge_spiral_override: false,
   aashto_tables: null, case_ii: CASE_II_DEFAULTS,
+  case_ii_geometry_mode: "shared_corridor", case_ii_placement_mode: "coordinated",
   manual_spiral_length_check: false,
   project_name: "",
   route_name: "",
@@ -125,7 +126,7 @@ function cleanName(value: string, fallback: string) {
 
 function calculationInputKey(inputs: Dict) {
   return JSON.stringify({
-    aashto: Object.fromEntries(["case_ii","max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","circular_placement_basis","override_standard_placement","acknowledge_spiral_override","aashto_tables","manual_spiral_length_check"].map(key => [key, inputs[key]])),
+    aashto: Object.fromEntries(["case_ii","case_ii_geometry_mode","case_ii_placement_mode","max_superelevation","roadway","initial_section","rotation_axis","lane_widths","crown_from_left","left_normal_slope","right_normal_slope","initial_slope","alignment_type","ts","st","runout_placement","runoff_tangent_percent","circular_placement_basis","override_standard_placement","acknowledge_spiral_override","aashto_tables","manual_spiral_length_check"].map(key => [key, inputs[key]])),
     criteria_profile: inputs.criteria_profile,
     curve_direction: inputs.curve_direction,
     pc: inputs.pc,
@@ -459,7 +460,8 @@ export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: 
     loadedCurveCalculation.current = null;
     const aashto = String(inputs.criteria_profile).startsWith("aashto");
     const readyToCalculate = (isCaseII
-      ? ["left", "right"].every(side => (lengthCheckMode ? ["speed", "radius"] : ["speed", "radius", "pivot_offset"]).every(key => String(inputs.case_ii?.[side]?.[key] ?? "").trim()))
+      ? (inputs.case_ii_geometry_mode !== "shared_corridor" || String(inputs.radius ?? "").trim())
+        && ["left", "right"].every(side => (inputs.case_ii_geometry_mode === "shared_corridor" ? ["speed", "pivot_offset"] : lengthCheckMode ? ["speed", "radius"] : ["speed", "radius", "pivot_offset"]).every(key => String(inputs.case_ii?.[side]?.[key] ?? "").trim()))
       : String(inputs.speed ?? "").trim() && String(inputs.radius ?? "").trim())
       && (lengthCheckMode || (String(inputs.pc ?? "").trim()
         && (!aashto || (String(inputs.pt ?? "").trim()
@@ -838,7 +840,7 @@ export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: 
   const exportCurves = () => curves.length ? curves : (curveObject() ? [curveObject()!] : []);
 
   const projectSnapshot = () => ({
-    version: manifest?.project_schema_version || 6,
+    version: manifest?.project_schema_version || 7,
     application_version: manifest?.application_version,
     calculation_engine_version: manifest?.calculation_engine_version,
     criteria: calculation?.results?.calculation_metadata?.criteria || manifest?.criteria,
@@ -1298,7 +1300,7 @@ export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: 
               </> : <>{input("crown_from_left","Crown distance from left edge (ft)")}{input("left_normal_slope","Left normal slope (decimal)")}{input("right_normal_slope","Right normal slope (decimal)")}</>}
               {!lengthCheckMode && inputs.alignment_type === "spiral" && <><label className="field"><span>Tangent runout placement</span><select value={inputs.runout_placement} onChange={e=>update("runout_placement",e.target.value)}><option value="on_tangent">On tangent</option><option value="in_spiral">In spiral</option></select></label><label className="check full"><input type="checkbox" checked={inputs.acknowledge_spiral_override} onChange={e=>update("acknowledge_spiral_override",e.target.checked)}/>Acknowledge project-specific minimum-length placement and zero-crown drainage review.</label></>}
               </>}
-              {isCaseII && <CaseIIInputs value={inputs.case_ii} onChange={changes => updateInputs({case_ii: changes})} speeds={speedOptions} spiral={inputs.alignment_type === "spiral"} lengthsOnly={lengthCheckMode} />}
+              {isCaseII && <CaseIIInputs value={inputs.case_ii} settings={inputs} result={result} onChange={changes => updateInputs({case_ii: changes})} onSettingsChange={updateInputs} speeds={speedOptions} spiral={inputs.alignment_type === "spiral"} lengthsOnly={lengthCheckMode} />}
             </>}
             {!activeProfileId.startsWith("aashto") && <label className="check full"><input type="checkbox" checked={inputs.override_standard_placement} onChange={e=>update("override_standard_placement",e.target.checked)}/>Override standard circular transition placement</label>}
             {!isCaseII && (!lengthCheckMode && activeProfileId.startsWith("aashto") && inputs.alignment_type !== "spiral" || !activeProfileId.startsWith("aashto") && inputs.override_standard_placement) && <>

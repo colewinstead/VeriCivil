@@ -78,6 +78,33 @@ for (const direction of ["left", "right"]) {
   loaded.curves[0].results.carriageways.left.Lr += 1;
   assert.throws(() => browser("export_pdf", { entitlement: proEntitlement, curves: loaded.curves }), /recalculate both carriageways/);
 }
+for (const direction of ["left", "right"]) {
+  const request = {entitlement:proEntitlement, inputs:{criteria_profile:aashtoInputs.criteria_profile,
+    roadway:"divided_case_ii",case_ii_geometry_mode:"shared_corridor",case_ii_placement_mode:"coordinated",
+    radius:4000,curve_direction:direction,pc:"100+00",pt:"110+00",max_superelevation:8,
+    runoff_tangent_percent:50,circular_placement_basis:"runoff_runout",
+    case_ii:Object.fromEntries(["left","right"].map(side=>[side,{speed:65,lane_count:4,lane_width:12,
+      initial_slope:side==="left"?-.02:.02,pivot_offset:side==="left"?-12:12}]))}};
+  const calculation = browser("calculate",request);
+  assert.deepEqual(calculation,native("calculate",request));
+  for (const child of Object.values(calculation.results.carriageways)) {
+    assert.equal(child.full_super_ft,10192);
+    assert.equal(child.full_super_out_ft,10808);
+    assert.equal(child.radius_provenance.source,"baseline_offset");
+  }
+  const saved=browser("project_save",{entitlement:proEntitlement,project:{version:7,vars:request.inputs,last_results:calculation.results}});
+  const loaded=browser("project_load",{entitlement:proEntitlement,content:saved});
+  assert.equal(loaded.project.vars.case_ii_geometry_mode,"shared_corridor");
+  assert.deepEqual(browser("diagram_lookup",{entitlement:proEntitlement,results:loaded.project.last_results,station:10192,direction}),
+    native("diagram_lookup",{entitlement:proEntitlement,results:loaded.project.last_results,station:10192,direction}));
+}
+const rampFactorRequest={entitlement:proEntitlement,inputs:{...aashtoInputs,roadway:"one_way",initial_section:"single_slope",
+  initial_slope:.02,rotation_axis:"left_edge",lane_widths:"12,12",speed:65,radius:3000,pt:3000}};
+const rampFactors=browser("calculate",rampFactorRequest);
+assert.deepEqual(rampFactors,native("calculate",rampFactorRequest));
+assert.equal(rampFactors.results.bw,.75);
+assert.ok(Math.abs(rampFactors.results.Lr-216)<1e-9);
+assert.ok(Math.abs(rampFactors.results.Lt-72)<1e-9);
 const spacingXml = await readFile(new URL("../../tests/fixtures/reverse_spacing_synthetic.xml", import.meta.url), "utf8");
 const spacingInputs = { speed: "30", e_manual: "0.06", Lr_manual: "100", Lt_manual: "25" };
 const spacingCurves = browser("build_all_landxml_curves", { entitlement: proEntitlement, content: spacingXml, shared_inputs: spacingInputs });
@@ -225,8 +252,8 @@ for (const maximum of [4, 6, 8, 10, 12]) {
         assert.equal(check.Lt, 0);
         assert.equal(check.section_transition.target_signed_slope, 0.02);
       } else if (direction === "left" && maximum <= 8) {
-        assert.equal(check.Lr, 90);
-        assert.equal(check.Lt, 90);
+        assert.equal(check.Lr, 67.5);
+        assert.equal(check.Lt, 67.5);
       }
     }
   }

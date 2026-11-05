@@ -207,6 +207,26 @@ class AASHTOTests(unittest.TestCase):
             r = self.result(lane_widths=",".join(["12"] * width_count))
             self.assertAlmostEqual(r["bw"], criteria.lane_factor(width_count / 2))
 
+    def test_ramp_lane_factors_and_actual_width_are_applied_once(self):
+        for count in range(1, 8):
+            values = inputs(roadway="one_way", initial_section="single_slope", initial_slope=.02,
+                            rotation_axis="left_edge", lane_widths=",".join(["12"] * count),
+                            speed=65, radius=3000, e_manual=.06, curve_direction="left")
+            result = self.result(**{k: v for k, v in values.items()})
+            expected_bw = (1 + .5 * (count - 1)) / count
+            self.assertAlmostEqual(result["bw"], expected_bw)
+            self.assertAlmostEqual(result["Lr"], 12 * count * expected_bw * .06 / .005)
+            self.assertAlmostEqual(result["Lt"], 12 * count * expected_bw * .02 / .005)
+            source = next(s for s in result["calculation_metadata"]["calculation_sources"] if s["component"] == "Lane adjustment")
+            self.assertIn("10.9.6.2.14", source["reference"])
+            self.assertEqual(source["mode"], "formula_derived" if count > 3.5 else "calculated")
+        values.update(lane_widths="16")
+        wide = self.result(**values)
+        self.assertEqual(wide["bw"], 1)
+        self.assertAlmostEqual(wide["Lr"], 192)
+        values.update(lane_widths="12", rotation_axis="centerline")
+        self.assertEqual(self.result(**values)["bw"], 1)
+
     def test_explicit_circular_placement_and_overlap(self):
         with self.assertRaisesRegex(ValueError, "required"):
             self.result(runoff_tangent_percent="")
@@ -323,7 +343,7 @@ class AASHTOTests(unittest.TestCase):
                                 self.assertEqual(r["no_transition_required"], unchanged)
                                 self.assertAlmostEqual(r["section_transition"]["target_signed_slope"], target)
                                 self.assertEqual((r["Lr"], r["Lt"]), (check["Lr"], check["Lt"]))
-                                expected = 0 if unchanged else 24 * abs(slope) / criteria.relative_gradient(45)
+                                expected = 0 if unchanged else 24 * .75 * abs(slope) / criteria.relative_gradient(45)
                                 self.assertAlmostEqual(r["Lr"], expected)
                                 self.assertAlmostEqual(r["Lt"], expected)
                                 self.assertEqual(len(r["section_lanes"]), 2)

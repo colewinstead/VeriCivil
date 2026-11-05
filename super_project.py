@@ -11,7 +11,13 @@ from app_info import APP_VERSION, CALCULATION_ENGINE_VERSION
 from criteria_info import criteria_metadata
 
 
-PROJECT_VERSION = 6
+PROJECT_VERSION = 7
+
+
+def _case_ii_input_modes(values: dict) -> dict:
+    if values.get("roadway") == "divided_case_ii" or "case_ii" in values:
+        return {"case_ii_geometry_mode": "explicit_radii", "case_ii_placement_mode": "independent", **values}
+    return values
 
 
 class ProjectFormatError(ValueError):
@@ -82,6 +88,12 @@ def normalize_project(data: dict[str, Any]) -> dict[str, Any]:
         )
 
     vars_data = dict(data.get("vars", {})) if isinstance(data.get("vars", {}), dict) else {}
+    vars_data = _case_ii_input_modes(vars_data)
+    if isinstance(vars_data.get("landxml_shared_inputs"), dict):
+        vars_data["landxml_shared_inputs"] = _case_ii_input_modes(vars_data["landxml_shared_inputs"])
+    if isinstance(vars_data.get("landxml_curve_inputs"), dict):
+        vars_data["landxml_curve_inputs"] = {key: _case_ii_input_modes(value) if isinstance(value, dict) else value
+                                             for key, value in vars_data["landxml_curve_inputs"].items()}
     vars_data.pop("coordinate_reverse_curves", None)
     curves = []
     raw_curves = data.get("curves", []) or []
@@ -113,6 +125,10 @@ def normalize_project(data: dict[str, Any]) -> dict[str, Any]:
             excluded_curve_indexes.add(normalized_index)
 
     migration_warnings: list[str] = []
+    if version < 7 and (vars_data.get("roadway") == "divided_case_ii"
+                       or any((c.get("results") or {}).get("transition_method") == "aashto_case_ii" for c in curves)
+                       or (data.get("last_results") or {}).get("transition_method") == "aashto_case_ii"):
+        migration_warnings.append("Existing Case II radii and independent placement are retained. Select shared-corridor geometry or coordinated placement explicitly, then recompute before exporting.")
     raw_pairs = data.get("reverse_curve_pairs")
     if raw_pairs is None and version < 5:
         inferred: set[tuple[int, int]] = set()

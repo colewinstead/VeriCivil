@@ -26,6 +26,16 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     definitions = values.get("case_ii")
     if not isinstance(definitions, dict) or set(definitions) != set(SIDES):
         raise ValueError("Case II requires both left and right carriageway inputs.")
+    geometry_mode = values.get("case_ii_geometry_mode", "explicit_radii")
+    placement_mode = values.get("case_ii_placement_mode", "independent")
+    if geometry_mode not in {"explicit_radii", "shared_corridor"}:
+        raise ValueError("Select shared-corridor or engineer-entered radius geometry.")
+    if placement_mode not in {"independent", "coordinated"}:
+        raise ValueError("Select coordinated or independent Case II placement.")
+    if lengths_only and values.get("geometry_provenance", {}).get("source") == "LandXML":
+        raise ValueError("Required spiral lengths is a manual-input check; use the imported alignment's established stations.")
+    coordinated = placement_mode == "coordinated" and values.get("alignment_type", "circular") != "spiral"
+    requests, radius_sources = {}, {}
     children, pivots, errors, findings = {}, {}, [], []
     common = {key: value for key, value in values.items()
               if key not in SIDE_FIELDS | {"case_ii", "lane_widths", "initial_slope", "roadway"}}
@@ -34,7 +44,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         try:
             if not isinstance(definition, dict):
                 raise ValueError("Carriageway inputs must be an object.")
-            offset = (None if lengths_only and definition.get("pivot_offset") in (None, "")
+            offset = (None if lengths_only and geometry_mode == "explicit_radii" and definition.get("pivot_offset") in (None, "")
                       else section._number(definition, "pivot_offset"))
             count = section._number(definition, "lane_count", 4)
             if not count.is_integer() or not 1 <= count <= 7:
@@ -44,22 +54,39 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 raise ValueError("Lane width must be positive.")
             if definition.get("initial_slope", 0) in (None, "", "-"):
                 raise ValueError("Enter the initial slope magnitude and drainage direction.")
+            definition = dict(definition)
+            if geometry_mode == "shared_corridor":
+                baseline_radius = section._number(values, "radius")
+                if baseline_radius <= 0:
+                    raise ValueError("Baseline radius must be positive.")
+                direction = values.get("curve_direction", "left")
+                if direction not in {"left", "right"}:
+                    raise ValueError("Curve direction must be left or right.")
+                left_edge, right_edge = ((offset - count * width, offset) if side == "left"
+                                         else (offset, offset + count * width))
+                controlling_offset = left_edge if direction == "left" else right_edge
+                radius = baseline_radius + controlling_offset * (1 if direction == "left" else -1)
+                if radius <= 0:
+                    raise ValueError("The inside-curve pavement edge reaches or crosses the curve center; derived radius must be positive.")
+                definition["radius"] = radius
+                radius_sources[side] = {"source": "baseline_offset", "baseline_radius_ft": baseline_radius,
+                    "controlling_edge_offset_ft": controlling_offset, "design_radius_ft": radius,
+                    "reference": "AASHTO §3.3.3.3; inside edge of innermost travel lane; constant right-positive baseline offset"}
+            else:
+                radius_sources[side] = {"source": "engineer_entered", "design_radius_ft": section._number(definition, "radius"),
+                    "reference": "Engineer-entered design radius; pavement reference not inferred"}
             # Each side extends away from its median-side pivot.
             child_values = {**common, **{key: value for key, value in definition.items() if key in SIDE_FIELDS},
                             "roadway": "one_way", "initial_section": "single_slope",
                             "rotation_axis": "right_edge" if side == "left" else "left_edge",
                             "lane_widths": ",".join([str(width)] * int(count)),
                             "initial_slope": definition.get("initial_slope", -.02 if side == "left" else .02)}
+            if coordinated:
+                child_values.update(runoff_tangent_percent=values.get("runoff_tangent_percent"),
+                                    circular_placement_basis=values.get("circular_placement_basis", "runoff"))
+            requests[side] = child_values
             child = section.calculate(child_values, station_equations, alignment_range,
-                                      lengths_only=lengths_only, _case_ii=True)
-            child["warnings"] = [warning for warning in child.get("warnings", []) if not warning.startswith("One-way carriageway uses")]
-            child["baseline_radius_ft"] = values.get("radius")
-            child["case_ii_side"] = side
-            child["baseline_pivot_offset_ft"] = offset
-            child["lane_adjustment_factor"] = section.criteria.lane_factor(count, case_ii=True)
-            for source in child["calculation_metadata"]["calculation_sources"]:
-                if source["component"] == "Lane adjustment":
-                    source.update(value=child["lane_adjustment_factor"], mode="formula_derived" if count > 3.5 else "calculated")
+                                      lengths_only=lengths_only or coordinated, _case_ii=True)
             children[side] = child
             # Input offsets are right-positive; shared section coordinates are left-positive.
             pivots[side] = {"x": -offset if offset is not None else None, "y": 0.0, "label": f"{side.title()} median-side travel-lane edge"}
@@ -74,8 +101,48 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     if positioned and pivots["left"]["x"] <= pivots["right"]["x"]:
         raise ValueError("The left carriageway pivot must lie left of the right pivot (positive right, negative left: left offset must be less than right offset).")
 
+    full_anchors = None
+    if coordinated and not lengths_only:
+        import Super
+        active = [child for child in children.values() if not child["no_transition_required"]]
+        if active:
+            percent = section._number(values, "runoff_tangent_percent")
+            basis = values.get("circular_placement_basis", "runoff")
+            demands = []
+            for child in active:
+                fraction = section.circular_runoff_fraction(percent, basis, child["Lr"], child["Lt"])
+                # RC can have runout only; total-transition placement still has a curve-side demand.
+                demand = ((1 - percent / 100) * (child["Lr"] + child["Lt"]) if basis == "runoff_runout"
+                          else (1 - fraction) * child["Lr"])
+                demands.append(demand)
+            equations = Super.strict_station_equations(station_equations)
+            full_anchors = (section._station(values, "pc", "PC", equations, alignment_range) + max(demands),
+                            section._station(values, "pt", "PT", equations, alignment_range) - max(demands))
+        for side in SIDES:
+            try:
+                children[side] = section.calculate(requests[side], station_equations, alignment_range,
+                                                   _case_ii=True, _full_super_anchors=full_anchors)
+            except (ValueError, TypeError, OverflowError) as exc:
+                errors.append(f"{side.title()} carriageway: {exc}")
+                findings.extend({**f, "message": f"{side.title()} carriageway: {f['message']}", "carriageway": side}
+                                for f in getattr(exc, "findings", []) or [{"code": "INVALID_CASE_II_SIDE", "severity": "block", "message": str(exc)}])
+        if errors:
+            raise section.TransitionError("; ".join(errors), findings)
+    for side, child in children.items():
+        child.update(baseline_radius_ft=values.get("radius"), case_ii_side=side,
+                     baseline_pivot_offset_ft=-pivots[side]["x"] if pivots[side]["x"] is not None else None,
+                     radius_provenance=radius_sources[side], case_ii_placement_mode=placement_mode,
+                     lane_adjustment_factor=section.criteria.lane_factor(float(definitions[side].get("lane_count", 4)), case_ii=True))
+        source = radius_sources[side]
+        child["calculation_metadata"]["calculation_sources"].append({"component": "Design radius", **source,
+            "mode": "calculated" if geometry_mode == "shared_corridor" else "user_input",
+            "reference": (f"{source['reference']}; baseline R={source['baseline_radius_ft']:g} ft, edge offset={source['controlling_edge_offset_ft']:+g} ft, design R={source['design_radius_ft']:g} ft"
+                          if geometry_mode == "shared_corridor" else source["reference"])})
+
     first = children["left"]
     result = {"transition_method": METHOD, "inputs": copy.deepcopy(values), "carriageways": children,
+              "case_ii_geometry_mode": geometry_mode, "case_ii_placement_mode": placement_mode,
+              "coordinated_full_super": list(full_anchors) if full_anchors else None,
               "pivot_offset_convention": "right_positive",
               "pivots": pivots if positioned else {},
               "median_gap_ft": pivots["left"]["x"] - pivots["right"]["x"] if positioned else None,
@@ -140,7 +207,8 @@ def validate_curves(curves):
             raise ValueError("A Case II length check has no established stations and cannot be exported as a calculated curve.")
         expected = calculate(result["inputs"], result.get("station_equations"), result.get("alignment_station_range"))
         for key in ("carriageways", "section_lanes", "lane_events", "pivots", "pivot_offset_convention", "median_gap_ft",
-                    "alignment_anchors", "pc_ft", "pt_ft", "pnc_ft", "pnc_out_ft", "no_transition_required", "calculation_metadata"):
+                    "alignment_anchors", "pc_ft", "pt_ft", "pnc_ft", "pnc_out_ft", "no_transition_required", "calculation_metadata",
+                    "case_ii_geometry_mode", "case_ii_placement_mode", "coordinated_full_super"):
             if result.get(key) != expected.get(key):
                 raise ValueError("Saved Case II results differ from current inputs/engine; recalculate both carriageways before exporting.")
         alignment = curve.get("meta", {}).get("alignment_name", "")
