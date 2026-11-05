@@ -2,6 +2,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Dict = Record<string, any>;
 
+export function sectionStopLabel(diagram: Dict, stop?: Dict): string {
+  if (!stop) return "";
+  const profiles: Dict[] = diagram.cross_section?.pivots ? diagram.section_profiles || [] : [];
+  return [...new Set<string>(stop.labels || [])].map(label => {
+    const name = label.toLowerCase() === "full super" ? "Full superelevation" : label;
+    const lanes = profiles.filter(profile => profile.points.some((point: Dict) =>
+      Math.abs(point.station_ft - stop.station_ft) < 1e-7 && point.label === label));
+    const sides = [...new Set(lanes.map(lane => lane.side))];
+    const scope = sides.length === 2 && lanes.length === profiles.length ? "All lanes"
+      : sides.length === 1 ? `${sides[0] === "left" ? "Left" : "Right"} ${lanes.length === 1 ? "lane" : "lanes"}` : "";
+    return scope ? `${name} · ${scope}` : name;
+  }).join("; ");
+}
+
 export function previewStationLabel(frames: Dict[], station: number): string {
   if (!frames.length || station < frames[0].station_ft || station > frames.at(-1)!.station_ft) return "";
   const frame = frames.filter(item => item.station_ft <= station).at(-1)!;

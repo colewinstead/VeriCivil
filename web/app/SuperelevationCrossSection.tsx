@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import ControlIcon from "./ControlIcon";
-import { crossSectionPreview, previewStationLabel } from "../lib/cross-section-preview";
+import { crossSectionPreview, previewStationLabel, sectionStopLabel } from "../lib/cross-section-preview";
 
 type Dict = Record<string, any>;
 
@@ -25,6 +25,9 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
   const stationText = draft?.curveIndex === curveIndex ? draft.text
     : inspector?.curve_index === curveIndex ? inspector.station : "";
   const [trueScale, setTrueScale] = useState(false);
+  const [scrubbingDiagram, setScrubbingDiagram] = useState<Dict | null>(null);
+  const scrubbing = !!diagram && scrubbingDiagram === diagram;
+  const pointerActive = useRef(false);
   const scrubber = useRef<HTMLInputElement>(null);
   const lastRequest = useRef<{ curveIndex: number; station: number | string } | null>(null);
   const queued = useRef<{ diagram: Dict; station: number } | null>(null);
@@ -43,12 +46,15 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
   const flush = () => {
     const next = queued.current;
     cancelScheduled();
+    if (!pointerActive.current) setScrubbingDiagram(null);
     if (next?.diagram !== diagram) return;
     setTarget(next);
     inspect(next.station);
   };
   const selectStation = (value: number, immediate = false) => {
     setDraft(null);
+    setScrubbingDiagram(immediate ? null : diagram);
+    if (immediate) pointerActive.current = false;
     queued.current = { diagram, station: value };
     if (immediate) { flush(); return; }
     if (animation.current === null) animation.current = requestAnimationFrame(() => {
@@ -58,6 +64,7 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = setTimeout(flush, 100);
   };
+  const finishScrubbing = () => { pointerActive.current = false; flush(); };
   const initialize = useEffectEvent(() => {
     if (!diagram) return;
     const remembered = lastRequest.current?.curveIndex === curveIndex ? lastRequest.current.station : station;
@@ -71,6 +78,7 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
       if (timer.current !== null) clearTimeout(timer.current);
       animation.current = timer.current = null;
       queued.current = null;
+      pointerActive.current = false;
     };
   }, [diagram, onStation]);
 
@@ -106,9 +114,13 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
   const y = (value: number) => 210 - value * scale * exaggeration;
   const top = bounds ? Math.min(0, y(bounds.y_max) - 85) : 0;
   const bottom = bounds ? Math.max(360, y(bounds.y_min) + 85) : 360;
-  const events = (diagram.snap_points || []).map((event: Dict) => Number(event.station_ft)).filter((value: number) => value >= start && value <= end);
-  const previous = events.filter((value: number) => value < station - 1e-7).at(-1);
-  const next = events.find((value: number) => value > station + 1e-7);
+  const events: Dict[] = (diagram.snap_points || []).filter((event: Dict) => event.station_ft >= start && event.station_ft <= end);
+  const previous = events.filter(event => event.station_ft < station - 1e-7).at(-1);
+  const next = events.find(event => event.station_ft > station + 1e-7);
+  const current = events.find(event => Math.abs(event.station_ft - station) < 1e-7);
+  const eventCaption = scrubbing ? "Scrubbing…" : sectionStopLabel(diagram, current) || "Between stopping points";
+  const stopTitle = (stop: Dict | undefined, direction: string) => stop
+    ? `${direction}: ${sectionStopLabel(diagram, stop)} · ${stop.station}` : `No ${direction.toLowerCase()} stopping point`;
 
   return <div className="cross-section-view" role="tabpanel" aria-label="Cross Section">
     <div className="cross-section-controls">
@@ -123,17 +135,19 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
     </div>
     <div className="cross-section-heading"><div><h4>{model?.title || "Cross section unavailable"}</h4><p>Looking ahead along increasing station</p></div><strong>{physical && trueScale ? "True scale · 1×" : "Vertical exaggeration · 5×"}</strong></div>
     <div className="cross-section-scrubber">
-      <button aria-label="Previous section event" disabled={previous === undefined} onClick={() => selectStation(previous, true)}><ControlIcon name="left" /></button>
+      <button aria-label="Previous section event" title={stopTitle(previous, "Previous")} disabled={!previous} onClick={() => selectStation(previous!.station_ft, true)}><ControlIcon name="left" /></button>
       <input ref={scrubber} type="range" min={start} max={end} step="any" value={station} aria-label="Cross-section station scrubber" aria-valuetext={stationLabel}
         onChange={event => selectStation(Number(event.target.value))}
-        onPointerUp={flush} onPointerCancel={flush} onKeyUp={flush} onBlur={flush}
+        onPointerDown={() => { pointerActive.current = true; setScrubbingDiagram(diagram); }}
+        onPointerUp={finishScrubbing} onPointerCancel={finishScrubbing} onKeyUp={finishScrubbing} onBlur={finishScrubbing}
         onKeyDown={event => {
           const offset = event.key === "ArrowLeft" || event.key === "ArrowDown" ? -1 : event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : 0;
           if (offset) { event.preventDefault(); selectStation(Math.max(start, Math.min(end, station + offset))); }
         }} />
-      <button aria-label="Next section event" disabled={next === undefined} onClick={() => selectStation(next, true)}><ControlIcon name="right" /></button>
+      <button aria-label="Next section event" title={stopTitle(next, "Next")} disabled={!next} onClick={() => selectStation(next!.station_ft, true)}><ControlIcon name="right" /></button>
     </div>
-    <div className="cross-section-readout"><strong>{stationLabel}</strong><span>{preview ? "Preview · ≈ interpolated slopes" : `${station.toFixed(3)} internal ft`} · Focus the slider to scroll by station</span></div>
+    <div className="cross-section-readout"><strong>{stationLabel}</strong><span>{scrubbing || preview ? "Preview · ≈ interpolated slopes" : `${station.toFixed(3)} internal ft`} · Focus the slider to scroll by station</span></div>
+    <p className={`cross-section-event${scrubbing ? " scrubbing" : ""}`} role="status" aria-atomic="true" title={eventCaption}>{eventCaption}</p>
     <p className="cross-section-error" role={error ? "alert" : undefined}>{error || "\u00a0"}</p>
     <div className="cross-section-drawing" aria-busy={pending || (preview && !error)}>
       {!section ? <div className="analysis-empty" role="status">{error ? "Correct the station or select the slider to continue." : "Loading cross section…"}</div> : section.mode === "unavailable" || !bounds ? <div className="analysis-empty">{section.message || model?.message || "Section geometry is unavailable. Recalculate this curve."}</div> : <svg viewBox={`0 ${top} 900 ${bottom - top}`} role="img" aria-label={`${preview ? "Preview: " : ""}${section.title} at ${stationLabel}, ${exaggeration} times vertical scale. Looking ahead along increasing station. Left to right: ${section.segments.map((segment: Dict) => `${segment.name}: ${segment.slope_label}${physical ? `, ${segment.width_ft} ft wide` : ""}`).join("; ")}. ${section.pivots ? `Two level median-side pivots; ${section.median_gap_ft} ft median interval; heights relative to the common profile.` : section.pivot ? `Fixed ${section.pivot.label} pivot; heights are relative to this pivot.` : section.message}`}>
@@ -158,6 +172,6 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
     {section?.segments?.length > 0 && <div className="cross-section-mobile-labels"><p>Slopes, left to right</p><dl>{section.segments.map((segment: Dict) => <div key={segment.name} className={`section-segment section-${segment.side}`}><dt>{segment.name}</dt><dd><strong>{segment.slope_label}</strong>{physical && <span> · {Number(segment.width_ft).toFixed(1)} ft</span>}</dd></div>)}</dl>{section.pivot && <p>Fixed pivot · {section.pivot.label}</p>}</div>}
     <p className="cross-section-note">{model?.message}</p>
     {physical && <div className="cross-section-table"><table><caption>Lane edges relative to the fixed pivot (ft) · {confirmed ? `Exact at ${confirmed.station}` : "Waiting for exact station"}</caption><thead><tr><th>Lane</th><th>Slope</th><th>Left edge</th><th>Right edge</th></tr></thead><tbody>{(confirmed?.cross_section?.segments || section?.segments || []).map((segment: Dict) => <tr key={segment.name}><td>{segment.name}</td><td>{confirmed ? segment.slope_label : "—"}</td><td>{confirmed ? segment.left.y.toFixed(4) : "—"}</td><td>{confirmed ? segment.right.y.toFixed(4) : "—"}</td></tr>)}</tbody></table></div>}
-    <p className="cross-section-note">Slope signs follow each recorded lane side, outward from alignment. <span role="status">{preview ? "Preview; exact values update when you stop." : pending ? "Updating station…" : "\u00a0"}</span></p>
+    <p className="cross-section-note">Slope signs follow each recorded lane side, outward from alignment. <span role="status">{scrubbing || preview ? "Preview; exact values update when you stop." : pending ? "Updating station…" : "\u00a0"}</span></p>
   </div>;
 }

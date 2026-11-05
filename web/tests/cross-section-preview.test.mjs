@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { crossSectionPreview, previewStationLabel } from "../lib/cross-section-preview.ts";
+import { crossSectionPreview, previewStationLabel, sectionStopLabel } from "../lib/cross-section-preview.ts";
 
 const frames = [0, 100].map(station => ({ station_ft: station, segments: [{
   name: "Lane 1", side: "left", width_ft: 12, slope_pct: -2 + station / 10,
@@ -47,4 +47,19 @@ test("station previews retain station format and apply Python-provided equation 
   assert.equal(previewStationLabel([], 1000), "");
   assert.equal(previewStationLabel(ordinary, -1), "");
   assert.equal(previewStationLabel(ordinary, 2001), "");
+});
+
+test("stop captions use lane wording and keep coincident events associated with their lanes", () => {
+  const point = label => ({station_ft: 1000, label});
+  const diagram = {cross_section:{pivots:[{},{}]}, section_profiles:[
+    {side:"left",points:[point("Full super"),point("PC")]},
+    {side:"left",points:[point("Full super"),point("PC")]},
+    {side:"right",points:[point("Level section"),point("PC")]},
+  ]};
+  assert.equal(sectionStopLabel(diagram,{station_ft:1000,labels:["Full super"]}),"Full superelevation · Left lanes");
+  assert.equal(sectionStopLabel(diagram,{station_ft:1000,labels:["Level section"]}),"Level section · Right lane");
+  assert.equal(sectionStopLabel(diagram,{station_ft:1000,labels:["PC","PC"]}),"PC · All lanes");
+  assert.equal(sectionStopLabel(diagram,{station_ft:1000,labels:["Full super","Level section"]}),"Full superelevation · Left lanes; Level section · Right lane");
+  assert.equal(sectionStopLabel({}, {station_ft:1000,labels:["Full super"]}),"Full superelevation");
+  assert.equal(sectionStopLabel(diagram),"");
 });

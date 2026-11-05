@@ -46,7 +46,9 @@ case_values={**values,"roadway":"divided_case_ii","pc":"7000","pt":"9000","case_
 case_result=super_service.calculate_curve(case_values)["results"]
 curves = [{"results":result,"meta":{"curve_direction":"left","curve_name":"Synthetic four-lane undivided"}}, {"results":ramp,"meta":{"curve_direction":"right","curve_name":"Synthetic three-lane ramp"}}, {"results":case_result,"meta":{"curve_direction":"left","curve_name":"Synthetic Case II"}}]
 content = super_service.project_save({"version":5,"vars":values,"curves":curves,"last_results":result,"last_meta":curves[0]["meta"]})
-print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_start":result["zero_crown_ft"],"results":result}))
+case_stops=super_service.corridor_diagram(curves)["curves"][2]["snap_points"]
+case_index=next(index for index,stop in enumerate(case_stops) if "Full super" in stop["labels"] and stop["lanes"]==["left"])
+print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_start":result["zero_crown_ft"],"results":result,"case_previous":case_stops[case_index-1],"case_full":case_stops[case_index]}))
 `], { cwd: root, encoding: 'utf8' }));
   const project = path.join(profile, 'section.vericivil');
   writeFileSync(project, fixture.content);
@@ -86,6 +88,7 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
   await wait(`Number(document.querySelector('[aria-label="Cross-section station scrubber"]').value)===${before + 1} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
+  assert.equal(await js("document.querySelector('.cross-section-event').textContent"),'Between stopping points');
   const enter = async text => {
     window.focus();
     window.webContents.focus();
@@ -107,6 +110,7 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
       const drawing=document.querySelector('.cross-section-drawing'); const view=document.querySelector('.cross-section-view');
       window.sectionFrames.push({station:Number(slider.value),label:document.querySelector('.cross-section-readout strong').textContent,accessibleLabel:slider.getAttribute('aria-valuetext'),top:slider.getBoundingClientRect().top,
         height:drawing.getBoundingClientRect().height,scroll:view.scrollTop,page:window.scrollY,
+        caption:document.querySelector('.cross-section-event').textContent,scrubbing:document.querySelector('.cross-section-event').classList.contains('scrubbing'),captionHeight:document.querySelector('.cross-section-event').getBoundingClientRect().height,
         mounted:window.sectionSvg===drawing.querySelector('svg'),table:!!document.querySelector('.cross-section-table'),
         slopes:Array.from(drawing.querySelectorAll('.section-slope'),item=>item.textContent),
         mobile:Array.from(document.querySelectorAll('.cross-section-mobile-labels strong'),item=>item.textContent),
@@ -131,6 +135,10 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
   assert.ok(previews.length>5, 'native sustained dragging shows continuous previews while responses are delayed');
   assert.ok(new Set(previews.map(sample=>JSON.stringify(sample.slopes))).size>5, 'live percentages change throughout the drag');
   assert.ok(new Set(previews.map(sample=>JSON.stringify(sample.edges))).size>5, 'geometry moves with live percentages');
+  const scrubbingSamples=samples.filter(sample=>sample.scrubbing);
+  assert.ok(scrubbingSamples.length>5,'the test records a sustained drag');
+  assert.deepEqual([...new Set(scrubbingSamples.map(sample=>sample.caption))],['Scrubbing…'],'event captions stay quiet throughout the gesture, including pauses');
+  assert.notEqual(await js("document.querySelector('.cross-section-event').textContent"),'Scrubbing…','the caption settles after release');
   const expectedPreviews = JSON.parse(execFileSync(python,['-c','import json,sys,super_service; data=json.load(sys.stdin); print(json.dumps([super_service.diagram_lookup(data["results"],"left",station) for station in data["stations"]]))'],{cwd:root,input:JSON.stringify({results:fixture.results,stations:previews.map(sample=>sample.station)}),encoding:'utf8'}));
   previews.forEach((sample,index)=>{
     const packet=expectedPreviews[index]; const bounds=packet.cross_section.bounds;
@@ -146,7 +154,7 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
     assert.equal(sample.mounted,true,'the SVG stays mounted');
     assert.equal(sample.table,true,'the exact table stays mounted');
     assert.deepEqual(sample.mobile,sample.slopes,'mobile percentages match the SVG');
-    for (const key of ['top','height','scroll','page']) assert.ok(Math.abs(sample[key]-samples[0][key])<1,`${key} stays stable during scrubbing`);
+    for (const key of ['top','height','scroll','page','captionHeight']) assert.ok(Math.abs(sample[key]-samples[0][key])<1,`${key} stays stable during scrubbing`);
   }
   const exact = JSON.parse(execFileSync(python,['-c','import json,sys,super_service; print(json.dumps(super_service.diagram_lookup(json.loads(sys.stdin.read()),"left",float(sys.argv[1]))))',String(stopped)],{cwd:root,input:JSON.stringify(fixture.results),encoding:'utf8'}));
   assert.deepEqual(await js("Array.from(document.querySelectorAll('.section-slope'),item=>item.textContent)"),exact.cross_section.segments.map(segment=>segment.slope_label));
@@ -217,6 +225,15 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
   await js("var curve=document.querySelector('[aria-label=\"Cross-section curve\"]'); curve.value='2'; curve.dispatchEvent(new Event('change',{bubbles:true}));");
   await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===8 && document.querySelectorAll('.section-pivot').length===2 && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'");
   assert.match(await js("document.querySelector('.section-median-gap').textContent"), /40.0 ft/);
+  await enter(String(fixture.case_previous.station_ft));
+  await wait(`document.querySelector('.cross-section-readout strong').textContent===${JSON.stringify(fixture.case_previous.station)} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
+  assert.ok((await js("document.querySelector('[aria-label=\"Next section event\"]').title")).includes('Full superelevation · Left lanes'));
+  await js("document.querySelector('[aria-label=\"Next section event\"]').click()");
+  await wait(`document.querySelector('.cross-section-readout strong').textContent===${JSON.stringify(fixture.case_full.station)} && document.querySelector('.cross-section-event').textContent==='Full superelevation · Left lanes'`);
+  if (!window.webContents.debugger.isAttached()) window.webContents.debugger.attach('1.3');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  assert.equal(await js("getComputedStyle(document.querySelector('.cross-section-event')).transitionDuration"),'0s');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[]});
   await enter('7300');
   await wait("document.querySelector('.cross-section-readout strong').textContent==='73+00.000'");
   await js("document.querySelector('.expand-analysis').click()");
