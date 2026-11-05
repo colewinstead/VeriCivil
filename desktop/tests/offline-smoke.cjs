@@ -69,10 +69,24 @@ original.start().then(async (window) => {
     const caseIILoaded=await call('project_load',{content:caseIISaved});
     const caseIIPdf=await call('export_pdf',{curves:caseIILoaded.project.curves});
     const caseIIDxf=await call('export_detail_dxf',{curves:caseIILoaded.project.curves});
+    const sharedInputs={...caseIIInputs,radius:4000,case_ii_geometry_mode:'shared_corridor',case_ii_placement_mode:'coordinated',
+      runoff_tangent_percent:50,circular_placement_basis:'runoff_runout'};
+    const sharedCalculation=await call('calculate',{inputs:sharedInputs});
+    const sharedSaved=await call('project_save',{project:{version:7,vars:sharedInputs,last_results:sharedCalculation.results}});
+    const sharedLoaded=await call('project_load',{content:sharedSaved});
+    const sharedCurves=[{results:sharedLoaded.project.last_results,meta:{curve_direction:'left'}}];
+    const sharedPdf=await call('export_pdf',{curves:sharedCurves});
+    const sharedDxf=await call('export_detail_dxf',{curves:sharedCurves});
+    const sharedLookup=await call('diagram_lookup',{results:sharedLoaded.project.last_results,station:10192,direction:'left'});
+    const adjustedRamp=await call('calculate',{inputs:{...inputs,criteria_profile:'aashto-green-book-2018-2019-10',
+      roadway:'one_way',initial_section:'single_slope',initial_slope:.02,rotation_axis:'left_edge',lane_widths:'12,12',
+      speed:65,radius:3000,e_manual:.06,pc:1000,pt:3000,curve_direction:'left',runoff_tangent_percent:70}});
     worker.terminate();
     let remoteBlocked=false;try{await fetch('https://vericivil.com/')}catch{remoteBlocked=true}
     return {manifest,calculation,csv:csv.content,pdf:pdf.content.slice(0,4),dxf:Array.from(dxf.content).slice(0,200),loaded,remoteBlocked,
       caseII:caseIICalculation.results.carriageways,caseIIPdf:caseIIPdf.content.slice(0,4),caseIIDxf:Array.from(caseIIDxf.content).slice(0,200),
+      shared:sharedLoaded.project,sharedPdf:sharedPdf.content.slice(0,4),sharedDxf:Array.from(sharedDxf.content).slice(0,200),
+      sharedLookup,adjustedRamp:adjustedRamp.results,
       rendererSecurity:{require:typeof window.require,node:typeof window.process},
       ui:document.querySelector('main')?.className};
   })()`);
@@ -89,6 +103,22 @@ original.start().then(async (window) => {
   assert.equal(result.caseII.right.Lt,120);
   assert.equal(String.fromCharCode(...result.caseIIPdf),'%PDF');
   assert.match(Buffer.from(result.caseIIDxf).toString(),/SECTION/);
+  assert.equal(result.shared.version,7);
+  assert.equal(result.shared.vars.case_ii_geometry_mode,'shared_corridor');
+  for (const [side,radius,rate,runoff] of [['left',3940,.046,156],['right',4012,.044,264]]) {
+    const child=result.shared.last_results.carriageways[side];
+    assert.equal(child.radius_provenance.design_radius_ft,radius);
+    assert.ok(Math.abs(child.e-rate)<1e-12);
+    assert.ok(Math.abs(child.Lr-runoff)<1e-9);
+    assert.equal(child.full_super_ft,10192);
+    assert.equal(child.full_super_out_ft,10808);
+  }
+  assert.equal(result.sharedLookup.cross_section.pivots.length,2);
+  assert.equal(String.fromCharCode(...result.sharedPdf),'%PDF');
+  assert.match(Buffer.from(result.sharedDxf).toString(),/SECTION/);
+  assert.equal(result.adjustedRamp.bw,.75);
+  assert.ok(Math.abs(result.adjustedRamp.Lr-216)<1e-9);
+  assert.ok(Math.abs(result.adjustedRamp.Lt-72)<1e-9);
   assert.deepEqual(JSON.parse(JSON.stringify(result.loaded.project.last_results)), JSON.parse(JSON.stringify(result.calculation.results)));
   assert.equal(result.remoteBlocked,true);
   assert.deepEqual(result.rendererSecurity,{require:'undefined',node:'undefined'});

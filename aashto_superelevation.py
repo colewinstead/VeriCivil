@@ -64,7 +64,7 @@ def _station(values, key, label, equations, alignment_range):
     return station
 
 
-def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False, compound_sides=(), _case_ii=False) -> dict:
+def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False, compound_sides=(), _case_ii=False, _full_super_anchors=None) -> dict:
     if values.get("roadway") == "divided_case_ii":
         from aashto_divided import calculate as calculate_divided
         return calculate_divided(values, station_equations, alignment_range, lengths_only=lengths_only)
@@ -246,9 +246,9 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     ]
     farthest = max(abs(x - pivot_x) for x in boundaries)
     n = farthest / widths[0]
-    # Table 3-15 is directly applicable to undivided highways. For one-way
-    # ramps use the unadjusted Eq. 3-23 gradient, avoiding an unverified discount.
-    bw = criteria.lane_factor(n, case_ii=_case_ii) if _case_ii or roadway == "two_way" else 1.0
+    # §10.9.6.2.14(3) also applies Table 3-15 to wider rotated ramp widths.
+    bw = (1.0 if roadway == "one_way" and not _case_ii and n < 1
+          else criteria.lane_factor(n, case_ii=_case_ii, ramp=roadway == "one_way" and not _case_ii))
     allowed_gradient = gradient / bw
 
     def profile_height(x, bank):
@@ -313,9 +313,11 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                  + ("; formula-derived beyond printed 3.5-lane range" if n > 3.5 else ""))
                 if _case_ii else "Table 3-15 unrounded footnote"
                 if roadway == "two_way"
-                else "Unadjusted gradient for one-way carriageway; no Table 3-15 discount"
+                else "AASHTO §10.9.6.2.14(3); Table 3-15 unrounded footnote"
+                if n >= 1 else "Retained legacy centerline pivot: less than one lane rotated; unadjusted gradient"
             ),
-            "mode": "calculated",
+            "mode": "formula_derived" if n > 3.5 and (_case_ii or roadway == "one_way") else "calculated",
+            "value": bw,
         },
     ]
     sources.append(
@@ -413,7 +415,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             ],
         )
     if lengths_only:
-        if values.get("geometry_provenance", {}).get("source") == "LandXML":
+        if not _case_ii and values.get("geometry_provenance", {}).get("source") == "LandXML":
             raise ValueError("Required spiral lengths is a manual-input check; use the imported alignment's established stations.")
         return {
             "result_type": "spiral_length_check",
@@ -430,8 +432,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 "criteria_workbook": {"storage": pack.get("storage", "user_workbook"), "table_digest": pack.get("table_digest"), "runoff_digest": criteria.RUNOFF_DIGEST, "file_sha256": pack.get("file_sha256"), "source_version": "2018 / October 2019 errata"} if pack else {},
                 "manual_overrides": {"superelevation_rate": manual, "runoff_length": values.get("Lr_manual") not in (None, ""), "tangent_runout": values.get("Lt_manual") not in (None, "")},
             },
-            "warnings": (["Manual rate: published radius/rate applicability must be independently verified."] if manual else [])
-                + (["One-way carriageway uses unadjusted relative gradient; no multilane runoff reduction is assumed for ramps."] if roadway == "one_way" else []),
+            "warnings": (["Manual rate: published radius/rate applicability must be independently verified."] if manual else []),
             "scope_note": "Minimum lengths for the superelevation transition only. Existing PC/PT remain reference stations; TS/SC/CS/ST locations and new horizontal geometry are not constructed.",
         }
     spiral = values.get("alignment_type", "circular") == "spiral"
@@ -596,18 +597,35 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             run_end + Lt,
         )
         pc_full, pt_full = pc + (1 - p) * Lr, pt - (1 - p) * Lr
+        if _full_super_anchors is not None and not no_transition:
+            if not _case_ii:
+                raise ValueError("Common full-super anchors require a paired Case II calculation.")
+            pc_full, pt_full = _full_super_anchors
+            if not all(math.isfinite(s) for s in (pc_full, pt_full)):
+                raise ValueError("Common full-super anchors must be finite.")
+            run_start, run_end = pc_full - Lr, pt_full + Lr
+            start, zero_start, zero_end, end = run_start - Lt, run_start, run_end, run_end + Lt
         anchors = {"PC": pc, "PT": pt}
         sources.append(
             {
                 "component": "Transition placement",
-                "reference": "§3.3.8.2.3; explicit project runoff percentage" if placement_basis == "runoff" else "Project placement: percentage of total runoff + runout length around PC/PT; §3.3.8.2.3 bank check retained",
+                "reference": "Project-coordinated Case II full-super anchors; §3.3.8.2.3 bank check retained" if _full_super_anchors is not None else "§3.3.8.2.3; explicit project runoff percentage" if placement_basis == "runoff" else "Project placement: percentage of total runoff + runout length around PC/PT; §3.3.8.2.3 bank check retained",
                 "mode": "project_input",
                 "placement_basis": placement_basis,
                 "percent_on_tangent": placement_percent,
             }
         )
         if e and not no_transition:
-            if p >= 0:
+            if _full_super_anchors is not None:
+                if pc <= start:
+                    pc_bank = bank_sign * initial_bank
+                elif pc < run_start and Lt:
+                    pc_bank = bank_sign * (initial_bank + (pc - start) / Lt * (zero_bank - initial_bank))
+                elif Lr:
+                    pc_bank = bank_sign * (zero_bank + min(1, (pc - run_start) / Lr) * (target_bank - zero_bank))
+                else:
+                    pc_bank = bank_sign * target_bank
+            elif p >= 0:
                 pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
             else:
                 pc_bank = bank_sign * (initial_bank + (pc - start) / Lt * (zero_bank - initial_bank))
@@ -650,7 +668,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         )
     geometry = values.get("geometry_provenance", {})
     tangent_demand = (
-        Lt if spiral and placement == "on_tangent" else 0 if spiral else p * Lr + Lt
+        Lt if spiral and placement == "on_tangent" else 0 if spiral else max(0, pc - start)
     )
     if e and not no_transition:
         for side, a, b in (

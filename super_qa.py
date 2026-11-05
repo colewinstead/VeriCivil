@@ -850,7 +850,10 @@ def analyze_corridor(data: super_landxml.LandXMLData, curves: list[dict], exclud
                 values={**results["inputs"],"linear_unit":data.linear_unit,
                         "geometry_provenance":{"source":"LandXML",**{key:preset[key] for key in ("available_entry_tangent_ft","available_exit_tangent_ft")}}}
                 try:
-                    aashto_superelevation.calculate(values,data.station_equations,data.station_range(), compound_sides=tuple(compound_sides.get(index, [])), _case_ii=bool(results.get("case_ii_side")))
+                    common_anchors = ((results["full_super_ft"], results["full_super_out_ft"])
+                                      if results.get("case_ii_side") and results.get("case_ii_placement_mode") == "coordinated"
+                                      and values.get("alignment_type", "circular") != "spiral" else None)
+                    aashto_superelevation.calculate(values,data.station_equations,data.station_range(), compound_sides=tuple(compound_sides.get(index, [])), _case_ii=bool(results.get("case_ii_side")), _full_super_anchors=common_anchors)
                 except ValueError as exc:
                     for item in getattr(exc,"findings",[]) or [{"code":"INVALID_IMPORTED_TRANSITION","severity":"block","message":str(exc)}]:
                         if item["severity"]=="block":

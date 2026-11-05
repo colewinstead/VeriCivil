@@ -45,3 +45,18 @@ test("Case II edits preserve the other carriageway and each curve's other inputs
   assert.equal(restored.radius, "500");
   assert.equal(restored.area, "urban_freeway");
 });
+
+test("shared-corridor modes survive selected edits and legacy curves keep explicit radii", () => {
+  const shared = { roadway: "divided_case_ii", case_ii_geometry_mode: "shared_corridor",
+    case_ii_placement_mode: "coordinated", radius: "4000", case_ii: {left: {pivot_offset: "24"}, right: {pivot_offset: "48"}} };
+  const state = editLandxmlInputs({shared, curves: {}}, {case_ii: {right: {speed: "65"}}}, 0, "curve", [0]);
+  assert.equal(mergeCurveInputs(state.shared, state.curves[0]).case_ii_geometry_mode, "shared_corridor");
+  const restored = curveInputValues({results: {inputs: shared}, meta: {}});
+  assert.equal(restored.case_ii_placement_mode, "coordinated");
+  assert.equal(restored.case_ii.right.pivot_offset, "48");
+  const legacy = curveInputValues({results: {inputs: {roadway: "divided_case_ii", case_ii: shared.case_ii}}, meta: {}});
+  assert.equal(legacy.case_ii_geometry_mode, "explicit_radii");
+  assert.equal(legacy.case_ii_placement_mode, "independent");
+  const derived = curveInputValues({results: {inputs: {...shared, case_ii_placement_mode: undefined}}, meta: {}});
+  assert.equal(derived.case_ii_placement_mode, "coordinated");
+});

@@ -253,6 +253,32 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
   await wait("document.querySelector('[aria-label=\"left carriageway results\"]')?.textContent.includes('144.00')");
   assert.match(await js("document.querySelector('[aria-label=\"right carriageway results\"]').textContent"), /336.00/);
   console.log('Case II: paired native inputs, independent recomputation, eight lanes, level pivots and median interval passed.');
+  await js("var mode=document.querySelector('[aria-label=\"Case II geometry\"]'); mode.value='shared_corridor'; mode.dispatchEvent(new Event('change',{bubbles:true}));");
+  await wait("!!document.querySelector('[aria-label=\"Case II baseline radius\"]')");
+  const editField = async (label, value) => {
+    await js(`var field=document.querySelector(${JSON.stringify(`[aria-label="${label}"]`)});field.focus();field.select();`);
+    window.webContents.sendInputEvent({type:'keyDown',keyCode:'Backspace'});
+    window.webContents.sendInputEvent({type:'keyUp',keyCode:'Backspace'});
+    for (const character of value) window.webContents.sendInputEvent({type:'char',keyCode:character});
+  };
+  await editField('Case II baseline radius','4000');
+  await editField('left carriageway Pivot baseline offset (ft)','-12');
+  await editField('right carriageway Pivot baseline offset (ft)','12');
+  await editField('Case II common tangent percent','50');
+  await js("var basis=document.querySelector('[aria-label=\"Case II common placement basis\"]');basis.value='runoff_runout';basis.dispatchEvent(new Event('change',{bubbles:true}));");
+  await wait("document.querySelector('[aria-label=\"left carriageway derived radius\"]')?.value==='3940' && document.querySelector('[aria-label=\"left carriageway results\"]')?.textContent.includes('71+92.000')");
+  assert.equal(await js("document.querySelector('[aria-label=\"right carriageway derived radius\"]').value"),'4012');
+  for (const side of ['left','right']) {
+    assert.match(await js(`document.querySelector('[aria-label="${side} carriageway results"]').textContent`), /88\+08.000/);
+  }
+  assert.match(await js("document.querySelector('[aria-label=\"left carriageway results\"]').textContent"), /156.00/);
+  for (const theme of ['light','dark']) {
+    nativeTheme.themeSource=theme;
+    await js("document.querySelector('.case-ii-inputs').scrollIntoView({block:'start'})");
+    await new Promise(resolve=>setTimeout(resolve,100));
+    if(capture)writeFileSync(path.join(capture,`shared-corridor-${browserUrl?'browser':'electron'}-${theme}.png`),(await window.capturePage()).toPNG());
+  }
+  console.log('Shared corridor: native geometry conversion, derived pavement-edge radii and coordinated full-super stations passed.');
   await js('window.confirm=()=>true;undefined;');
   if (browserUrl) {
     writeFileSync(project, execFileSync(python, ['-c', `

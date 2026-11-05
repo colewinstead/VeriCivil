@@ -403,7 +403,13 @@ def build_curves_from_presets(presets: Iterable[dict], shared_inputs: dict[str, 
     curves=[]
     for index,preset in enumerate(presets):
         try:
-            values = {**shared_inputs, **(curve_inputs or {}).get(preset.get("landxml_curve_index", index), {})}
+            overrides = (curve_inputs or {}).get(preset.get("landxml_curve_index", index), {})
+            values = {**shared_inputs, **overrides}
+            if isinstance(shared_inputs.get("case_ii"), dict) and isinstance(overrides.get("case_ii"), dict):
+                values["case_ii"] = {**shared_inputs["case_ii"], **overrides["case_ii"]}
+                for side in ("left", "right"):
+                    if isinstance(shared_inputs["case_ii"].get(side), dict) and isinstance(overrides["case_ii"].get(side), dict):
+                        values["case_ii"][side] = {**shared_inputs["case_ii"][side], **overrides["case_ii"][side]}
             curves.append(build_curve_from_preset(preset,values,compound_sides=tuple(sides.get(index, []))))
         except ValueError as exc:
             curve_name = preset.get("curve_name") or f"Curve {index+1}"

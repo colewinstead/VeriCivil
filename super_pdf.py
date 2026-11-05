@@ -739,11 +739,19 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
             ]))
             story.extend([alert, Spacer(1, 0.1 * inch)])
 
+        radius_source = results.get("radius_provenance", {})
+        radius_description = _number(inputs.get("radius_ft"), 2, " ft")
+        if radius_source.get("source") == "baseline_offset":
+            radius_description += (f"<br/>Baseline {_number(radius_source['baseline_radius_ft'], 2, ' ft')}; "
+                                   f"inside-curve edge offset {_number(radius_source['controlling_edge_offset_ft'], 2, ' ft (right-positive)')}. "
+                                   "Derived per AASHTO §3.3.3.3.")
+        elif results.get("case_ii_side"):
+            radius_description += "<br/>Engineer-entered design radius; pavement reference not inferred."
         input_rows = [
             ("SC station" if inputs.get("alignment_type")=="spiral" else "PC station", _text(inputs.get("pc"))),
             ("CS station" if inputs.get("alignment_type")=="spiral" else "PT station", _text(inputs.get("pt"), "N/A")),
             ("Design speed", _number(inputs.get("speed_mph"), 0, " mph")),
-            ("Curve radius", _number(inputs.get("radius_ft"), 2, " ft")),
+            ("Curve radius", radius_description),
             ("Facility / area", f"{'Median-side travel-lane edge' if results.get('case_ii_side') else _text(inputs.get('facility'))} / {_text(inputs.get('area_type'))}"),
             ("Lane configuration", f"{_number(inputs.get('lane_width_ft'), 2, ' ft')} / {_number(inputs.get('lanes_rotated'), 0, ' rotated')}"),
             ("Rate source", _text(results.get("e_source"))),
@@ -759,7 +767,7 @@ def export_pdf(path: str, curves: Iterable[dict], corridor_qa: dict | None = Non
         if results.get("transition_method") == "aashto_fixed_pivot" or results.get("runoff_tangent_fraction") is not None:
             input_rows.extend([("Roadway / section",_text("Divided Case II / uniform single slope" if results.get("case_ii_side") else f"{inputs.get('roadway','')} / {inputs.get('initial_section','')}")),
                                ("Rotation axis",_text(f"{inputs.get('rotation_axis',results.get('facility'))} / {results.get('pivot_relationship','')}")),
-                               ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else f"{inputs.get('runoff_tangent_percent')}% {'runoff + runout' if inputs.get('circular_placement_basis') == 'runoff_runout' else 'runoff'} on tangent")),
+                               ("Placement",_text("Not applicable; initial section retained" if results.get("no_transition_required") else inputs.get("runout_placement") if inputs.get("alignment_type")=="spiral" else ("Coordinated full-super anchors; controlling demand: " if results.get("case_ii_placement_mode") == "coordinated" else "") + f"{inputs.get('runoff_tangent_percent')}% {'runoff + runout' if inputs.get('circular_placement_basis') == 'runoff_runout' else 'runoff'} on tangent")),
                                ("Criteria",_text(profile_name))])
             if results.get("section_lanes"):
                 if section_transition:
