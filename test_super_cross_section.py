@@ -2,6 +2,7 @@
 import copy
 import unittest
 
+import Super
 import aashto_superelevation
 import super_cross_section
 import super_batch
@@ -25,6 +26,8 @@ class CrossSectionTests(unittest.TestCase):
             self.assertEqual(frames[-1]["station_ft"], diagram["domain"]["end_ft"])
             for frame in frames:
                 packet = super_service.diagram_lookup(result, diagram["direction"], frame["station_ft"])
+                self.assertEqual(frame["station"], packet["station"])
+                self.assertEqual(frame["civil_station_ft"], Super.internal_to_civil_station(frame["station_ft"], result.get("station_equations")))
                 for actual, exact in zip(frame["segments"], packet["cross_section"]["segments"]):
                     key = exact["name"] if diagram["cross_section"]["mode"] == "physical" else exact["side"]
                     self.assertEqual(actual, {**exact, "slope_pct": packet["lanes"][key]["slope_pct"]})
@@ -139,6 +142,18 @@ class CrossSectionTests(unittest.TestCase):
         answer = super_service.diagram_lookup(result, "left", "26+00")
         self.assertEqual(answer["station_ft"], 1600)
         self.assertEqual(answer["station"], "26+00.000")
+        for ahead in (2500, 1000):
+            result["station_equations"][0]["ahead"] = ahead
+            self.assert_preview_frames([{"results": result}])
+            frames = super_service.corridor_diagram([{"results": result}])["curves"][0]["cross_section_frames"]
+            boundary = next(frame for frame in frames if frame["station_ft"] == 1500)
+            self.assertEqual(boundary["civil_station_ft"], ahead)
+            self.assertEqual(boundary["station_suffix"], "R2")
+            for left, right in zip(frames, frames[1:]):
+                station = (left["station_ft"] + right["station_ft"]) / 2
+                civil = left["civil_station_ft"] + (station - left["station_ft"])
+                preview = Super.format_station(civil) + left["station_suffix"]
+                self.assertAlmostEqual(Super.parse_station_reference(preview, result["station_equations"], result["alignment_station_range"]), station, places=3)
 
     def test_coordinated_compound_and_reverse_sections_use_recorded_profiles(self):
         curves = []

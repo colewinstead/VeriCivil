@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import ControlIcon from "./ControlIcon";
-import { crossSectionPreview } from "../lib/cross-section-preview";
+import { crossSectionPreview, previewStationLabel } from "../lib/cross-section-preview";
 
 type Dict = Record<string, any>;
 
@@ -95,7 +95,7 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
   const previewSegments = selected ? null : crossSectionPreview(diagram.cross_section_frames || [], station);
   const preview = !!previewSegments;
   const section = selected?.cross_section || (previewSegments ? { ...model, segments: previewSegments } : confirmed?.cross_section);
-  const stationLabel = selected?.station || `${station.toFixed(3)} internal ft`;
+  const stationLabel = selected?.station || previewStationLabel(diagram.cross_section_frames || [], station) || "Selecting station…";
   const physical = model?.mode === "physical";
   const exaggeration = physical && trueScale ? 1 : 5;
   const bounds = model?.bounds;
@@ -124,7 +124,7 @@ export default function SuperelevationCrossSection({ diagrams, activeCurveIndex,
     <div className="cross-section-heading"><div><h4>{model?.title || "Cross section unavailable"}</h4><p>Looking ahead along increasing station</p></div><strong>{physical && trueScale ? "True scale · 1×" : "Vertical exaggeration · 5×"}</strong></div>
     <div className="cross-section-scrubber">
       <button aria-label="Previous section event" disabled={previous === undefined} onClick={() => selectStation(previous, true)}><ControlIcon name="left" /></button>
-      <input ref={scrubber} type="range" min={start} max={end} step="any" value={station} aria-label="Cross-section station scrubber" aria-valuetext={selected?.station || `${station.toFixed(3)} internal ft`}
+      <input ref={scrubber} type="range" min={start} max={end} step="any" value={station} aria-label="Cross-section station scrubber" aria-valuetext={stationLabel}
         onChange={event => selectStation(Number(event.target.value))}
         onPointerUp={flush} onPointerCancel={flush} onKeyUp={flush} onBlur={flush}
         onKeyDown={event => {

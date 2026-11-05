@@ -105,7 +105,7 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
     function recordSection(){
       const slider=document.querySelector('[aria-label="Cross-section station scrubber"]');
       const drawing=document.querySelector('.cross-section-drawing'); const view=document.querySelector('.cross-section-view');
-      window.sectionFrames.push({station:Number(slider.value),top:slider.getBoundingClientRect().top,
+      window.sectionFrames.push({station:Number(slider.value),label:document.querySelector('.cross-section-readout strong').textContent,accessibleLabel:slider.getAttribute('aria-valuetext'),top:slider.getBoundingClientRect().top,
         height:drawing.getBoundingClientRect().height,scroll:view.scrollTop,page:window.scrollY,
         mounted:window.sectionSvg===drawing.querySelector('svg'),table:!!document.querySelector('.cross-section-table'),
         slopes:Array.from(drawing.querySelectorAll('.section-slope'),item=>item.textContent),
@@ -134,6 +134,8 @@ print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_star
   const expectedPreviews = JSON.parse(execFileSync(python,['-c','import json,sys,super_service; data=json.load(sys.stdin); print(json.dumps([super_service.diagram_lookup(data["results"],"left",station) for station in data["stations"]]))'],{cwd:root,input:JSON.stringify({results:fixture.results,stations:previews.map(sample=>sample.station)}),encoding:'utf8'}));
   previews.forEach((sample,index)=>{
     const packet=expectedPreviews[index]; const bounds=packet.cross_section.bounds;
+    assert.equal(sample.label,packet.station,'station notation stays visible while scrubbing');
+    assert.equal(sample.accessibleLabel,sample.label,'the slider announces the same formatted station');
     packet.cross_section.segments.forEach((segment,lane)=>{
       const slope=packet.lanes[segment.name].slope_pct;
       assert.ok(Math.abs(Number.parseFloat(sample.slopes[lane].replace('≈',''))-slope)<=.00501,'preview percentage follows the current station');

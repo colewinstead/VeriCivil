@@ -454,7 +454,8 @@ def _cross_section_frames(results: dict, diagram: dict) -> list[dict]:
     if diagram["cross_section"]["mode"] == "unavailable":
         return []
     start, end = diagram["domain"]["start_ft"], diagram["domain"]["end_ft"]
-    stations = {start, end}
+    equations = Super.normalize_station_equations(results.get("station_equations"))
+    stations = {start, end, *(equation["internal"] for equation in equations)}
     for profile in [*diagram["profiles"].values(),
                     *(lane["events"] for lane in results.get("section_lanes", []))]:
         stations.update(float(point["station_ft"]) for point in profile)
@@ -469,7 +470,10 @@ def _cross_section_frames(results: dict, diagram: dict) -> list[dict]:
         for segment in packet["cross_section"]["segments"]:
             key = segment["name"] if diagram["cross_section"]["mode"] == "physical" else segment["side"]
             segments.append({**segment, "slope_pct": packet["lanes"][key]["slope_pct"]})
-        frames.append({"station_ft": station, "segments": segments})
+        frames.append({"station_ft": station, "station": packet["station"],
+                       "civil_station_ft": Super.internal_to_civil_station(station, equations),
+                       "station_suffix": f"R{1 + sum(station >= equation['internal'] for equation in equations)}" if equations else "",
+                       "segments": segments})
     return frames
 
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { crossSectionPreview } from "../lib/cross-section-preview.ts";
+import { crossSectionPreview, previewStationLabel } from "../lib/cross-section-preview.ts";
 
 const frames = [0, 100].map(station => ({ station_ft: station, segments: [{
   name: "Lane 1", side: "left", width_ft: 12, slope_pct: -2 + station / 10,
@@ -29,4 +29,22 @@ test("preview respects each breakpoint and refuses unavailable or mismatched geo
   assert.equal(crossSectionPreview([], 0), null);
   assert.equal(crossSectionPreview([{ station_ft: 0, segments: [] }], 0), null);
   assert.equal(crossSectionPreview([frames[0], { ...frames[1], segments: [{ ...frames[1].segments[0], name: "Other curve" }] }], 50), null);
+});
+
+test("station previews retain station format and apply Python-provided equation spans", () => {
+  const ordinary = [0, 2000].map(station => ({station_ft: station, civil_station_ft: station, station: `${station / 100}+00.000`, station_suffix: ""}));
+  assert.equal(previewStationLabel(ordinary, 1012.852), "10+12.852");
+  assert.equal(previewStationLabel(ordinary, 0), "0+00.000");
+  for (const ahead of [2500, 1000]) {
+    const equation = [{station_ft: 1000, civil_station_ft: 1000, station: "10+00.000", station_suffix: "R1"},
+      {station_ft: 1500, civil_station_ft: ahead, station: `${ahead / 100}+00.000R2`, station_suffix: "R2"},
+      {station_ft: 2000, civil_station_ft: ahead + 500, station: `${(ahead + 500) / 100}+00.000R2`, station_suffix: "R2"}];
+    assert.equal(previewStationLabel(equation, 1499.999), "14+99.999R1");
+    assert.equal(previewStationLabel(equation, 1500), `${ahead / 100}+00.000R2`);
+    assert.equal(previewStationLabel(equation, 1500.001), `${ahead / 100}+00.001R2`);
+    assert.equal(previewStationLabel(equation, 1600), `${(ahead + 100) / 100}+00.000R2`);
+  }
+  assert.equal(previewStationLabel([], 1000), "");
+  assert.equal(previewStationLabel(ordinary, -1), "");
+  assert.equal(previewStationLabel(ordinary, 2001), "");
 });
