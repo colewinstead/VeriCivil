@@ -58,19 +58,37 @@ original.start().then(async (window) => {
     const dxf=await call('export_overlay_dxf',{curves,landxml_source:parsed.source});
     const saved=await call('project_save',{project:{version:5,vars:inputs,curves:manualCurves,last_results:calculation.results,last_meta:{curve_direction:'right'}}});
     const loaded=await call('project_load',{content:saved});
+    const caseIIInputs={criteria_profile:'aashto-green-book-2018-2019-10',roadway:'divided_case_ii',
+      curve_direction:'left',pc:'100+00',pt:'110+00',max_superelevation:'8',
+      case_ii:Object.fromEntries(['left','right'].map(side=>[side,{speed:'65',radius:'4000',lane_count:4,lane_width:'12',
+        initial_slope:side==='left'?'-0.02':'0.02',pivot_offset:side==='left'?'-12':'12',
+        runoff_tangent_percent:'50',circular_placement_basis:'runoff_runout'}]))};
+    const caseIICalculation=await call('calculate',{inputs:caseIIInputs});
+    const caseIICurves=[{results:caseIICalculation.results,meta:{curve_direction:'left'}}];
+    const caseIISaved=await call('project_save',{project:{version:6,vars:caseIIInputs,curves:caseIICurves}});
+    const caseIILoaded=await call('project_load',{content:caseIISaved});
+    const caseIIPdf=await call('export_pdf',{curves:caseIILoaded.project.curves});
+    const caseIIDxf=await call('export_detail_dxf',{curves:caseIILoaded.project.curves});
     worker.terminate();
     let remoteBlocked=false;try{await fetch('https://vericivil.com/')}catch{remoteBlocked=true}
     return {manifest,calculation,csv:csv.content,pdf:pdf.content.slice(0,4),dxf:Array.from(dxf.content).slice(0,200),loaded,remoteBlocked,
+      caseII:caseIICalculation.results.carriageways,caseIIPdf:caseIIPdf.content.slice(0,4),caseIIDxf:Array.from(caseIIDxf.content).slice(0,200),
       rendererSecurity:{require:typeof window.require,node:typeof window.process},
       ui:document.querySelector('main')?.className};
   })()`);
   const python = process.platform === 'win32' ? 'python' : 'python3';
   const expected = JSON.parse(execFileSync(python, ['-c', 'import sys,json,super_service; print(json.dumps(super_service.dispatch("calculate",sys.stdin.read())))'], { cwd:root, input: JSON.stringify({inputs,entitlement:{plan:'pro',status:'active'}}), encoding:'utf8' }));
-  // Pyodide maps Python None to undefined; native JSON represents it as null.
-  assert.deepEqual(JSON.parse(JSON.stringify(result.calculation, (_key, value) => value === undefined ? null : value)), expected);
+  assert.deepEqual(result.calculation, expected);
   assert.match(result.csv,/SuperelevationLane,Station,CrossSlope/);
   assert.equal(String.fromCharCode(...result.pdf),'%PDF');
   assert.match(Buffer.from(result.dxf).toString(),/SECTION/);
+  assert.equal(result.caseII.left.friction,null);
+  assert.equal(result.caseII.left.Lr,144);
+  assert.equal(result.caseII.left.Lt,0);
+  assert.equal(result.caseII.right.Lr,264);
+  assert.equal(result.caseII.right.Lt,120);
+  assert.equal(String.fromCharCode(...result.caseIIPdf),'%PDF');
+  assert.match(Buffer.from(result.caseIIDxf).toString(),/SECTION/);
   assert.deepEqual(JSON.parse(JSON.stringify(result.loaded.project.last_results)), JSON.parse(JSON.stringify(result.calculation.results)));
   assert.equal(result.remoteBlocked,true);
   assert.deepEqual(result.rendererSecurity,{require:'undefined',node:'undefined'});
