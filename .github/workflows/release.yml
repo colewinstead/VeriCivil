@@ -27,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Classify documentation-only changes
+      - name: Classify documentation and agent-tooling changes
         id: scope
         env:
           CHANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -42,7 +42,7 @@ jobs:
           REQUIRED=$(python scripts/classify_release_changes.py "${ARGS[@]}")
           echo "release-required=$REQUIRED" >> "$GITHUB_OUTPUT"
           if [[ "$REQUIRED" == "false" ]]; then
-            echo "Documentation-only change: no version bump or release required."
+            echo "Documentation/agent-tooling-only change: no version bump or release required."
           fi
 
       - name: Validate release version
