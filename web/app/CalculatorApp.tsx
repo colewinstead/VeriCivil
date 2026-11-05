@@ -1168,10 +1168,12 @@ export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: 
     } catch { setError("Recovery could not finish. The snapshot is still on this computer."); }
   };
 
+  const desktopCompany = desktopBranding?.companyLabel ?? "VeriCivil";
+  const desktopLabel = desktopBranding?.desktopLabel ?? "Free desktop app";
   return (
     <main className={`app-shell${desktop ? " desktop-workspace" : ""}`} data-inspector={desktop ? inspectorTab : undefined}>
       {desktop ? <header className="desktop-toolbar">
-        <div><h1>{desktopBranding?.headerTitle ?? "Superelevation"}</h1><span>{desktopBranding?.companyLabel ?? "VeriCivil"} <span className="desktop-preview-label">Free desktop app</span></span></div>
+        <div><h1>{desktopBranding?.headerTitle ?? "Superelevation"}</h1>{(desktopCompany || desktopLabel) && <span>{desktopCompany}{desktopLabel && <span className="desktop-preview-label">{desktopLabel}</span>}</span>}</div>
         <div className={`desktop-runtime ${runtime}`} role="status"><i />{runtime === "ready" ? "Offline engine ready" : runtimeMessage}</div>
         <button onClick={loadSampleCalculation} disabled={runtime !== "ready" || !!busy}>Load synthetic sample</button>
         <button onClick={newProject}>New project</button>
@@ -1347,7 +1349,7 @@ export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: 
 
       <section className="exports panel"><div><p className="step">04</p><h2>Review & export {proChip(CAPABILITIES.pdfReports)}</h2><p>{desktop ? "Save the recorded results through a native file dialog." : "Exports use the same recorded calculation results shown above. Supported browsers open a Save dialog; others use Downloads."}</p></div><div className="crs-status"><span>Overlay coordinates</span><strong>{landxml?.summary?.coordinate_system?.display_name || "Select LandXML to detect"}</strong><small>DXF preserves the LandXML XY coordinates without reprojection.</small></div><div className="export-buttons"><button onClick={() => performExport("export_pdf", "pdf", "application/pdf")}>PDF report {proChip(CAPABILITIES.pdfReports)}</button><button disabled={!!result?.carriageways || curves.some(curve => curve.results?.carriageways)} title={isCaseII ? "Case II ORD mapping is not validated; use PDF or DXF." : undefined} onClick={() => performExport("export_ord_csv", "csv", "text/csv")}>ORD CSV {proChip(CAPABILITIES.ordCsv)}</button><button className="primary" onClick={() => performExport("export_overlay_dxf", "dxf", "application/dxf")}>Overlay DXF {proChip(CAPABILITIES.overlayDxf)}</button></div></section>
 
-      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Free desktop · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}{(!desktop || desktopBranding?.legalDisclosure !== "") && <span className="legal-disclosure">{desktopBranding?.legalDisclosure ?? "VeriCivil is a brand of CW Aerial Media LLC."}</span>}</p></footer>
+      {(!desktop || desktopBranding?.showFooter !== false) && <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Free desktop · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}{(!desktop || desktopBranding?.legalDisclosure !== "") && <span className="legal-disclosure">{desktopBranding?.legalDisclosure ?? "VeriCivil is a brand of CW Aerial Media LLC."}</span>}</p></footer>}
     </main>
   );
 }

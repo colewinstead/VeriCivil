@@ -22,7 +22,9 @@
     "previewDirectory": "releases",
     "channelPrefix": "latest-",
     "diagnosticsName": "vericivil-diagnostics.json",
-    "downloadsUrl": "https://vericivil.com/downloads"
+    "downloadsUrl": "https://vericivil.com/downloads",
+    "desktopLabel": "Free desktop app",
+    "showFooter": true
   },
   "neutral": {
     "packageName": "superelevation-calculator-desktop",
@@ -47,6 +49,8 @@
     "previewDirectory": "releases/neutral",
     "channelPrefix": "latest-neutral-",
     "diagnosticsName": "superelevation-diagnostics.json",
-    "downloadsUrl": ""
+    "downloadsUrl": "",
+    "desktopLabel": "",
+    "showFooter": false
   }
 }

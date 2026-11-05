@@ -1,6 +1,8 @@
 export type DesktopBranding = {
   headerTitle: string;
   companyLabel: string;
+  desktopLabel: string;
+  showFooter: boolean;
   legalDisclosure: string;
   projectExtension: string;
 };

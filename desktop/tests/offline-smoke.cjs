@@ -21,6 +21,8 @@ original.start().then(async (window) => {
   assert.equal(app.getName(), edition.productName);
   assert.equal(await window.webContents.executeJavaScript('document.title'), edition.windowTitle);
   assert.equal(await window.webContents.executeJavaScript("document.querySelector('.desktop-toolbar h1').textContent"), edition.headerTitle);
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-preview-label')"), !!edition.desktopLabel);
+  assert.equal(await window.webContents.executeJavaScript('!!document.querySelector("footer")'), edition.showFooter);
   if (edition.id === 'neutral') assert.doesNotMatch(await window.webContents.executeJavaScript('document.body.innerText'), /VeriCivil|CW Aerial/);
   window.webContents.setBackgroundThrottling(false);
   window.webContents.on('console-message', (event) => console.log('Renderer:', event.message));

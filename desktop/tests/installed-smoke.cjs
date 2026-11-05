@@ -62,9 +62,11 @@ async function verify() {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       if (!ready) throw new Error('Installed workspace document did not finish loading.');
-      const branding = await command({ returnByValue: true, expression: "({ title: document.title, heading: document.querySelector('.desktop-toolbar h1').textContent, text: document.body.innerText })" });
+      const branding = await command({ returnByValue: true, expression: "({ title: document.title, heading: document.querySelector('.desktop-toolbar h1').textContent, text: document.body.innerText, footer: !!document.querySelector('footer'), label: !!document.querySelector('.desktop-preview-label') })" });
       assert.equal(branding.result.value.title, edition.windowTitle);
       assert.equal(branding.result.value.heading, edition.headerTitle);
+      assert.equal(branding.result.value.footer, edition.showFooter);
+      assert.equal(branding.result.value.label, !!edition.desktopLabel);
       if (edition.id === 'neutral') assert.doesNotMatch(branding.result.value.text, /VeriCivil|CW Aerial/);
       if (companion) assert.equal(companion.exitCode, null, 'both editions remain running');
       const result = await command({ awaitPromise: true, returnByValue: true, expression: `(async () => {
