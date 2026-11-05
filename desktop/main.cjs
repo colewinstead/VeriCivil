@@ -2,14 +2,16 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell
 const { saveAtomically } = require('./files.cjs');
 const { Projects, projectContent } = require('./projects.cjs');
 const { createDiagnostics } = require('./diagnostics.cjs');
-const { Updates, availableVersion, closeForUpdate, canInstallUpdates } = require('./updates.cjs');
+const { Updates, availableVersion, editionDownload, isEditionUpdate, closeForUpdate, canInstallUpdates } = require('./updates.cjs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { APP_URL, FILE_TYPES, assetPath, savePayload, websiteUrl } = require('./security.cjs');
 
+const edition = require('./edition.json');
+
 protocol.registerSchemesAsPrivileged([{ scheme: 'vericivil', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
-app.setName('VeriCivil Superelevation');
+app.setName(edition.productName);
 const launchFile = args => args.find(value => path.isAbsolute(value) && /\.(vericivil|json)$/i.test(value));
 let startupFile = launchFile(process.argv.slice(1));
 let openFile;
@@ -17,10 +19,10 @@ app.on('open-file', (event, file) => { event.preventDefault(); if (openFile) voi
 
 async function start() {
   if (!app.requestSingleInstanceLock()) { app.quit(); return null; }
-  app.setAppUserModelId('com.vericivil.superelevation');
+  app.setAppUserModelId(edition.appId);
   const diagnostics = createDiagnostics(path.join(app.getPath('userData'), 'logs'), { app: app.getVersion(), electron: process.versions.electron, ...require('./release-info.json') });
   diagnostics.record('startup');
-  process.on('uncaughtException', error => { diagnostics.record('native_uncaught', error.code); dialog.showErrorBox('VeriCivil needs to restart', 'An unexpected application error occurred. A local recovery snapshot may be available after restarting. Export diagnostics from Help if this repeats.'); app.exit(1); });
+  process.on('uncaughtException', error => { diagnostics.record('native_uncaught', error.code); dialog.showErrorBox(`${edition.productName} needs to restart`, 'An unexpected application error occurred. A local recovery snapshot may be available after restarting. Export diagnostics from Help if this repeats.'); app.exit(1); });
   process.on('unhandledRejection', error => diagnostics.record('native_rejection', error?.code));
   await app.whenReady();
   const projects = new Projects(app.getPath('userData'));
@@ -44,7 +46,7 @@ async function start() {
     opening = null;
     if (currentFile) { startupFile = currentFile; currentFile = null; }
     window = new BrowserWindow({ width: 1440, height: 960, minWidth: 1040, minHeight: 700,
-      title: 'Superelevation · VeriCivil', show: false, backgroundColor: '#10201b', icon: path.join(__dirname, 'icon.png'),
+      title: edition.windowTitle, show: false, backgroundColor: '#10201b', icon: path.join(__dirname, 'icon.png'),
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     window.webContents.setWindowOpenHandler(({ url }) => { if (websiteUrl(url)) void shell.openExternal(url); return { action: 'deny' }; });
@@ -53,7 +55,7 @@ async function start() {
       if (dialog.showMessageBoxSync(window, { type: 'question', buttons: ['Keep working', 'Discard changes'], defaultId: 0, cancelId: 0,
         message: 'Close this unsaved project?', detail: 'Save your project before closing to keep your changes.' }) === 1) event.preventDefault();
     });
-    window.webContents.on('render-process-gone', (_event, details) => { diagnostics.record('renderer_gone', details.reason); dirty = true; showError('The workspace stopped. Restart VeriCivil to recover your work.'); });
+    window.webContents.on('render-process-gone', (_event, details) => { diagnostics.record('renderer_gone', details.reason); dirty = true; showError(`The workspace stopped. Restart ${edition.productName} to recover your work.`); });
     await window.loadURL(APP_URL);
     window.show();
     return window;
@@ -81,7 +83,7 @@ async function start() {
     return handler(payload);
   });
   const openDialog = async () => {
-    const chosen = await dialog.showOpenDialog(window, { filters: [{ name: 'VeriCivil project', extensions: ['vericivil', 'json'] }], properties: ['openFile'] });
+    const chosen = await dialog.showOpenDialog(window, { filters: [{ name: edition.projectLabel, extensions: ['vericivil', 'json'] }], properties: ['openFile'] });
     if (!chosen.canceled && chosen.filePaths[0]) await openFile(chosen.filePaths[0]);
   };
   handle('desktop:open', openDialog);
@@ -91,7 +93,7 @@ async function start() {
     if (isProject) projectContent(file.data.toString('utf8'));
     const selected = isProject && currentFile && !payload.saveAs ? { filePath: currentFile } : await dialog.showSaveDialog(window, {
       defaultPath: isProject && currentFile ? currentFile : file.name,
-      filters: [{ name: FILE_TYPES[file.extension], extensions: [file.extension] }], properties: ['showOverwriteConfirmation'],
+      filters: [{ name: isProject ? edition.projectLabel : FILE_TYPES[file.extension], extensions: [file.extension] }], properties: ['showOverwriteConfirmation'],
     });
     if (selected.canceled || !selected.filePath) return 'cancelled';
     await saveAtomically(selected.filePath, file.data);
@@ -117,11 +119,25 @@ async function start() {
   const config = require('./desktop-config.json');
   if (config.updateChannel) autoUpdater.channel = config.updateChannel;
   if (!config.signedUpdates) autoUpdater.disableDifferentialDownload = true;
+  const fetchRelease = async () => {
+    const response = await fetch('https://api.github.com/repos/colewinstead/VeriCivil/releases/latest', { headers: { Accept: 'application/vnd.github+json', 'User-Agent': edition.packageName }, signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error('Release check unavailable.');
+    return response.json();
+  };
+  const openDownloads = async () => {
+    try {
+      const url = edition.downloadsUrl || editionDownload(await fetchRelease(), edition, process.platform, process.arch)?.url;
+      if (!url) throw new Error('No download for this desktop edition and platform is available in the latest release.');
+      await shell.openExternal(url);
+    } catch (error) { showError('Could not find the desktop download', error); }
+  };
   const updates = new Updates(autoUpdater, { enabled: app.isPackaged && canInstallUpdates(config, process.platform), version: app.getVersion(), isDirty: () => dirty || busy || recoveryPending,
+    downloadHint: edition.id === 'neutral' ? 'Use Download latest version to get this edition.' : undefined,
+    validateUpdate: edition.id === 'neutral' ? info => isEditionUpdate(info, edition, process.platform, process.arch) : undefined,
     discover: async () => {
-      const response = await fetch('https://api.github.com/repos/colewinstead/VeriCivil/releases/latest', { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'VeriCivil-desktop' }, signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error('Release check unavailable.');
-      return availableVersion(await response.json(), app.getVersion());
+      const release = await fetchRelease();
+      const version = availableVersion(release, app.getVersion());
+      return edition.id === 'neutral' && !editionDownload(release, edition, process.platform, process.arch) ? null : version;
     },
     closeWindows: async () => {
       closingForUpdate = true;
@@ -133,12 +149,12 @@ async function start() {
     }, record: diagnostics.record,
   });
   updates.on('state', state => {
-    if (state.status === 'error' && window?.isDestroyed()) { closingForUpdate = false; void createWindow().catch(error => showError('Restart VeriCivil to continue', error)); }
+    if (state.status === 'error' && window?.isDestroyed()) { closingForUpdate = false; void createWindow().catch(error => showError(`Restart ${edition.productName} to continue`, error)); }
     else if (window && !window.isDestroyed()) window.webContents.send('desktop:update', state);
   });
   handle('desktop:update-state', () => updates.state);
   handle('desktop:update-action', action => updates.action(action));
-  handle('desktop:downloads', () => shell.openExternal('https://vericivil.com/downloads'));
+  handle('desktop:downloads', openDownloads);
   const buildMenu = () => Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
@@ -154,14 +170,14 @@ async function start() {
     { role: 'windowMenu' },
     { role: 'help', submenu: [
       { label: 'Check for updates…', click: () => { send('updates'); void updates.action('check'); } },
-      { label: 'Download latest version', click: () => void shell.openExternal('https://vericivil.com/downloads') },
+      { label: 'Download latest version', click: () => void openDownloads() },
       { label: 'Export diagnostics…', click: async () => {
         try {
-          const selected = await dialog.showSaveDialog(window, { defaultPath: 'vericivil-diagnostics.json', filters: [{ name: 'Diagnostic report', extensions: ['json'] }] });
+          const selected = await dialog.showSaveDialog(window, { defaultPath: edition.diagnosticsName, filters: [{ name: 'Diagnostic report', extensions: ['json'] }] });
           if (!selected.canceled && selected.filePath) await saveAtomically(selected.filePath, diagnostics.bundle());
         } catch (error) { showError('Could not export diagnostics', error); }
       } },
-      { label: 'About VeriCivil', click: () => dialog.showMessageBox(window, { message: 'VeriCivil Superelevation', detail: `Version ${app.getVersion()}\nCurrent desktop tools are free. Engineering calculations and project recovery stay on this computer.\n\nIndependently verify engineering criteria, inputs, results, and deliverables.` }) },
+      { label: edition.aboutLabel, click: () => dialog.showMessageBox(window, { message: edition.productName, detail: `Version ${app.getVersion()}\n${edition.id === 'neutral' ? 'CW Aerial Media LLC\n' : ''}Current desktop tools are free. Engineering calculations and project recovery stay on this computer.\n\nIndependently verify engineering criteria, inputs, results, and deliverables.` }) },
     ] },
   ]));
   buildMenu();

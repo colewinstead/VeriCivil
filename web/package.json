@@ -16,7 +16,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-pages --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "desktop:build": "npm --prefix ../desktop ci --ignore-scripts --no-audit --no-fund && node desktop/build.mjs",
-    "desktop:dev": "npm run desktop:build && electron ../desktop/app",
+    "desktop:dev": "npm run desktop:build && node desktop/run.mjs",
     "desktop:package": "npm run desktop:build && node desktop/package.mjs",
     "desktop:test": "node --test ../desktop/tests/*.test.cjs",
     "desktop:installer": "npm run desktop:build && node desktop/installer.mjs",

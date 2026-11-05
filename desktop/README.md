@@ -28,6 +28,29 @@ The first command packages the host platform: the current Mac architecture, or W
 
 `desktop:installer` builds an unsigned NSIS installer on Windows, or DMG and update ZIP on Mac, under `desktop/installers/`. The installer uses the stable identity `com.vericivil.superelevation`. Windows creates Start menu/desktop shortcuts and an uninstaller; upgrades and uninstall preserve user projects and the local profile. Local Windows Application Control can prevent NSIS from executing its unsigned build stub; use the clean Windows CI runner for acceptance rather than bypassing that policy.
 
+## Neutral desktop edition
+
+`desktop/editions.json` supplies build-time branding for the shared UI, Electron shell, and packaging. `DESKTOP_EDITION` accepts `vericivil` (the default) or `neutral`; unknown values fail the build. This is not an installer choice or an in-app preference. UI and calculation changes apply to both editions.
+
+To build **Superelevation Calculator** without VeriCivil branding:
+
+```sh
+DESKTOP_EDITION=neutral npm --prefix web run desktop:dev
+DESKTOP_EDITION=neutral npm --prefix web run desktop:package
+DESKTOP_EDITION=neutral npm --prefix web run desktop:installer
+DESKTOP_EDITION=neutral npm --prefix web run desktop:test:offline
+python3 scripts/package_electron_release.py --platform darwin --arch arm64 --edition neutral
+python3 scripts/stage_desktop_installers.py --platform darwin --arch arm64 --edition neutral
+```
+
+On Windows PowerShell, set `$env:DESKTOP_EDITION = 'neutral'` before the npm commands and use `--platform win32 --arch x64` with the Python commands. Clear that environment variable to return to the default edition. Each staging/archive command requires the corresponding package to have been built first. The neutral app stages under `desktop/app-neutral/`, preview packages under `desktop/releases/neutral/`, and installers under `desktop/installers/neutral/`.
+
+The neutral installer has its own app identity, shortcuts, uninstaller, updater cache, and `Superelevation Calculator` profile directory under the OS application-data folder. It can coexist with VeriCivil without migrating or sharing recovery data. It opens existing `.json` and `.vericivil` projects, saves new projects as `.json`, and registers neither extension, leaving existing file associations alone. The neutral workspace omits the desktop promotional label and footer. Required ownership information stays in About and the bundled license; engineering verification guidance remains in About.
+
+Both editions are built by each platform's release job. Neutral installers/previews and separate checksums are public GitHub Release assets, but the website's download buttons ignore them. Windows neutral installers use `latest-neutral-unsigned-win32-x64.yml`, accept only matching neutral installer filenames, and still require approval before downloading or restarting. Unsigned Macs and portable apps check for matching neutral assets and require manual replacement. Missing neutral assets never fall back to a branded download. A public GitHub asset is unadvertised, not access-restricted.
+
+Protected signing workflows remain VeriCivil-only; requesting a signed neutral build fails explicitly. Regenerate the neutral geometric SE artwork with `python3 scripts/create_neutral_desktop_icons.py` (Pillow required).
+
 ## Projects, recovery, and support
 
 New desktop projects use `.vericivil` (the existing JSON project format). Older `.json` projects still open. File → Open recent remembers ten paths; double-clicking a `.vericivil` file opens it in the existing application instance. Save updates the opened project; Save As chooses another destination. File validation and shared-engine schema checks run before accepting the opened project.

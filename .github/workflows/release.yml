@@ -140,7 +140,7 @@ jobs:
             arch: x64
             target: Windows-x64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -199,6 +199,44 @@ jobs:
       - name: Archive unsigned preview and checksum
         run: python scripts/package_electron_release.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
 
+      - name: Build and verify neutral desktop edition
+        env:
+          DESKTOP_EDITION: neutral
+        run: npm --prefix web run desktop:package
+
+      - name: Verify neutral offline runtime and branding
+        env:
+          DESKTOP_EDITION: neutral
+        run: npm --prefix web run desktop:test:offline
+
+      - name: Build neutral unsigned installer
+        env:
+          DESKTOP_EDITION: neutral
+        run: node web/desktop/installer.mjs
+
+      - name: Stage neutral installers and isolated Windows feed
+        run: python scripts/stage_desktop_installers.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --edition neutral
+
+      - name: Build next neutral version for upgrade acceptance
+        if: matrix.platform == 'win32'
+        env:
+          DESKTOP_EDITION: neutral
+        run: node web/desktop/installer.mjs win32 --upgrade-test
+
+      - name: Verify neutral Windows lifecycle and coexistence
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $initial = @(Get-ChildItem desktop/installers/neutral/win32-x64/Superelevation-Calculator-*-unsigned.exe)
+          $upgrade = @(Get-ChildItem desktop/installer-tests/neutral/Superelevation-Calculator-*-unsigned.exe)
+          $companion = @(Get-ChildItem desktop/installers/win32-x64/VeriCivil-Superelevation-*-unsigned.exe)
+          if ($initial.Count -ne 1 -or $upgrade.Count -ne 1 -or $companion.Count -ne 1) { throw 'Expected one installer for each edition and test version' }
+          $version = python -c "from app_info import APP_VERSION; p=list(map(int,APP_VERSION.split('.'))); p[2]+=1; print('.'.join(map(str,p)))"
+          ./scripts/test_windows_installer.ps1 -InitialInstaller $initial[0].FullName -UpgradeInstaller $upgrade[0].FullName -ExpectedVersion $version -Edition neutral -CompanionInstaller $companion[0].FullName
+
+      - name: Archive neutral preview and checksum
+        run: python scripts/package_electron_release.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --edition neutral
+
       - name: Upload desktop release files
         uses: actions/upload-artifact@v7
         with:
@@ -228,15 +266,23 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate-version.outputs.version }}
         shell: bash
         run: |
+          BINARIES=()
+          FEEDS=()
+          for FILE in release-assets/*; do
+            if [[ "$FILE" == *.yml ]]; then FEEDS+=("$FILE"); else BINARIES+=("$FILE"); fi
+          done
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-assets/* \
+            gh release upload "$RELEASE_TAG" "${BINARIES[@]}" \
               --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$RELEASE_TAG" release-assets/* \
+            gh release create "$RELEASE_TAG" "${BINARIES[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Superelevation Calculator v$RELEASE_VERSION" \
               --notes "Code signing policy: https://vericivil.com/code-signing. SignPath approval is pending. Automated desktop downloads are unsigned evaluation builds. Windows installers support user-approved updates without publisher-signature verification; unsigned Mac and portable builds require manual updates." \
               --generate-notes \
               --latest
+          fi
+          if [[ "${#FEEDS[@]}" -gt 0 ]]; then
+            gh release upload "$RELEASE_TAG" "${FEEDS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           fi

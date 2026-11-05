@@ -1,7 +1,9 @@
 const { app, dialog } = require('electron');
 const path = require('node:path');
-app.setPath('userData', path.join(app.getPath('appData'), 'VeriCivil Superelevation'));
+const edition = require('./edition.json');
+app.setName(edition.productName);
+app.setPath('userData', path.join(app.getPath('appData'), edition.profileDirectory));
 require('./main.cjs').start().catch(() => {
-  dialog.showErrorBox('VeriCivil could not start', 'Check that the application folder is complete and your user profile is writable. Reinstall from vericivil.com/downloads if this repeats. Your saved projects have not been changed.');
+  dialog.showErrorBox(`${edition.productName} could not start`, `Check that the application folder is complete and your user profile is writable. Reinstall ${edition.productName} if this repeats. Your saved projects have not been changed.`);
   app.exit(1);
 });

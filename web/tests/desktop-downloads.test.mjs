@@ -19,3 +19,14 @@ test('downloads reject draft/prerelease metadata, foreign URLs, and wrong versio
   assert.equal(desktopDownloads({ tag_name: '<script>', assets: [] }), null);
   assert.deepEqual(desktopDownloads({ tag_name: 'v1.7.0', assets: [{ ...asset('VeriCivil-Superelevation-1.7.0-win-x64.exe'), browser_download_url: 'https://evil.example/setup.exe' }, asset('VeriCivil-Superelevation-1.6.0-win-x64.exe')] }).downloads, []);
 });
+
+test('public download buttons ignore unadvertised neutral installers and previews', () => {
+  const assets = [
+    asset('Superelevation-Calculator-1.7.0-win-x64-unsigned.exe'),
+    asset('Superelevation-Calculator-1.7.0-mac-arm64-unsigned.dmg'),
+    asset('Superelevation-Calculator-Desktop-Preview-1.7.0-macOS-Intel.dmg'),
+  ];
+  assert.deepEqual(desktopDownloads({ tag_name: 'v1.7.0', assets }).downloads, []);
+  assets.push(asset('VeriCivil-Superelevation-1.7.0-win-x64-unsigned.exe'));
+  assert.equal(desktopDownloads({ tag_name: 'v1.7.0', assets }).downloads.length, 1);
+});

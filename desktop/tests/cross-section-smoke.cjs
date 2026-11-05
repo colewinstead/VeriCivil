@@ -19,7 +19,7 @@ const launch = browserUrl ? app.whenReady().then(async () => {
   const window = new BrowserWindow({ width: 1440, height: 960, webPreferences: { partition: 'section-browser-test', sandbox: true, contextIsolation: true, nodeIntegration: false } });
   await window.loadURL(browserUrl);
   return window;
-}) : require('../app/main.cjs').start();
+}) : require(path.join(__dirname, '..', require('../edition.cjs').getEdition().appDirectory, 'main.cjs')).start();
 launch.then(async window => {
   window.webContents.setBackgroundThrottling(false);
   window.webContents.on("console-message", event => { if (event.level === "error") console.error("Renderer:", event.message); });

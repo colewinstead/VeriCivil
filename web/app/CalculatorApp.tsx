@@ -2,7 +2,7 @@
 
 import ControlIcon from "./ControlIcon";
 import { CASE_II_DEFAULTS, CaseIIInputs, CaseIIResults } from "./CaseIICarriageways";
-import type { DesktopHost, DesktopProject } from "../lib/desktop";
+import type { DesktopBranding, DesktopHost, DesktopProject } from "../lib/desktop";
 import DesktopUpdates from "./DesktopUpdates";
 import { requiresCompoundCalculation } from "../lib/qa-findings";
 import { curveInputValues, editLandxmlInputs, mergeCurveInputs, type LandxmlInputs } from "../lib/curve-inputs";
@@ -148,7 +148,7 @@ function calculationInputKey(inputs: Dict) {
   });
 }
 
-export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {}) {
+export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: DesktopHost; desktopBranding?: DesktopBranding } = {}) {
   const [inspectorTab, setInspectorTab] = useState("curve");
   // Generated release changes must restart retained workers during local hot reload.
   const expectedApplicationVersion = releaseInfo.application_version;
@@ -853,7 +853,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
 
   const saveProject = async () => {
     if (!requestCapability(CAPABILITIES.projectFiles)) return;
-    const filename = `${cleanName(inputs.project_name, "superelevation-project")}.${desktop ? "vericivil" : "json"}`;
+    const filename = `${cleanName(inputs.project_name, "superelevation-project")}.${desktop ? (desktopBranding?.projectExtension ?? "vericivil") : "json"}`;
     let target: SaveTarget | null;
     try {
       target = await chooseSaveTarget(filename, "application/json", "json", "Superelevation project");
@@ -1168,10 +1168,12 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
     } catch { setError("Recovery could not finish. The snapshot is still on this computer."); }
   };
 
+  const desktopCompany = desktopBranding?.companyLabel ?? "VeriCivil";
+  const desktopLabel = desktopBranding?.desktopLabel ?? "Free desktop app";
   return (
     <main className={`app-shell${desktop ? " desktop-workspace" : ""}`} data-inspector={desktop ? inspectorTab : undefined}>
       {desktop ? <header className="desktop-toolbar">
-        <div><h1>Superelevation</h1><span>VeriCivil <span className="desktop-preview-label">Free desktop app</span></span></div>
+        <div><h1>{desktopBranding?.headerTitle ?? "Superelevation"}</h1>{(desktopCompany || desktopLabel) && <span>{desktopCompany}{desktopLabel && <span className="desktop-preview-label">{desktopLabel}</span>}</span>}</div>
         <div className={`desktop-runtime ${runtime}`} role="status"><i />{runtime === "ready" ? "Offline engine ready" : runtimeMessage}</div>
         <button onClick={loadSampleCalculation} disabled={runtime !== "ready" || !!busy}>Load synthetic sample</button>
         <button onClick={newProject}>New project</button>
@@ -1347,7 +1349,7 @@ export default function CalculatorApp({ desktop }: { desktop?: DesktopHost } = {
 
       <section className="exports panel"><div><p className="step">04</p><h2>Review & export {proChip(CAPABILITIES.pdfReports)}</h2><p>{desktop ? "Save the recorded results through a native file dialog." : "Exports use the same recorded calculation results shown above. Supported browsers open a Save dialog; others use Downloads."}</p></div><div className="crs-status"><span>Overlay coordinates</span><strong>{landxml?.summary?.coordinate_system?.display_name || "Select LandXML to detect"}</strong><small>DXF preserves the LandXML XY coordinates without reprojection.</small></div><div className="export-buttons"><button onClick={() => performExport("export_pdf", "pdf", "application/pdf")}>PDF report {proChip(CAPABILITIES.pdfReports)}</button><button disabled={!!result?.carriageways || curves.some(curve => curve.results?.carriageways)} title={isCaseII ? "Case II ORD mapping is not validated; use PDF or DXF." : undefined} onClick={() => performExport("export_ord_csv", "csv", "text/csv")}>ORD CSV {proChip(CAPABILITIES.ordCsv)}</button><button className="primary" onClick={() => performExport("export_overlay_dxf", "dxf", "application/dxf")}>Overlay DXF {proChip(CAPABILITIES.overlayDxf)}</button></div></section>
 
-      <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Free desktop · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}<span className="legal-disclosure">VeriCivil is a brand of CW Aerial Media LLC.</span></p></footer>
+      {(!desktop || desktopBranding?.showFooter !== false) && <footer><p><strong>Engineering aid.</strong> The licensed professional responsible for the project must independently verify criteria, inputs, stationing, coordinate systems, results, and deliverables against governing standards and project requirements.</p><p>{desktop ? "Free desktop · Local files · Offline processing" : `${entitlement.plan === "free" ? "Free without account" : `${entitlement.plan.toUpperCase()} access`} · Local files · Browser processing`}{(!desktop || desktopBranding?.legalDisclosure !== "") && <span className="legal-disclosure">{desktopBranding?.legalDisclosure ?? "VeriCivil is a brand of CW Aerial Media LLC."}</span>}</p></footer>}
     </main>
   );
 }

@@ -41,6 +41,7 @@ Sample Data/
 Test exports/
 *.png
 !web/public/brand/vericivil-icon.png
+!desktop/icons/superelevation.png
 !web/public/og.png
 !web/public/showcase/
 !web/public/showcase/*.png
@@ -81,6 +82,7 @@ SuperElevation_legacy_*.exe
 # impeccable-ignore-end
 # Local Electron preview artifacts and offline dependency cache
 /desktop/app/
+/desktop/app-neutral/
 /desktop/runtime/
 /desktop/releases/
 /desktop/release-assets/

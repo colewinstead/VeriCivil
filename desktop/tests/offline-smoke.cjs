@@ -10,11 +10,20 @@ app.setPath('userData', process.env.VERICIVIL_TEST_PROFILE);
 console.log('Starting actual Electron app and offline worker');
 const root = path.resolve(__dirname, '../..');
 const timer = setTimeout(() => { console.error('Desktop smoke timed out'); app.exit(1); }, 180000);
-const original = require('../app/main.cjs');
+const { getEdition } = require('../edition.cjs');
+const edition = getEdition();
+const appDirectory = path.join(root, 'desktop', edition.appDirectory);
+const original = require(path.join(appDirectory, 'main.cjs'));
 original.start().then(async (window) => {
-  const icon = nativeImage.createFromPath(path.join(root, 'desktop/app/icon.png'));
+  const icon = nativeImage.createFromPath(path.join(appDirectory, 'icon.png'));
   assert.deepEqual(icon.getSize(), { width: 512, height: 512 });
-  assert.equal(readFileSync(path.join(root, 'desktop/app/icon.png')).equals(readFileSync(path.join(root, 'web/public/brand/vericivil-icon.png'))), true);
+  assert.equal(readFileSync(path.join(appDirectory, 'icon.png')).equals(readFileSync(path.join(root, edition.id === 'vericivil' ? 'web/public/brand/vericivil-icon.png' : 'desktop/icons/superelevation.png'))), true);
+  assert.equal(app.getName(), edition.productName);
+  assert.equal(await window.webContents.executeJavaScript('document.title'), edition.windowTitle);
+  assert.equal(await window.webContents.executeJavaScript("document.querySelector('.desktop-toolbar h1').textContent"), edition.headerTitle);
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-preview-label')"), !!edition.desktopLabel);
+  assert.equal(await window.webContents.executeJavaScript('!!document.querySelector("footer")'), edition.showFooter);
+  if (edition.id === 'neutral') assert.doesNotMatch(await window.webContents.executeJavaScript('document.body.innerText'), /VeriCivil|CW Aerial/);
   window.webContents.setBackgroundThrottling(false);
   window.webContents.on('console-message', (event) => console.log('Renderer:', event.message));
   const inputs = { pc: '10+00', pt: '12+00', speed: '45', radius: '1200', facility: 'centerline', area: 'rural', lane_width: '12', lanes_rotated: '2', normal_crown: '0.02', curve_direction: 'right' };
@@ -95,6 +104,12 @@ original.start().then(async (window) => {
     const recovered = JSON.parse(await readFile(path.join(app.getPath('userData'), 'recovery.json'), 'utf8'));
     assert.equal(recovered.vars.recovery_test, true);
     await window.webContents.executeJavaScript("window.vericivilDesktop.saveRecovery(null)");
+    await window.webContents.executeJavaScript("window.vericivilDesktop.newProject()");
+    let suggestedProject;
+    dialog.showSaveDialog = async (_window, options) => { suggestedProject = options.defaultPath; return { canceled: true }; };
+    await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('.desktop-toolbar button')).find(button => button.textContent === 'Save project').click()");
+    for (let attempt = 0; attempt < 100 && !suggestedProject; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(suggestedProject?.endsWith('.' + edition.projectExtension));
   } finally { dialog.showSaveDialog = originalDialog; await rm(folder,{recursive:true,force:true}); }
   const geometry = [];
   for (const [width,height] of [[1040,760],[1440,960]]) {

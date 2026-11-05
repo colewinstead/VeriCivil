@@ -6,7 +6,7 @@ const MAX_PROJECT_BYTES = 64 * 1024 * 1024;
 function projectContent(content) {
   if (typeof content !== 'string' || Buffer.byteLength(content) > MAX_PROJECT_BYTES) throw new Error('Project exceeds 64 MiB.');
   const project = JSON.parse(content);
-  if (!project || typeof project !== 'object' || Array.isArray(project) || !Number.isInteger(project.version) || !project.vars || typeof project.vars !== 'object' || Array.isArray(project.vars)) throw new Error('Select a valid saved VeriCivil project.');
+  if (!project || typeof project !== 'object' || Array.isArray(project) || !Number.isInteger(project.version) || !project.vars || typeof project.vars !== 'object' || Array.isArray(project.vars)) throw new Error('Select a valid saved superelevation project.');
   return content;
 }
 
@@ -28,7 +28,7 @@ class Projects {
     await saveAtomically(path.join(this.directory, 'recent.json'), JSON.stringify(this.recent));
   }
   async read(file) {
-    if (!path.isAbsolute(file) || !['.json', '.vericivil'].includes(path.extname(file).toLowerCase())) throw new Error('Select a saved VeriCivil project.');
+    if (!path.isAbsolute(file) || !['.json', '.vericivil'].includes(path.extname(file).toLowerCase())) throw new Error('Select a saved superelevation project.');
     const stat = await fs.stat(file);
     if (!stat.isFile() || stat.size > MAX_PROJECT_BYTES) throw new Error('Project exceeds 64 MiB or is not a file.');
     const content = projectContent(await fs.readFile(file, 'utf8'));
