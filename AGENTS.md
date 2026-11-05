@@ -34,5 +34,5 @@
 
 ## Website publishing
 
-- After a successful merge and GitHub Release, invoke `$ship-main` or ask Codex to “Ship main.”
+- After a successful merge and GitHub Release, invoke `$ship-main` or “Ship main” if the user request the site to be rereleased.
 - Publish only to the existing ChatGPT Site identified by `web/.openai/hosting.json`. Never create a replacement site, change its slug, or change its access policy unless the user explicitly requests that change.

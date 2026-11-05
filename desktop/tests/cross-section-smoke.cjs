@@ -46,7 +46,9 @@ case_values={**values,"roadway":"divided_case_ii","pc":"7000","pt":"9000","case_
 case_result=super_service.calculate_curve(case_values)["results"]
 curves = [{"results":result,"meta":{"curve_direction":"left","curve_name":"Synthetic four-lane undivided"}}, {"results":ramp,"meta":{"curve_direction":"right","curve_name":"Synthetic three-lane ramp"}}, {"results":case_result,"meta":{"curve_direction":"left","curve_name":"Synthetic Case II"}}]
 content = super_service.project_save({"version":5,"vars":values,"curves":curves,"last_results":result,"last_meta":curves[0]["meta"]})
-print(json.dumps({"content":content,"full":result["full_super_ft"]}))
+case_stops=super_service.corridor_diagram(curves)["curves"][2]["snap_points"]
+case_index=next(index for index,stop in enumerate(case_stops) if "Full super" in stop["labels"] and stop["lanes"]==["left"])
+print(json.dumps({"content":content,"full":result["full_super_ft"],"preview_start":result["zero_crown_ft"],"results":result,"case_previous":case_stops[case_index-1],"case_full":case_stops[case_index]}))
 `], { cwd: root, encoding: 'utf8' }));
   const project = path.join(profile, 'section.vericivil');
   writeFileSync(project, fixture.content);
@@ -66,23 +68,100 @@ print(json.dumps({"content":content,"full":result["full_super_ft"]}))
   await js("document.querySelector('.expand-analysis').click()");
   const station = () => js("Number(document.querySelector('[aria-label=\"Cross-section station scrubber\"]').value)");
   console.log('Loaded four-lane section; checking native input.');
-  await js("window.sectionRequests=[]; var sectionPost=Worker.prototype.postMessage; Worker.prototype.postMessage=function(message,...args){if(message.operation==='diagram_lookup')window.sectionRequests.push(message.payload.station);return sectionPost.call(this,message,...args)};undefined;");
+  await js(`window.sectionRequests=[]; window.sectionDelay=0; window.sectionIds=new Set();
+    var sectionPost=Worker.prototype.postMessage;
+    Worker.prototype.postMessage=function(message,...args){
+      if(message.operation==='diagram_lookup') {
+        window.sectionRequests.push(message.payload.station); window.sectionIds.add(message.id);
+        if(!this.sectionWrapped) {
+          this.sectionWrapped=true; const receive=this.onmessage;
+          this.onmessage=event=>{
+            if(window.sectionIds.delete(event.data.id) && window.sectionDelay) setTimeout(()=>receive.call(this,event),window.sectionDelay);
+            else receive.call(this,event);
+          };
+        }
+      }
+      return sectionPost.call(this,message,...args);
+    }; undefined;`);
   const before = await station();
   await js("document.querySelector('[aria-label=\"Cross-section station scrubber\"]').focus()");
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
   await wait(`Number(document.querySelector('[aria-label="Cross-section station scrubber"]').value)===${before + 1} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
+  assert.equal(await js("document.querySelector('.cross-section-event').textContent"),'Between stopping points');
   const enter = async text => {
     window.focus();
     window.webContents.focus();
     await js("var input=document.querySelector('[aria-label=\"Cross-section station\"]'); input.focus(); input.select();");
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+    await wait("document.querySelector('[aria-label=\"Cross-section station\"]').value===''");
     for (const character of text) window.webContents.sendInputEvent({ type: 'char', keyCode: character });
     await wait(`document.querySelector('[aria-label="Cross-section station"]').value===${JSON.stringify(text)}`);
     await js('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     await js("document.querySelector('.cross-section-station button').click()");
   };
+  await enter(String(fixture.preview_start));
+  await wait(`Number(document.querySelector('[aria-label="Cross-section station scrubber"]').value)===${fixture.preview_start} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
+  await js(`window.sectionDelay=450; window.sectionRequests=[]; window.sectionFrames=[]; window.sectionRecording=true;
+    window.sectionSvg=document.querySelector('.cross-section-drawing svg');
+    function recordSection(){
+      const slider=document.querySelector('[aria-label="Cross-section station scrubber"]');
+      const drawing=document.querySelector('.cross-section-drawing'); const view=document.querySelector('.cross-section-view');
+      window.sectionFrames.push({station:Number(slider.value),label:document.querySelector('.cross-section-readout strong').textContent,accessibleLabel:slider.getAttribute('aria-valuetext'),top:slider.getBoundingClientRect().top,
+        height:drawing.getBoundingClientRect().height,scroll:view.scrollTop,page:window.scrollY,
+        caption:document.querySelector('.cross-section-event').textContent,scrubbing:document.querySelector('.cross-section-event').classList.contains('scrubbing'),captionHeight:document.querySelector('.cross-section-event').getBoundingClientRect().height,
+        mounted:window.sectionSvg===drawing.querySelector('svg'),table:!!document.querySelector('.cross-section-table'),
+        slopes:Array.from(drawing.querySelectorAll('.section-slope'),item=>item.textContent),
+        mobile:Array.from(document.querySelectorAll('.cross-section-mobile-labels strong'),item=>item.textContent),
+        edges:Array.from(drawing.querySelectorAll('.section-segment line'),item=>Number(item.getAttribute('y1')))});
+      if(window.sectionRecording)requestAnimationFrame(recordSection);
+    } requestAnimationFrame(recordSection);`);
+  const track = await js(`(() => {const input=document.querySelector('[aria-label="Cross-section station scrubber"]'); const rect=input.getBoundingClientRect(); return {left:rect.left+8,width:rect.width-16,y:rect.top+rect.height/2,min:Number(input.min),max:Number(input.max)};})()`);
+  const point = fraction => ({ x: Math.round(track.left + ((fixture.preview_start + fraction * (fixture.full - fixture.preview_start) - track.min) / (track.max - track.min)) * track.width), y: Math.round(track.y) });
+  window.webContents.sendInputEvent({ type: 'mouseMove', ...point(0) });
+  window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...point(0) });
+  const motion = [...Array.from({length: 12}, (_,i)=>(i+1)/15), ...Array.from({length: 12}, (_,i)=>.8-(i+1)/24)];
+  for (let index=0; index<motion.length; index++) {
+    window.webContents.sendInputEvent({ type: 'mouseMove', modifiers: ['leftbuttondown'], ...point(motion[index]) });
+    await new Promise(resolve=>setTimeout(resolve,index===6?140:24));
+    if (capture && index===12) writeFileSync(path.join(capture,`cross-section-preview-${browserUrl?'browser':'electron'}.png`),(await window.capturePage()).toPNG());
+  }
+  window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point(motion.at(-1)) });
+  const stopped = await station();
+  await wait(`Number(document.querySelector('[aria-label="Cross-section station scrubber"]').value)===${stopped} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
+  const samples = await js('window.sectionRecording=false; window.sectionDelay=0; window.sectionFrames');
+  const previews = samples.filter(sample=>sample.slopes.some(label=>label.startsWith('≈')));
+  assert.ok(previews.length>5, 'native sustained dragging shows continuous previews while responses are delayed');
+  assert.ok(new Set(previews.map(sample=>JSON.stringify(sample.slopes))).size>5, 'live percentages change throughout the drag');
+  assert.ok(new Set(previews.map(sample=>JSON.stringify(sample.edges))).size>5, 'geometry moves with live percentages');
+  const scrubbingSamples=samples.filter(sample=>sample.scrubbing);
+  assert.ok(scrubbingSamples.length>5,'the test records a sustained drag');
+  assert.deepEqual([...new Set(scrubbingSamples.map(sample=>sample.caption))],['Scrubbing…'],'event captions stay quiet throughout the gesture, including pauses');
+  assert.notEqual(await js("document.querySelector('.cross-section-event').textContent"),'Scrubbing…','the caption settles after release');
+  const expectedPreviews = JSON.parse(execFileSync(python,['-c','import json,sys,super_service; data=json.load(sys.stdin); print(json.dumps([super_service.diagram_lookup(data["results"],"left",station) for station in data["stations"]]))'],{cwd:root,input:JSON.stringify({results:fixture.results,stations:previews.map(sample=>sample.station)}),encoding:'utf8'}));
+  previews.forEach((sample,index)=>{
+    const packet=expectedPreviews[index]; const bounds=packet.cross_section.bounds;
+    assert.equal(sample.label,packet.station,'station notation stays visible while scrubbing');
+    assert.equal(sample.accessibleLabel,sample.label,'the slider announces the same formatted station');
+    packet.cross_section.segments.forEach((segment,lane)=>{
+      const slope=packet.lanes[segment.name].slope_pct;
+      assert.ok(Math.abs(Number.parseFloat(sample.slopes[lane].replace('≈',''))-slope)<=.00501,'preview percentage follows the current station');
+      assert.ok(Math.abs(sample.edges[lane]-(210-segment.left.y*760/(bounds.x_max-bounds.x_min)*5))<1e-8,'preview geometry follows the same station as its percentage');
+    });
+  });
+  for (const sample of samples) {
+    assert.equal(sample.mounted,true,'the SVG stays mounted');
+    assert.equal(sample.table,true,'the exact table stays mounted');
+    assert.deepEqual(sample.mobile,sample.slopes,'mobile percentages match the SVG');
+    for (const key of ['top','height','scroll','page','captionHeight']) assert.ok(Math.abs(sample[key]-samples[0][key])<1,`${key} stays stable during scrubbing`);
+  }
+  const exact = JSON.parse(execFileSync(python,['-c','import json,sys,super_service; print(json.dumps(super_service.diagram_lookup(json.loads(sys.stdin.read()),"left",float(sys.argv[1]))))',String(stopped)],{cwd:root,input:JSON.stringify(fixture.results),encoding:'utf8'}));
+  assert.deepEqual(await js("Array.from(document.querySelectorAll('.section-slope'),item=>item.textContent)"),exact.cross_section.segments.map(segment=>segment.slope_label));
+  assert.ok((await js("document.querySelector('.cross-section-table caption').textContent")).includes(`Exact at ${exact.station}`));
+  assert.equal(await js('window.sectionRequests.at(-1)'),stopped,'release requests the final exact station');
+  assert.ok(await js('window.sectionRequests.length')<motion.length,'exact requests are coalesced during dragging');
+  console.log('PASS: sustained native drag, live percentages, stable layout, reversal, delayed responses and exact settlement.');
   await enter(String(fixture.full));
   await wait(`Number(document.querySelector('[aria-label="Cross-section station scrubber"]').value)===${fixture.full} && document.querySelectorAll('.cross-section-drawing .section-segment').length===4`);
   console.log('Station entry propagated to the section.');
@@ -93,18 +172,19 @@ print(json.dumps({"content":content,"full":result["full_super_ft"]}))
   assert.ok(Math.abs(exaggerated / actual - 5) < 1e-10, 'true-scale toggle changes only vertical exaggeration');
   await js("document.querySelector('.cross-section-scale input').click()");
   await enter('-100');
-  await wait("!!document.querySelector('.cross-section-error')");
+  await wait("!!document.querySelector('.cross-section-error[role=alert]')");
   assert.match(await js("document.querySelector('.cross-section-error').textContent"), /within this curve/);
   await js("document.querySelector('[aria-label=\"Previous section event\"]').click()");
-  await wait("!document.querySelector('.cross-section-error') && document.querySelectorAll('.cross-section-drawing .section-segment').length===4");
+  await wait("!document.querySelector('.cross-section-error[role=alert]') && document.querySelectorAll('.cross-section-drawing .section-segment').length===4");
   const beforeWheel = await station();
   await js("var slider=document.querySelector('[aria-label=\"Cross-section station scrubber\"]'); slider.focus(); slider.dispatchEvent(new WheelEvent('wheel',{deltaY:10,bubbles:true,cancelable:true}));");
   await wait(`Number(document.querySelector('[aria-label="Cross-section station scrubber"]').value)===${beforeWheel + 1} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
-  await js("var curve=document.querySelector('[aria-label=\"Cross-section curve\"]'); curve.value='1'; curve.dispatchEvent(new Event('change',{bubbles:true}));");
-  await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===3 && document.querySelector('.cross-section-heading h4').textContent==='One-way / ramp'");
+  await js("window.sectionRequests=[]; document.querySelector('[aria-label=\"Cross-section station scrubber\"]').dispatchEvent(new WheelEvent('wheel',{deltaY:10,bubbles:true,cancelable:true})); var curve=document.querySelector('[aria-label=\"Cross-section curve\"]'); curve.value='1'; curve.dispatchEvent(new Event('change',{bubbles:true}));");
+  await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===3 && document.querySelector('.cross-section-heading h4').textContent==='One-way / ramp' && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'");
   assert.ok(await station() > 4000, 'switching curves clamps station into its own domain instead of bridging the gap');
+  assert.equal(await js(`window.sectionRequests.includes(${beforeWheel+2})`),false,'switching curves cancels the prior curve\'s debounced lookup');
   await js("var curve=document.querySelector('[aria-label=\"Cross-section curve\"]'); curve.value='0'; curve.dispatchEvent(new Event('change',{bubbles:true}));");
-  await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===4");
+  await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===4 && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'");
   await enter('1000');
   await wait("Number(document.querySelector('[aria-label=\"Cross-section station scrubber\"]').value)===1000 && document.querySelectorAll('.cross-section-drawing .section-segment').length===4");
   for (const theme of browserUrl ? ['desktop', 'mobile'] : ['light', 'dark']) {
@@ -145,6 +225,15 @@ print(json.dumps({"content":content,"full":result["full_super_ft"]}))
   await js("var curve=document.querySelector('[aria-label=\"Cross-section curve\"]'); curve.value='2'; curve.dispatchEvent(new Event('change',{bubbles:true}));");
   await wait("document.querySelectorAll('.cross-section-drawing .section-segment').length===8 && document.querySelectorAll('.section-pivot').length===2 && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'");
   assert.match(await js("document.querySelector('.section-median-gap').textContent"), /40.0 ft/);
+  await enter(String(fixture.case_previous.station_ft));
+  await wait(`document.querySelector('.cross-section-readout strong').textContent===${JSON.stringify(fixture.case_previous.station)} && document.querySelector('.cross-section-drawing').getAttribute('aria-busy')==='false'`);
+  assert.ok((await js("document.querySelector('[aria-label=\"Next section event\"]').title")).includes('Full superelevation · Left lanes'));
+  await js("document.querySelector('[aria-label=\"Next section event\"]').click()");
+  await wait(`document.querySelector('.cross-section-readout strong').textContent===${JSON.stringify(fixture.case_full.station)} && document.querySelector('.cross-section-event').textContent==='Full superelevation · Left lanes'`);
+  if (!window.webContents.debugger.isAttached()) window.webContents.debugger.attach('1.3');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  assert.equal(await js("getComputedStyle(document.querySelector('.cross-section-event')).transitionDuration"),'0s');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[]});
   await enter('7300');
   await wait("document.querySelector('.cross-section-readout strong').textContent==='73+00.000'");
   await js("document.querySelector('.expand-analysis').click()");

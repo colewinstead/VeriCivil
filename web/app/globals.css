@@ -183,6 +183,9 @@ td:last-child, th:last-child { text-align: right; }
 .cross-section-readout { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 8px 0; font-variant-numeric: tabular-nums; }
 .cross-section-readout strong { font: 600 1.2rem var(--font-plex-mono), monospace; }
 .cross-section-readout span { color: var(--muted); font-size: .72rem; }
+.cross-section-event { height: 2.8em; margin: 0; overflow: auto; color: var(--ink); font-size: .8rem; line-height: 1.4; transition: color 150ms ease-out; }
+.cross-section-event.scrubbing { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .cross-section-event { transition: none; } }
 .cross-section-drawing { min-height: 220px; }
 .cross-section-drawing svg { display: block; width: 100%; max-height: 460px; min-height: 220px; }
 .cross-section-drawing text { fill: var(--muted); font-size: 13px; }
@@ -195,6 +198,7 @@ td:last-child, th:last-child { text-align: right; }
 .section-pivot circle { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
 .section-pivot line { stroke: var(--muted); stroke-dasharray: 3 4; }
 .cross-section-note { max-width: 75ch; margin: 12px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.6; }
+.cross-section-note [role="status"] { display: block; min-height: 1.6em; }
 .cross-section-error { color: var(--error, #ff9690); font-size: .8rem; }
 .cross-section-table { overflow-x: auto; margin-top: 18px; }
 .cross-section-table caption { text-align: left; color: var(--muted); font-size: .75rem; margin-bottom: 8px; }
