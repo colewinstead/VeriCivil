@@ -169,6 +169,52 @@ The Windows app folder is in `desktop/releases/`; its ZIP and SHA-256 checksum a
 
 Version-bumped PRs build all three targets automatically and expose downloads under the **Full Release** Actions run. PR runs do not publish a GitHub Release. After merge to `main`, successful release builds attach both Mac DMGs, the Windows portable ZIP, and SHA-256 checksums to the versioned GitHub Release alongside the browser build.
 
+### Build the unbranded desktop edition
+
+The **Superelevation Calculator** edition uses the same UI and calculation engine with a neutral name and SE icon. Select it when building; the installer already contains the selected edition. Complete the dependency and Electron installation steps above first.
+
+On macOS, choose the command for what you want to create:
+
+```sh
+# Build and launch from source.
+DESKTOP_EDITION=neutral npm --prefix web run desktop:dev
+# Build without launching.
+DESKTOP_EDITION=neutral npm --prefix web run desktop:build
+# Package a standalone app for this Mac's architecture.
+DESKTOP_EDITION=neutral npm --prefix web run desktop:package
+# Create an unsigned DMG and ZIP for this Mac's architecture.
+DESKTOP_EDITION=neutral npm --prefix web run desktop:installer
+```
+
+On Windows PowerShell, set the edition for the current terminal, then use the same npm commands:
+
+```powershell
+$env:DESKTOP_EDITION = 'neutral'
+npm --prefix web run desktop:package
+npm --prefix web run desktop:installer
+# Archive the packaged app as a portable Windows ZIP with a checksum.
+python scripts/package_electron_release.py --platform win32 --arch x64 --edition neutral
+# Return subsequent builds to the default VeriCivil edition.
+Remove-Item Env:\DESKTOP_EDITION
+```
+
+| Output | Location |
+| --- | --- |
+| Staged app and offline runtime | `desktop/app-neutral/` |
+| Standalone Mac app or Windows EXE folder | `desktop/releases/neutral/` |
+| Mac DMG/ZIP | `desktop/installers/neutral/darwin-arm64/` or `desktop/installers/neutral/darwin-x64/` |
+| Windows installer | `desktop/installers/neutral/win32-x64/` |
+| Archived previews and checksums | `desktop/release-assets/` |
+
+To create a neutral portable Windows x64 ZIP from a Mac:
+
+```sh
+DESKTOP_EDITION=neutral npm --prefix web run desktop:package:windows
+python3 scripts/package_electron_release.py --platform win32 --arch x64 --edition neutral
+```
+
+Both editions can be installed together with separate profiles and updater caches. The neutral edition opens existing `.json` and `.vericivil` projects, saves new projects as `.json`, and leaves file associations unchanged. Windows installers check for neutral updates and require approval to download/restart; unsigned Macs and portable builds require manual replacement. Neutral release assets are publicly reachable on GitHub but omitted from the website's download buttons. These local commands do not publish anything. See the [neutral desktop guide](desktop/README.md#neutral-desktop-edition) for archive commands, distribution details, and checks.
+
 ## Browser app
 
 The browser app runs the shared Python calculation and export modules locally through Pyodide. Calculation inputs, project data, and LandXML content are processed in the browser tab and are not automatically uploaded. The hosted site also provides server-side sign-in, plan entitlements, billing, and anonymous usage analytics.
