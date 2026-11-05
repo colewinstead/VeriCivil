@@ -7,9 +7,9 @@
 
 ## Versioned merges
 
-- `main` is user-ready. Changes beyond documentation become a GitHub Release containing the browser build and unsigned Electron desktop previews.
-- Documentation-only changes (`.md`, `.rst`, and license files) do not require a version bump and do not create a GitHub Release. The `validate-version` job still runs and passes for these changes.
-- Increase `APP_VERSION` in `app_info.py` beyond the latest release for changes to application code, calculation data, tests, dependencies, builds, or workflows. Mixed documentation and code changes require a version bump.
+- `main` is user-ready. Changes beyond documentation and agent tooling become a GitHub Release containing the browser build and unsigned Electron desktop previews.
+- Changes confined to documentation (`.md`, `.rst`, and license files), Codex configuration (`.codex/`), and agent skills (`.agents/skills/`, including scripts, references, and assets) do not require a version bump and do not create a GitHub Release. The `validate-version` job still runs and passes for these changes; release build and publication jobs skip.
+- Increase `APP_VERSION` in `app_info.py` beyond the latest release for changes to application code, calculation data, tests, dependencies, builds, or workflows outside the exempt paths. Mixed changes containing any non-exempt file require a version bump. Changes to the release classifier, its tests, or release workflows also require a version bump.
 - Do not merge when `validate-version` or any other required check is red.
 - Create a short-lived branch for each issue from the latest `origin/main`, such as `fix/123-export-error`, `feat/123-new-calculator`, or `docs/123-workflow`. Open PRs from that branch into `main`; do not use `dev` as a permanent integration branch.
 - Enable automatic deletion of merged head branches on GitHub. After merging, start the next issue from updated `main`; remove local issue branches only after confirming their work is merged and the working tree is clean. Do not reuse merged issue branches.

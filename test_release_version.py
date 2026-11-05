@@ -26,13 +26,23 @@ class ReleaseVersionTests(unittest.TestCase):
     def test_documentation_changes_do_not_require_release(self):
         self.assertFalse(requires_release(["README.md", "AGENTS.md", "docs/guide.rst", "LICENSE"]))
 
+    def test_codex_and_agent_skill_changes_do_not_require_release(self):
+        for path in [".codex/hooks.json", ".codex/config.toml",
+                     ".agents/skills/example/SKILL.md", ".agents/skills/example/scripts/check.py",
+                     ".agents/skills/example/references/criteria.json", ".agents/skills/example/assets/icon.png"]:
+            with self.subTest(path=path):
+                self.assertFalse(requires_release(["README.md", path]))
+
     def test_application_and_unknown_files_require_release(self):
         for path in ["Super.py", "web/app/page.tsx", "web/package-lock.json", "docs/criteria.json",
-                     ".github/workflows/release.yml", "test_release_version.py", "unknown.txt"]:
+                     ".github/workflows/release.yml", "test_release_version.py", "unknown.txt",
+                     ".codex-extra/hooks.json", ".agents/skills-extra/check.py", ".agents/config.json",
+                     "web/.codex/hooks.json"]:
             with self.subTest(path=path):
-                self.assertTrue(requires_release(["README.md", path]))
+                self.assertTrue(requires_release(["README.md", ".codex/hooks.json",
+                                                  ".agents/skills/example/scripts/check.py", path]))
 
-    def test_git_diff_includes_original_path_when_code_is_renamed_to_documentation(self):
+    def test_git_diff_includes_original_path_when_code_is_moved_to_exempt_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             def git(*args):
                 return subprocess.check_output(
@@ -52,13 +62,19 @@ class ReleaseVersionTests(unittest.TestCase):
             git("commit", "-m", "Docs")
             docs = git("rev-parse", "HEAD")
             self.assertFalse(requires_release(changed_paths(base, docs, merge_base=True, cwd=directory)))
-            source.rename(Path(directory) / "app.md")
-            git("add", "-A")
-            git("commit", "-m", "Rename code")
-            paths = changed_paths(base, "HEAD", cwd=directory)
-            self.assertIn("app.py", paths)
-            self.assertIn("app.md", paths)
-            self.assertTrue(requires_release(paths))
+            for destination in ["app.md", ".codex/app.py", ".agents/skills/example/app.py"]:
+                with self.subTest(destination=destination):
+                    target = Path(directory) / destination
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    source.rename(target)
+                    source = target
+                    git("add", "-A")
+                    git("commit", "-m", "Move code")
+                    for merge_base in [False, True]:
+                        paths = changed_paths(base, "HEAD", merge_base=merge_base, cwd=directory)
+                        self.assertIn("app.py", paths)
+                        self.assertIn(destination, paths)
+                        self.assertTrue(requires_release(paths))
             self.assertTrue(requires_release(changed_paths("0" * 40, base, cwd=directory)))
 
 

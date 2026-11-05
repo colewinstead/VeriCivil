@@ -1,4 +1,4 @@
-"""Identify documentation-only changes without skipping the required CI job."""
+"""Identify documentation and agent-tooling changes without skipping required CI."""
 
 from __future__ import annotations
 
@@ -8,10 +8,11 @@ from pathlib import PurePosixPath
 
 
 def requires_release(paths: list[str]) -> bool:
-    """Unknown files require a release; only source documentation is exempt."""
+    """Unknown files require a release; documentation and agent tooling are exempt."""
     return any(
         PurePosixPath(path).suffix.lower() not in {".md", ".rst"}
         and path not in {"LICENSE", "LICENSE.txt", "LICENSE.md"}
+        and not path.startswith((".codex/", ".agents/skills/"))
         for path in paths
     )
 
