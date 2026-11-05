@@ -143,6 +143,36 @@ original.start().then(async (window) => {
   }
   assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), true);
   assert.match(await window.webContents.executeJavaScript("document.querySelector('dialog').textContent"), /manual updates/);
+  for (const [notes, expected] of [
+    ['<p>Code signing policy: <a href="https://vericivil.com/code-signing" rel="nofollow">Signing policy</a>.</p><h2>What\'s Changed</h2><ul><li>Add AASHTO Case II by <a class="user-mention" data-hovercard-url="/users/colewinstead/hovercard" href="https://github.com/colewinstead">@colewinstead</a> in <a href="https://github.com/colewinstead/VeriCivil/pull/85">#85</a></li></ul><p><strong>Full Changelog</strong>: v1.7.4…v1.7.5</p>', 'Code signing policy: Signing policy.\nWhat\'s Changed\n• Add AASHTO Case II by @colewinstead in #85\nFull Changelog: v1.7.4…v1.7.5'],
+    ['<p>Fixes &amp; improvements<br>Station &lt; 1000 &mdash; ready &#x2713;</p><ul><li>Save projects</li><li>Export reports</li></ul>', 'Fixes & improvements\nStation < 1000 — ready ✓\n• Save projects\n• Export reports'],
+    ['Plain release notes\nSecond line: 1 < 2 & 3 > 2.', 'Plain release notes\nSecond line: 1 < 2 & 3 > 2.'],
+    ['<h2>Fixed project saving</h2><ul><li>First fix<li>Second fix</ul>', 'Fixed project saving\n• First fix\n• Second fix'],
+    ['<style>body{display:none}</style><script>window.updateNotesExecuted=true</script><p onclick="window.updateNotesExecuted=true">Safe <a href="javascript:window.updateNotesExecuted=true">description</a><img src="https://example.invalid/tracker" onerror="window.updateNotesExecuted=true"></p>', 'Safe description'],
+    ['', null],
+    ['<script>window.updateNotesExecuted=true</script>', null],
+  ]) {
+    window.webContents.send('desktop:update', { status: 'available', version: '1.7.5', nextVersion: '1.7.6', notes });
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (await window.webContents.executeJavaScript(`(document.querySelector('.update-notes')?.textContent ?? null) === ${JSON.stringify(expected)}`)) break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(await window.webContents.executeJavaScript("document.querySelector('.update-notes')?.textContent ?? null"), expected);
+    assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.update-notes a, .update-notes img, .update-notes script, .update-notes style') || !!window.updateNotesExecuted"), false);
+    assert.equal(await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).some(button => button.textContent === 'Download update')"), true);
+    if (expected?.startsWith('Code signing policy:') && process.env.VERICIVIL_CAPTURE_DIR) {
+      const { mkdir, writeFile } = require('node:fs/promises');
+      await mkdir(process.env.VERICIVIL_CAPTURE_DIR, { recursive: true });
+      await window.webContents.executeJavaScript("document.querySelector('dialog details').open = true");
+      for (const theme of ['light', 'dark']) {
+        nativeTheme.themeSource = theme;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR, `desktop-update-${theme}.png`), (await window.capturePage()).toPNG());
+      }
+      nativeTheme.themeSource = 'system';
+    }
+  }
+  console.log('PASS: update descriptions show readable text, decoded entities and separate list items without inserting remote HTML.');
   await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Close').click()");
   assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), false);
   await window.webContents.executeJavaScript(`(() => {
