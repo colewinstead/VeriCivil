@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { runInNewContext } from "node:vm";
 import { loadPyodide } from "pyodide";
 
 const runtimeRoot = new URL("../public/python/", import.meta.url);
@@ -43,6 +44,10 @@ const browser = (operation, input) => {
   pyodide.globals.set("aashto_operation", operation);
   return JSON.parse(pyodide.runPython("__import__('json').dumps(super_service.dispatch(aashto_operation,aashto_payload),default=list)"));
 };
+const convertWorkerResult = runInNewContext(
+  `${await readFile(new URL("../public/pyodide-worker.js", import.meta.url), "utf8")}\nconvertResult;`,
+  { self: { location: { protocol: "https:" } } },
+);
 for (const direction of ["left", "right"]) {
   const request = { entitlement: proEntitlement, inputs: {
     criteria_profile: "aashto-green-book-2018-2019-10", roadway: "divided_case_ii", pc: "1000", pt: "3000", curve_direction: direction,
@@ -57,6 +62,21 @@ for (const direction of ["left", "right"]) {
   const inspection = { entitlement: proEntitlement, results: result.results, direction, station: 1000 };
   assert.deepEqual(browser("diagram_lookup", inspection), native("diagram_lookup", inspection));
   assert.equal(browser("diagram_lookup", inspection).cross_section.pivots.length, 2);
+  // Exercise the worker conversion and the JSON request back to Python, not only Python's JSON output.
+  pyodide.globals.set("aashto_payload", JSON.stringify(request));
+  const message = structuredClone(convertWorkerResult(pyodide.runPython('super_service.dispatch_safe("calculate", aashto_payload)')));
+  assert.equal(message.ok, true);
+  assert.equal(message.result.results.carriageways.left.friction, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(message.result)), JSON.parse(JSON.stringify(result)));
+  const curves = [{ results: message.result.results, meta: { curve_direction: direction } }];
+  const saved = browser("project_save", { entitlement: proEntitlement, project: { version: 6, vars: request.inputs, curves } });
+  const loaded = browser("project_load", { entitlement: proEntitlement, content: saved }).project;
+  assert.deepEqual(loaded.curves.map(curve => curve.results), JSON.parse(JSON.stringify(curves.map(curve => curve.results))));
+  for (const operation of ["export_pdf", "export_detail_dxf"]) {
+    assert.ok(browser(operation, { entitlement: proEntitlement, curves: loaded.curves }).content.length > 1000);
+  }
+  loaded.curves[0].results.carriageways.left.Lr += 1;
+  assert.throws(() => browser("export_pdf", { entitlement: proEntitlement, curves: loaded.curves }), /recalculate both carriageways/);
 }
 const spacingXml = await readFile(new URL("../../tests/fixtures/reverse_spacing_synthetic.xml", import.meta.url), "utf8");
 const spacingInputs = { speed: "30", e_manual: "0.06", Lr_manual: "100", Lt_manual: "25" };

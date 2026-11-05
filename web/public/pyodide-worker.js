@@ -65,7 +65,11 @@ import vericivil_service
 
 function convertResult(result) {
   if (result && typeof result.toJs === "function") {
-    const converted = result.toJs({ dict_converter: Object.fromEntries, create_proxies: false });
+    const converted = result.toJs({
+      // Keep Python None fields through JSON requests without changing binary export buffers.
+      dict_converter: (entries) => Object.fromEntries(Array.from(entries, ([key, value]) => [key, value === undefined ? null : value])),
+      create_proxies: false,
+    });
     result.destroy();
     return converted;
   }
