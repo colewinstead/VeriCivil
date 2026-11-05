@@ -16,7 +16,8 @@ PROJECT_VERSION = 7
 
 def _case_ii_input_modes(values: dict) -> dict:
     if values.get("roadway") == "divided_case_ii" or "case_ii" in values:
-        return {"case_ii_geometry_mode": "explicit_radii", "case_ii_placement_mode": "independent", **values}
+        return {"case_ii_geometry_mode": "explicit_radii",
+                "case_ii_placement_mode": "coordinated" if values.get("case_ii_geometry_mode") == "shared_corridor" else "independent", **values}
     return values
 
 

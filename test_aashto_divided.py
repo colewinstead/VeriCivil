@@ -159,6 +159,18 @@ class CaseIITests(unittest.TestCase):
         self.assertEqual(old["last_results"], result)
         self.assertTrue(old["migration_warnings"])
 
+    def test_shared_corridor_defaults_to_coordination_without_reinterpreting_legacy(self):
+        values = self.corridor_inputs()
+        del values["case_ii_placement_mode"]
+        result = self.result(values)
+        self.assertEqual(result["case_ii_placement_mode"], "coordinated")
+        self.assertEqual(result["carriageways"]["left"]["full_super_ft"], 10192)
+        project = super_project.normalize_project({"version": 7, "vars": values})
+        self.assertEqual(project["vars"]["case_ii_placement_mode"], "coordinated")
+        legacy = self.result(inputs())
+        self.assertEqual(legacy["case_ii_geometry_mode"], "explicit_radii")
+        self.assertEqual(legacy["case_ii_placement_mode"], "independent")
+
     def test_acceptance_and_mirror(self):
         for direction, favorable in (("left", "left"), ("right", "right")):
             result = self.result(inputs(curve_direction=direction))

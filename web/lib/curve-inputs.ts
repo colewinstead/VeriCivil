@@ -23,7 +23,7 @@ export function curveInputValues(curve: Dict): Dict {
     ...values, ...curve.meta, manual_spiral_length_check: false,
     ...(values.roadway === "divided_case_ii" ? {
       case_ii_geometry_mode: values.case_ii_geometry_mode ?? "explicit_radii",
-      case_ii_placement_mode: values.case_ii_placement_mode ?? "independent",
+      case_ii_placement_mode: values.case_ii_placement_mode ?? (values.case_ii_geometry_mode === "shared_corridor" ? "coordinated" : "independent"),
     } : {}),
     criteria_profile: values.criteria_profile ?? curve.results.calculation_metadata?.criteria?.profile_id ?? "mdot-rdsd-2026-04-22",
     circular_placement_basis: values.circular_placement_basis ?? "runoff",

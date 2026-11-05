@@ -19,6 +19,7 @@ export function CaseIIInputs({ value, settings, result, onChange, onSettingsChan
     const left = value?.left || {};
     const right = value?.right || {};
     const matching = String(left.runoff_tangent_percent ?? "").trim() !== ""
+      && String(right.runoff_tangent_percent ?? "").trim() !== ""
       && Number(left.runoff_tangent_percent) === Number(right.runoff_tangent_percent)
       && left.circular_placement_basis === right.circular_placement_basis;
     onSettingsChange({ case_ii_placement_mode: mode,

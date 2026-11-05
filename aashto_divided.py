@@ -27,7 +27,7 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
     if not isinstance(definitions, dict) or set(definitions) != set(SIDES):
         raise ValueError("Case II requires both left and right carriageway inputs.")
     geometry_mode = values.get("case_ii_geometry_mode", "explicit_radii")
-    placement_mode = values.get("case_ii_placement_mode", "independent")
+    placement_mode = values.get("case_ii_placement_mode", "coordinated" if geometry_mode == "shared_corridor" else "independent")
     if geometry_mode not in {"explicit_radii", "shared_corridor"}:
         raise ValueError("Select shared-corridor or engineer-entered radius geometry.")
     if placement_mode not in {"independent", "coordinated"}:

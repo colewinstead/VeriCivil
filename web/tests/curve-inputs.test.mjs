@@ -57,4 +57,6 @@ test("shared-corridor modes survive selected edits and legacy curves keep explic
   const legacy = curveInputValues({results: {inputs: {roadway: "divided_case_ii", case_ii: shared.case_ii}}, meta: {}});
   assert.equal(legacy.case_ii_geometry_mode, "explicit_radii");
   assert.equal(legacy.case_ii_placement_mode, "independent");
+  const derived = curveInputValues({results: {inputs: {...shared, case_ii_placement_mode: undefined}}, meta: {}});
+  assert.equal(derived.case_ii_placement_mode, "coordinated");
 });
