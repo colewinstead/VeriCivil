@@ -16,6 +16,47 @@ class CrossSectionTests(unittest.TestCase):
     def inspect(self, result, station, direction="left"):
         return super_service.diagram_lookup(result, direction, station)["cross_section"]
 
+    def assert_preview_frames(self, curves):
+        original = copy.deepcopy(curves)
+        for diagram in super_service.corridor_diagram(curves)["curves"]:
+            result = curves[diagram["curve_index"]]["results"]
+            frames = diagram["cross_section_frames"]
+            self.assertEqual(frames[0]["station_ft"], diagram["domain"]["start_ft"])
+            self.assertEqual(frames[-1]["station_ft"], diagram["domain"]["end_ft"])
+            for frame in frames:
+                packet = super_service.diagram_lookup(result, diagram["direction"], frame["station_ft"])
+                for actual, exact in zip(frame["segments"], packet["cross_section"]["segments"]):
+                    key = exact["name"] if diagram["cross_section"]["mode"] == "physical" else exact["side"]
+                    self.assertEqual(actual, {**exact, "slope_pct": packet["lanes"][key]["slope_pct"]})
+            for left, right in zip(frames, frames[1:]):
+                self.assertLess(left["station_ft"], right["station_ft"])
+                for fraction in (.25, .5, .75):
+                    station = left["station_ft"] + fraction * (right["station_ft"] - left["station_ft"])
+                    packet = super_service.diagram_lookup(result, diagram["direction"], station)
+                    for a, b, exact in zip(left["segments"], right["segments"], packet["cross_section"]["segments"]):
+                        key = exact["name"] if diagram["cross_section"]["mode"] == "physical" else exact["side"]
+                        self.assertAlmostEqual(a["slope_pct"] + fraction * (b["slope_pct"] - a["slope_pct"]), packet["lanes"][key]["slope_pct"], places=10)
+                        for edge in ("left", "right"):
+                            for axis in ("x", "y"):
+                                self.assertAlmostEqual(a[edge][axis] + fraction * (b[edge][axis] - a[edge][axis]), exact[edge][axis], places=10)
+        self.assertEqual(curves, original)
+
+    def test_preview_frames_cover_physical_and_schematic_breakpoints(self):
+        for direction in ("left", "right"):
+            for changes in ({}, {"roadway": "one_way", "initial_section": "single_slope", "initial_slope": "-0.02", "lane_widths": "11,11,11", "rotation_axis": "right_edge"}):
+                self.assert_preview_frames([{"results": self.result(curve_direction=direction, **changes), "meta": {"curve_direction": direction}}])
+            case = {"criteria_profile": "aashto-green-book-2018-2019-10", "roadway": "divided_case_ii", "pc": "1000", "pt": "3000", "curve_direction": direction,
+                    "case_ii": {side: {"speed": 65, "radius": 3000, "lane_count": 4, "lane_width": 12, "pivot_offset": offset, "initial_slope": slope, "runoff_tangent_percent": 70}
+                                for side, offset, slope in (("left", -20, -.02), ("right", 20, .02))}}
+            self.assert_preview_frames([{"results": super_service.calculate_curve(case)["results"], "meta": {"curve_direction": direction}}])
+        for profile in ("mdot-rdsd-2026-04-22", "tdot-rd11-2026-04-30"):
+            result = super_service.calculate_curve({"criteria_profile": profile, "pc": "1000", "pt": "2000", "speed": "45", "radius": "1200", "facility": "undivided" if profile.startswith("tdot") else "centerline"})["results"]
+            self.assert_preview_frames([{"results": result}])
+        result = self.result()
+        result["transition_method"] = "future_model"
+        self.assertEqual(super_service.corridor_diagram([{"results": result}])["curves"][0]["cross_section_frames"], [])
+        self.assertNotIn("cross_section_frames", super_service.curve_diagram(self.result()))
+
     def test_crown_bank_and_pivot_geometry_for_both_directions(self):
         for direction in ("left", "right"):
             for pivot in ("centerline", "left_edge", "right_edge"):
@@ -106,6 +147,7 @@ class CrossSectionTests(unittest.TestCase):
                 e_manual=rate, Lr_manual="200", Lt_manual="100"), compound_sides=("exit",) if index == 0 else ("entry",))
             curves.append({"results": result, "meta": {"curve_direction": "left"}})
         curves = super_batch.coordinate_compound_curve_transitions(curves)
+        self.assert_preview_frames(curves)
         plan = curves[0]["results"]["compound_curve_transitions"]["exit"]
         for curve in curves:
             for station in (plan["start_ft"], (plan["start_ft"] + plan["end_ft"]) / 2, plan["end_ft"]):
@@ -119,6 +161,7 @@ class CrossSectionTests(unittest.TestCase):
                 "speed": "45", "radius": "1200", "e_manual": "0.06", "Lr_manual": "100", "Lt_manual": "25", "curve_direction": direction})["results"]
             reverse.append({"results": result, "meta": {"curve_direction": direction}})
         reverse = super_service.coordinate_reverse_curves(reverse, True, [[0, 1]])
+        self.assert_preview_frames(reverse)
         for curve in reverse:
             result = curve["results"]
             self.assertIn("reverse_curve_coordination", result)

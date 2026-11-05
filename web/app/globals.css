@@ -195,6 +195,7 @@ td:last-child, th:last-child { text-align: right; }
 .section-pivot circle { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
 .section-pivot line { stroke: var(--muted); stroke-dasharray: 3 4; }
 .cross-section-note { max-width: 75ch; margin: 12px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.6; }
+.cross-section-note [role="status"] { display: block; min-height: 1.6em; }
 .cross-section-error { color: var(--error, #ff9690); font-size: .8rem; }
 .cross-section-table { overflow-x: auto; margin-top: 18px; }
 .cross-section-table caption { text-align: left; color: var(--muted); font-size: .75rem; margin-bottom: 8px; }

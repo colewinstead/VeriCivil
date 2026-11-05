@@ -434,6 +434,9 @@ def corridor_diagram(curves: list[dict]) -> dict[str, Any]:
         diagrams.append(diagram)
 
     _coordinate_corridor_plot_profiles(diagrams, curves)
+    for diagram in diagrams:
+        results = curves[diagram["curve_index"]]["results"]
+        diagram["cross_section_frames"] = _cross_section_frames(results, diagram)
     starts = [diagram["domain"]["start_ft"] for diagram in diagrams]
     ends = [diagram["domain"]["end_ft"] for diagram in diagrams]
     return {
@@ -444,6 +447,30 @@ def corridor_diagram(curves: list[dict]) -> dict[str, Any]:
             "end_ft": max(ends) if ends else 0.0,
         },
     }
+
+
+def _cross_section_frames(results: dict, diagram: dict) -> list[dict]:
+    """Preview keyframes reuse exact geometry; station lookups never build this cache."""
+    if diagram["cross_section"]["mode"] == "unavailable":
+        return []
+    start, end = diagram["domain"]["start_ft"], diagram["domain"]["end_ft"]
+    stations = {start, end}
+    for profile in [*diagram["profiles"].values(),
+                    *(lane["events"] for lane in results.get("section_lanes", []))]:
+        stations.update(float(point["station_ft"]) for point in profile)
+    for check in (results.get("reverse_curve_coordination", {}) or {}).get("checks", []):
+        if check.get("status") == "coordinated":
+            for lane in (check.get("lanes", {}) or {}).values():
+                stations.update(float(point["station_ft"]) for point in lane.get("profile_events", []))
+    frames = []
+    for station in sorted(value for value in stations if start <= value <= end):
+        packet = diagram_lookup(results, diagram["direction"], station)
+        segments = []
+        for segment in packet["cross_section"]["segments"]:
+            key = segment["name"] if diagram["cross_section"]["mode"] == "physical" else segment["side"]
+            segments.append({**segment, "slope_pct": packet["lanes"][key]["slope_pct"]})
+        frames.append({"station_ft": station, "segments": segments})
+    return frames
 
 
 def plan_view(data: super_landxml.LandXMLData, curves: list[dict]) -> dict[str, Any]:

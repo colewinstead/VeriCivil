@@ -51,6 +51,8 @@ for (const direction of ["left", "right"]) {
   } };
   const result = browser("calculate", request);
   assert.deepEqual(result, native("calculate", request));
+  const corridor = { entitlement: proEntitlement, curves: [{ results: result.results, meta: { curve_direction: direction } }] };
+  assert.deepEqual(browser("corridor_diagram", corridor), native("corridor_diagram", corridor));
   assert.deepEqual(browser("required_spiral_lengths", request), native("required_spiral_lengths", request));
   const inspection = { entitlement: proEntitlement, results: result.results, direction, station: 1000 };
   assert.deepEqual(browser("diagram_lookup", inspection), native("diagram_lookup", inspection));
