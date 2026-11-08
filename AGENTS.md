@@ -36,3 +36,17 @@
 
 - After a successful merge and GitHub Release, invoke `$ship-main` or “Ship main” if the user request the site to be rereleased.
 - Publish only to the existing ChatGPT Site identified by `web/.openai/hosting.json`. Never create a replacement site, change its slug, or change its access policy unless the user explicitly requests that change.
+
+## Agent skills
+
+### Issue tracker
+
+Use GitHub Issues in `colewinstead/VeriCivil`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context layout. See `docs/agents/domain.md`.
