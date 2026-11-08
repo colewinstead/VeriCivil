@@ -47,6 +47,18 @@ button:disabled { opacity: .48; cursor: not-allowed; transform: none; }
 .privacy-strip { min-height: 42px; padding: 9px 28px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); background: #0a1512; color: var(--muted); font-size: .75rem; }
 .privacy-strip strong { color: var(--teal-dark); text-transform: uppercase; letter-spacing: .09em; font-size: .67rem; }
 .privacy-strip .version { margin-left: auto; font-family: var(--font-plex-mono), monospace; }
+.superelevation-intro { max-width: 1800px; margin: 0 auto; padding: 16px clamp(16px, 2vw, 28px) 0; font-size: .875rem; line-height: 1.55; }
+.superelevation-intro p { max-width: 76ch; color: var(--muted); }
+.superelevation-intro p + p { margin-top: 6px; }
+.superelevation-intro strong { color: var(--ink); }
+.superelevation-intro details { margin-top: 8px; }
+.superelevation-intro summary { width: fit-content; min-height: 28px; cursor: pointer; color: var(--teal); font-weight: 700; }
+.superelevation-intro summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+.superelevation-intro details p:first-of-type { margin-top: 6px; }
+.superelevation-intro figure { margin-top: 12px; }
+.superelevation-intro img { max-width: 100%; height: auto; }
+.superelevation-intro figcaption { margin-top: 6px; font-size: .8rem; color: var(--muted); }
+.superelevation-intro a { color: var(--teal); text-decoration: underline; text-underline-offset: 2px; }
 .workspace { display: grid; grid-template-columns: minmax(250px, .7fr) minmax(360px, 1.08fr) minmax(410px, 1.22fr); gap: 14px; max-width: 1800px; margin: 0 auto; padding: 18px; align-items: start; }
 .panel { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); }
 .project-panel, .inputs-panel, .results-panel { padding: 18px; min-height: 690px; }
