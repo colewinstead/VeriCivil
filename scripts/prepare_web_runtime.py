@@ -17,9 +17,12 @@ from commercial_entitlements import commercial_manifest  # noqa: E402
 from criteria_info import criteria_metadata, criteria_profiles  # noqa: E402
 from app_info import APP_VERSION, CALCULATION_ENGINE_VERSION  # noqa: E402
 from calculators.catalog import browser_runtime_manifest, calculator_catalog  # noqa: E402
+from calculators.guardrail.service import application_manifest as guardrail_manifest  # noqa: E402
+from scripts.update_guardrail import verify as verify_guardrail  # noqa: E402
 
 
 def main() -> None:
+    verify_guardrail()
     runtime_manifest = browser_runtime_manifest()
     modules = sorted(
         {
@@ -33,8 +36,14 @@ def main() -> None:
         destination = TARGET / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, destination)
+    for bundle in runtime_manifest["calculators"].values():
+        for name in bundle.get("assets", []):
+            destination = TARGET / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / name, destination)
     (TARGET / "manifest.json").write_text(json.dumps(runtime_manifest, indent=2) + "\n", encoding="utf-8")
     GENERATED.mkdir(parents=True, exist_ok=True)
+    (GENERATED / "guardrail.json").write_text(json.dumps(guardrail_manifest(), indent=2) + "\n", encoding="utf-8")
     supported_profiles = []
     for profile in criteria_profiles():
         metadata = criteria_metadata(profile["profile_id"])

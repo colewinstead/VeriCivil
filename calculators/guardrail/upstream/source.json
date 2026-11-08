@@ -1,0 +1,22 @@
+{
+  "repository": "https://github.com/colewinstead/Guardrail-Calculator",
+  "commit": "c5df84ad9376442e6ba0cac1d37611a3cd34df2b",
+  "version": "V8.5.2",
+  "sha256": {
+    "LICENSE": "cf97d5632abe642ff6a0b81804c740e6bd7baa099ce20109cbd90e2f17a05834",
+    "guardrail_design.py": "12f5c79be56c1ef4a5112ab7d6bd170e79bc16a1a7427d32ad725dcdfe6df682",
+    "guardrail_models.py": "c08f7a712ea9db3d08d3fdb7392c57c2642aa986fc665c65bd83e6b0dc3343ba",
+    "guardrail_parsing.py": "48b475560e00228a77bf4c872d2e12fea7f2e9a6161af960b8389035f9cdf3c0",
+    "guardrail_validation.py": "3604aaf5a1ab5aef48e53fb5892bc560ecc60cb0fe03893ece5015e90eb35b8a",
+    "guardrail_engine.py": "86b160325adaaaca76d90f721a7c20eb0cd3805fcfd583c5ad1cdcaccd938cc0",
+    "guardrail_presentation.py": "cb6146565dcf8ba4857f8d61d321a9f74c7b4775ce2ef21379769ade9bec9cb1",
+    "guardrail_report.py": "d3360671103329e0fd9648f703e1c2dacf527ed4a3e63d8de3d306460e08f660",
+    "guardrail_pdf.py": "466eebcd8e8cb4b2be5cc553c1273be61be74a4a8874f9637fc235c1d08d1933",
+    "guardrail_pdf_files.py": "786e1989c0aeade17dc777ddd028bed9a01e9ceaffdff02a9d79efe947e44aa5",
+    "guardrail_resources.py": "32703d3c78f0ef10837e400f317917e90c2ce26af1d4f3c4a2a0aefd63493cca",
+    "gr manual.pdf": "a0bdccd105d27804e28ffbd28b0758b1cefd362d66a2ca4167dc0251a9d58872",
+    "GR-4.pdf": "a7632b798b6ac11180e5a0611295e5ebd9c60d3c12bc1d811472e7ad5a241782",
+    "GR-4a.pdf": "eaecb6aa13b24bf539e76aa97640fcf46a7d575071cc79729a9f3a83a1fc662b",
+    "test_fixtures/phase3_baseline.json": "37e4509ac83ff44288c4775d53abcb5581bc0b98f13bc1127f0d5890e276fc76"
+  }
+}

@@ -155,6 +155,20 @@ test("renders the calculator directory and crushed stone base workspace", async 
   assert.doesNotMatch(source, /localStorage|showSaveFilePicker|truckload|metric toggle/i);
 });
 
+test("renders the free Guardrail workflow and identifies its upstream source", async () => {
+  const response = await render("/calculators/guardrail");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  for (const text of ["Guardrail Length-of-Need Calculator", "Length review", "Save project", "Open project",
+    "Download calculation PDF", "Append MDOT reference documents", "Divided highway", "Source &amp; applicability",
+    "not independent engineering approval", "V8.5.2"]) assert.ok(html.includes(text), text);
+  assert.match(html, /https:\/\/vericivil.com\/calculators\/guardrail/);
+  assert.doesNotMatch(html, /Upgrade to Pro/);
+  const catalog = await (await render("/calculators")).text();
+  assert.match(catalog, /href="\/calculators\/guardrail"/);
+  await access(new URL("../public/showcase/guardrail-results.png", import.meta.url));
+});
+
 test("renders superelevation at its permanent route and preserves compatibility query parameters", async () => {
   const response = await render("/calculators/superelevation");
   assert.equal(response.status, 200);
@@ -513,7 +527,7 @@ test("sitemap public pages render matching production canonical URLs", async () 
   const robots = await readFile(new URL("../dist/client/robots.txt", import.meta.url), "utf8");
   assert.match(robots, /Sitemap: https:\/\/vericivil\.com\/sitemap\.xml/);
   const urls = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
-  assert.equal(urls.length, 9);
+  assert.equal(urls.length, 10);
   assert.equal(new Set(urls).size, urls.length);
   for (const url of urls) {
     assert.equal(new URL(url).origin, "https://vericivil.com");

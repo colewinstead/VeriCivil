@@ -47,6 +47,13 @@ await micropip.install(json.loads(_micropip_packages_json), deps=not _offline_bu
       if (slash >= 0) pyodide.FS.mkdirTree(`/app/${moduleName.slice(0, slash)}`);
       pyodide.FS.writeFile(`/app/${moduleName}`, await response.text(), { encoding: "utf8" });
     }
+    for (const assetName of bundle.assets || []) {
+      const response = await fetch(`/python/${assetName}`, { cache: "no-cache" });
+      if (!response.ok) throw new Error(`Could not load ${assetName}. Reload the calculator and try again.`);
+      const slash = assetName.lastIndexOf("/");
+      if (slash >= 0) pyodide.FS.mkdirTree(`/app/${assetName.slice(0, slash)}`);
+      pyodide.FS.writeFile(`/app/${assetName}`, new Uint8Array(await response.arrayBuffer()));
+    }
     pyodide.runPython(`
 import sys
 sys.path.insert(0, "/app")

@@ -10,6 +10,10 @@ const calculatorImages: Record<string, { src: string; alt: string }> = {
     src: "/showcase/stone-base-results.png",
     alt: "Crushed Stone Base Calculator showing equivalent keyout width and tonnage results",
   },
+  guardrail: {
+    src: "/showcase/guardrail-results.png",
+    alt: "Guardrail browser calculator showing near-side and opposing-side length review",
+  },
 };
 
 export default function CalculatorCards() {
@@ -26,7 +30,7 @@ export default function CalculatorCards() {
           </div>
           <h3>{calculator.short_title}</h3>
           <p>{calculator.description}</p>
-          <div className="calculator-card-action"><span>{calculator.id === "superelevation" ? "Open professional workspace" : "Open free quantity tool"}</span><b>↗</b></div>
+          <div className="calculator-card-action"><span>{calculator.id === "superelevation" ? "Open professional workspace" : calculator.id === "guardrail" ? "Open free guardrail calculator" : "Open free quantity tool"}</span><b>↗</b></div>
         </a>
       ))}
     </div>

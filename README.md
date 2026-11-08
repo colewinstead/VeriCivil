@@ -13,6 +13,7 @@ Calculate superelevation transitions, review lane slopes and stationing, and pre
 | Tool | What you can do | Where to start |
 | --- | --- | --- |
 | **Superelevation Calculator** | Calculate roadway transitions, inspect lane slopes and cross sections, save projects, and export PDF, ORD CSV, and overlay DXF. | [Browser workspace](https://vericivil.com/calculators/superelevation) |
+| **Guardrail** | Calculate near/opposing lengths, save projects and generate PDFs with optional MDOT references. | [Free browser calculator](https://vericivil.com/calculators/guardrail) |
 | **Crushed Stone Base** | Estimate compacted base volume and order tonnage across multiple construction segments. | [Free calculator](https://vericivil.com/calculators/crushed-stone-base) |
 | **Electron desktop preview** | Use the Superelevation workspace with a bundled offline calculation and export runtime. Current desktop tools are free without account sign-in. | [Downloads](https://vericivil.com/downloads) · [Build guide](desktop/README.md) |
 
@@ -186,3 +187,9 @@ See [`AGENTS.md`](AGENTS.md) for repository policy and the [release checklist](d
 ## License
 
 Project code is licensed under the [MIT License](LICENSE), copyright © 2026 Cole Winstead. Third-party dependencies and source materials retain their own terms; the project license does not resolve the AASHTO data redistribution limits described above.
+## Guardrail browser integration
+
+The free Guardrail browser workspace uses a pinned, unchanged engine from the
+separately maintained Guardrail Calculator repository. See
+[integration and update instructions](docs/GUARDRAIL_BROWSER.md) for ownership,
+project files, supported PDFs and validation limits.
