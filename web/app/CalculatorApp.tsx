@@ -13,7 +13,7 @@ import releaseInfo from "./generated/release-info.json";
 /* Browser worker responses mirror dynamically typed Python dictionaries. */
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-html-link-for-pages */
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   allows,
   CAPABILITIES,
@@ -149,7 +149,7 @@ function calculationInputKey(inputs: Dict) {
   });
 }
 
-export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: DesktopHost; desktopBranding?: DesktopBranding } = {}) {
+export default function CalculatorApp({ desktop, desktopBranding, intro }: { desktop?: DesktopHost; desktopBranding?: DesktopBranding; intro?: ReactNode } = {}) {
   const [inspectorTab, setInspectorTab] = useState("curve");
   // Generated release changes must restart retained workers during local hot reload.
   const expectedApplicationVersion = releaseInfo.application_version;
@@ -1203,6 +1203,8 @@ export default function CalculatorApp({ desktop, desktopBranding }: { desktop?: 
       </section>}
 
       {desktop ? <div className="desktop-context"><nav aria-label="Input workspace"><button aria-pressed={inspectorTab === "curve"} onClick={() => setInspectorTab("curve")}>Curve inputs</button><button aria-pressed={inspectorTab === "project"} onClick={() => setInspectorTab("project")}>Project & LandXML{dirty ? " · Unsaved" : ""}</button></nav><span>Local files · No uploads · App {manifest?.application_version || "…"}</span></div> : <div className="privacy-strip"><strong>Local calculations</strong><span>DOT standard, speed, radius, and PC/PT are collected without account linkage. LandXML retention is controlled below. <a href="/privacy">Privacy details</a></span><span className="version">App {manifest?.application_version || "…"} · Engine {manifest?.calculation_engine_version || "…"}</span></div>}
+
+      {intro}
 
       {(error || notice) && <div className={`toast ${error ? "error" : "notice"}`} role="alert"><strong>{error ? "Action needed" : "Complete"}</strong><span>{error || notice}</span><button aria-label="Dismiss message" onClick={() => { setError(""); setNotice(""); }}><ControlIcon name="close" /></button></div>}
 

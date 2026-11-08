@@ -162,6 +162,11 @@ test("renders superelevation at its permanent route and preserves compatibility 
   const source = await readFile(new URL("../app/CalculatorApp.tsx", import.meta.url), "utf8");
   const upgradeSource = await readFile(new URL("../app/UpgradeNotice.tsx", import.meta.url), "utf8");
   assert.match(html, /<title>Superelevation Calculator \| VeriCivil<\/title>/i);
+  assert.match(html, /<strong>Free manual calculations require no account\.<\/strong>/);
+  assert.match(html, /<summary>Worked example for a 45 mph rural curve<\/summary>/);
+  assert.match(html, /<strong>100\+32\.10<\/strong>/);
+  assert.match(html, /<img[^>]+src="\/showcase\/superelevation-sample-results\.webp"/);
+  await access(new URL("../public/showcase/superelevation-sample-results.webp", import.meta.url));
   assert.match(html, /CalculatorApp-[^"']+\.js/i);
   assert.match(source, /Private browser engine/i);
   assert.match(source, /isAashto && result\.e_note/);
