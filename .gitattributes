@@ -1,0 +1,2 @@
+# Imported Guardrail files must match upstream SHA-256 checksums on every platform.
+/calculators/guardrail/upstream/** -text

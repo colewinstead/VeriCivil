@@ -16,6 +16,8 @@ checksums are recorded in `calculators/guardrail/upstream/source.json`.
   `web/app/GuardrailCalculator.tsx`.
 - Never edit files under `calculators/guardrail/upstream/` directly. The browser
   staging step verifies their checksums and fails if they change.
+  `.gitattributes` disables Git line-ending conversion for this imported directory
+  so Windows checkouts retain the exact upstream bytes.
 
 After the upstream change is reviewed and tested, create an issue-linked VeriCivil
 branch from current `main`, check out the desired Guardrail commit locally, and run:
