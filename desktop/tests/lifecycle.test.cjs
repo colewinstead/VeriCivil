@@ -116,6 +116,16 @@ test('enabled installers require user download consent and a saved workspace bef
   await assert.rejects(f.updates.action('unknown'));
 });
 
+test('approved updates skip installer choices and relaunch the updated app', async () => {
+  const f = updaterFixture();
+  const installs = [];
+  f.updater.quitAndInstall = (...args) => installs.push(args);
+  await f.updates.action('check');
+  await f.updates.action('download');
+  await f.updates.action('install');
+  assert.deepEqual(installs, [[true, true]], 'Update must install silently and force the updated app to run');
+});
+
 test('offline/invalid-signature update failures stay recoverable and do not install', async () => {
   const f = updaterFixture();
   f.updater.checkForUpdates = async () => { throw Object.assign(new Error('private path'), { code: 'ENETUNREACH' }); };

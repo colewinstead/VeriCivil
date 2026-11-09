@@ -57,6 +57,8 @@ New desktop projects use `.vericivil` (the existing JSON project format). Older 
 
 Dirty work is snapshotted locally every two seconds; a startup banner offers Restore work or Discard snapshot. A failed/unreadable recovery file is preserved until an explicit discard. Recovery does not replace a separate backup of saved projects. Updates refuse restart while work is unsaved, an operation is running, or recovery needs a decision.
 
+On Windows, **Restart and install** applies the approved update silently in the existing installation and reopens the app. The first-install wizard still offers an installation location. Older installed versions retain their previous update behavior until this fix has been installed; that update may still require completing the wizard and reopening the app manually.
+
 The profile is `%APPDATA%/VeriCivil Superelevation` on Windows and `~/Library/Application Support/VeriCivil Superelevation` on Mac. It contains recovery/project data and recent paths; do not include the profile in public reports. Help → Export diagnostics writes only versions, platform/architecture, and bounded event/error-code logs, excluding project contents, file paths, and credentials. No diagnostic upload is performed.
 
 ## Signed production releases
