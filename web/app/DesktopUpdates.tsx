@@ -8,6 +8,16 @@ function releaseNotesText(notes: string) {
   const template = document.createElement("template");
   template.innerHTML = notes;
   template.content.querySelectorAll("script, style, template, noscript, iframe, object").forEach(element => element.remove());
+  const changes = Array.from(template.content.querySelectorAll("h1, h2, h3, h4, h5, h6")).find(element => /^what['’]s changed$/i.test(element.textContent?.trim() || ""));
+  if (changes) {
+    const range = document.createRange();
+    range.selectNodeContents(template.content);
+    range.setStartBefore(changes);
+    template.content.replaceChildren(range.cloneContents());
+    template.content.querySelectorAll("p").forEach(element => {
+      if (/^Full Changelog\s*:/i.test(element.textContent?.trim() || "")) element.remove();
+    });
+  }
   template.content.querySelectorAll("br").forEach(element => element.replaceWith("\n"));
   template.content.querySelectorAll("p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, tr").forEach(element => {
     if (element.tagName === "LI") element.prepend("• ");

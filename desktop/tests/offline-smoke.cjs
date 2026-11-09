@@ -207,10 +207,12 @@ original.start().then(async (window) => {
   assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), true);
   assert.match(await window.webContents.executeJavaScript("document.querySelector('dialog').textContent"), /manual updates/);
   for (const [notes, expected] of [
-    ['<p>Code signing policy: <a href="https://vericivil.com/code-signing" rel="nofollow">Signing policy</a>.</p><h2>What\'s Changed</h2><ul><li>Add AASHTO Case II by <a class="user-mention" data-hovercard-url="/users/colewinstead/hovercard" href="https://github.com/colewinstead">@colewinstead</a> in <a href="https://github.com/colewinstead/VeriCivil/pull/85">#85</a></li></ul><p><strong>Full Changelog</strong>: v1.7.4…v1.7.5</p>', 'Code signing policy: Signing policy.\nWhat\'s Changed\n• Add AASHTO Case II by @colewinstead in #85\nFull Changelog: v1.7.4…v1.7.5'],
+    ['<h2>Download the desktop app</h2><p>Choose one installer.</p><table><tr><th>Computer</th><th>VeriCivil edition</th></tr><tr><td>Windows x64</td><td>Windows installer</td></tr></table><p>Read the download guide and full asset breakdown.</p><h2>What\'s Changed</h2><ul><li>Clarify release downloads by @colewinstead in #113</li></ul><p><strong>Full Changelog</strong>: <a href="https://github.com/colewinstead/VeriCivil/compare/v1.9.2...v1.9.3">v1.9.2...v1.9.3</a></p>', 'What\'s Changed\n• Clarify release downloads by @colewinstead in #113'],
+    ['<p>Code signing policy: <a href="https://vericivil.com/code-signing" rel="nofollow">Signing policy</a>.</p><h2>What\'s Changed</h2><ul><li>Add AASHTO Case II by <a class="user-mention" data-hovercard-url="/users/colewinstead/hovercard" href="https://github.com/colewinstead">@colewinstead</a> in <a href="https://github.com/colewinstead/VeriCivil/pull/85">#85</a></li></ul><p><strong>Full Changelog</strong>: v1.7.4…v1.7.5</p>', 'What\'s Changed\n• Add AASHTO Case II by @colewinstead in #85'],
     ['<p>Fixes &amp; improvements<br>Station &lt; 1000 &mdash; ready &#x2713;</p><ul><li>Save projects</li><li>Export reports</li></ul>', 'Fixes & improvements\nStation < 1000 — ready ✓\n• Save projects\n• Export reports'],
     ['Plain release notes\nSecond line: 1 < 2 & 3 > 2.', 'Plain release notes\nSecond line: 1 < 2 & 3 > 2.'],
     ['<h2>Fixed project saving</h2><ul><li>First fix<li>Second fix</ul>', 'Fixed project saving\n• First fix\n• Second fix'],
+    ['<div><section><h2>Download guide</h2><p>Choose an installer.</p></section><section><h2>What’s Changed</h2><ul><li>Fix updater</li></ul><p><strong>Full Changelog</strong>: previous...current</p></section></div>', 'What’s Changed\n• Fix updater'],
     ['<style>body{display:none}</style><script>window.updateNotesExecuted=true</script><p onclick="window.updateNotesExecuted=true">Safe <a href="javascript:window.updateNotesExecuted=true">description</a><img src="https://example.invalid/tracker" onerror="window.updateNotesExecuted=true"></p>', 'Safe description'],
     ['', null],
     ['<script>window.updateNotesExecuted=true</script>', null],
@@ -223,7 +225,7 @@ original.start().then(async (window) => {
     assert.equal(await window.webContents.executeJavaScript("document.querySelector('.update-notes')?.textContent ?? null"), expected);
     assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.update-notes a, .update-notes img, .update-notes script, .update-notes style') || !!window.updateNotesExecuted"), false);
     assert.equal(await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).some(button => button.textContent === 'Download update')"), true);
-    if (expected?.startsWith('Code signing policy:') && process.env.VERICIVIL_CAPTURE_DIR) {
+    if (notes.startsWith('<h2>Download the desktop app</h2>') && process.env.VERICIVIL_CAPTURE_DIR) {
       const { mkdir, writeFile } = require('node:fs/promises');
       await mkdir(process.env.VERICIVIL_CAPTURE_DIR, { recursive: true });
       await window.webContents.executeJavaScript("document.querySelector('dialog details').open = true");
