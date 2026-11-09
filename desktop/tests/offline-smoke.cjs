@@ -179,6 +179,22 @@ original.start().then(async (window) => {
     assert.ok(layout.resultWidth > 500);
     assert.ok(layout.exportsBottom <= layout.height);
     assert.ok(layout.documentWidth <= layout.width);
+    const actions = await window.webContents.executeJavaScript(`(() => {
+      const bar = document.querySelector('.compute-bar');
+      const button = bar.querySelector('.primary');
+      const original = button.textContent;
+      try {
+        return ['Compute now', 'Recompute now', 'Check lengths', 'Calculate selected curves'].map(label => {
+          button.textContent = label;
+          const action = button.getBoundingClientRect();
+          const container = bar.getBoundingClientRect();
+          return { label, left: action.left, right: action.right, containerLeft: container.left, containerRight: container.right };
+        });
+      } finally { button.textContent = original; }
+    })()`);
+    for (const action of actions) {
+      assert.ok(action.left >= action.containerLeft && action.right <= action.containerRight + 1, `Calculation action clipped at ${layout.width}px: ${JSON.stringify(action)}`);
+    }
     geometry.push(layout);
   }
   for (const theme of ['light','dark']) {
@@ -196,6 +212,10 @@ original.start().then(async (window) => {
       await mkdir(process.env.VERICIVIL_CAPTURE_DIR, { recursive: true });
       await new Promise(resolve => setTimeout(resolve, 250));
       await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR, `desktop-${theme}.png`), (await window.capturePage()).toPNG());
+      const scrollTop = await window.webContents.executeJavaScript("document.querySelector('.inputs-panel').scrollTop");
+      await window.webContents.executeJavaScript("document.querySelector('.compute-bar').scrollIntoView({ block: 'nearest', behavior: 'instant' })");
+      await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR, `desktop-compute-${theme}.png`), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`document.querySelector('.inputs-panel').scrollTop = ${scrollTop}`);
     }
   }
   nativeTheme.themeSource='system';
