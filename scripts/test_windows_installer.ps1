@@ -41,7 +41,10 @@ function Get-ProjectAssociation {
 $originalAssociation = Get-ProjectAssociation
 foreach ($installer in @($InitialInstaller, $UpgradeInstaller)) {
     $resolvedInstaller = (Resolve-Path -LiteralPath $installer).Path
-    $process = Start-Process -FilePath $resolvedInstaller -ArgumentList @('/S', "/D=$installPath") -WindowStyle Hidden -PassThru -Wait
+    $installerArgs = if ($installer -eq $InitialInstaller) { @('/S', "/D=$installPath") } else { @('/S', '--updated', '--force-run') }
+    $process = Start-Process -FilePath $resolvedInstaller -ArgumentList $installerArgs -WindowStyle Hidden -PassThru
+    # Wait only for the installer; -Wait also waits for the relaunched app to exit.
+    if (-not $process.WaitForExit(120000)) { throw 'Installer timed out.' }
     if ($process.ExitCode -notin @(0, 3010)) { throw "Installer failed: $($process.ExitCode)" }
     if (-not (Test-Path -LiteralPath $application)) { throw 'Installed executable is missing.' }
     if ([IO.File]::ReadAllText($savedProject) -ne $project -or [IO.File]::ReadAllText($recoveryPath) -ne $project) { throw 'An installation changed user project or recovery data.' }
@@ -49,6 +52,14 @@ foreach ($installer in @($InitialInstaller, $UpgradeInstaller)) {
 }
 if ((Get-Item -LiteralPath $application).VersionInfo.ProductVersion -notlike "$ExpectedVersion*") { throw 'Upgrade did not install the expected application version.' }
 if (-not (Test-Path -LiteralPath (Join-Path $installPath 'resources/app.asar'))) { throw 'Installed runtime is missing.' }
+$restarted = @()
+for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    $restarted = @(Get-Process -Name $branding.executableName -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $application })
+    if ($restarted.Count) { break }
+    Start-Sleep -Milliseconds 250
+}
+if (-not $restarted.Count) { throw 'Upgrade did not restart the app from its existing installation.' }
+$restarted | Stop-Process -Force -ErrorAction SilentlyContinue
 $env:DESKTOP_EDITION = $Edition
 node desktop/tests/installed-smoke.cjs $application $companionApplication
 if ($LASTEXITCODE -ne 0) { throw 'Installed application runtime acceptance failed.' }
@@ -67,4 +78,4 @@ if ($companionApplication) {
     $removed = Start-Process $companionUninstaller[0].FullName -ArgumentList '/S' -WindowStyle Hidden -PassThru -Wait
     if ($removed.ExitCode -notin @(0, 3010)) { throw 'Companion uninstall failed.' }
 }
-Write-Output 'PASS: Windows install, N-to-N+1 upgrade, and uninstall preserve saved projects and recovery data.'
+Write-Output 'PASS: Windows upgrade reuses its installation and restarts the app; install, upgrade, and uninstall preserve saved projects and recovery data.'

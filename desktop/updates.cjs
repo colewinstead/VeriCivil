@@ -95,7 +95,7 @@ class Updates extends EventEmitter {
         // Close through the normal unsaved-work guard before invoking the updater.
         if (!await this.closeWindows()) return this.state;
         this.publish({ status: 'installing', message: 'Restarting to install…' });
-        this.updater.quitAndInstall(false, true);
+        this.updater.quitAndInstall(true, true);
       }
     } catch (error) {
       this.record('update_failed', error.code);
