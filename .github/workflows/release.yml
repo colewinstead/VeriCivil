@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: full-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate-version:

@@ -68,6 +68,8 @@ button:disabled { opacity: .55; }
 .desktop-workspace :is(.field input, .field select, .field textarea, .lookup input) { min-height: 36px; padding: 7px 9px; background: var(--raised); color: var(--ink); border-color: var(--line); border-radius: 5px; caret-color: var(--teal); }
 .desktop-workspace :is(.field small, .helper, .criteria-reference p, .criteria-reference li, .source-card p, .lookup-matches p) { color: var(--muted); font-size: 12px; line-height: 1.55; }
 .desktop-workspace .form-grid, .desktop-workspace .advanced-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.desktop-workspace .compute-bar { flex-wrap: wrap; }
+.desktop-workspace .compute-bar .primary { width: 100%; margin-left: 0; }
 .desktop-workspace :is(.source-card, .advanced-toggle, .lookup-card, .lookup-matches li, .criteria-reference, .diagram-inspector, .inspector-lanes article, .analysis-workspace, .qa-findings > button, .reverse-curve-guidance, .reverse-pair-link) { background: var(--raised); color: var(--ink); border-color: var(--line); box-shadow: none; }
 .desktop-workspace :is(.criteria-reference strong, .criteria-reference b, .inspector-heading strong, .inspector-lanes p, .inspector-lanes b, .lookup-heading strong, .lookup-lanes strong, .lookup-matches h4, .analysis-tabs .expand-analysis) { color: var(--ink); }
 .desktop-workspace .curve-list-item > button.selected { background: var(--raised); border-color: var(--teal); }
