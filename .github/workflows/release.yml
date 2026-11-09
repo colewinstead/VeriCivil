@@ -252,6 +252,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out the release notes template
+        uses: actions/checkout@v7
+
       - name: Download release files
         uses: actions/download-artifact@v8
         with:
@@ -266,6 +269,8 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate-version.outputs.version }}
         shell: bash
         run: |
+          sed -e "s/{{VERSION}}/$RELEASE_VERSION/g" -e "s/{{TAG}}/$RELEASE_TAG/g" \
+            docs/RELEASE_NOTES_TEMPLATE.md > release-notes.md
           BINARIES=()
           FEEDS=()
           for FILE in release-assets/*; do
@@ -279,7 +284,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Superelevation Calculator v$RELEASE_VERSION" \
-              --notes "Code signing policy: https://vericivil.com/code-signing. SignPath approval is pending. Automated desktop downloads are unsigned evaluation builds. Windows installers support user-approved updates without publisher-signature verification; unsigned Mac and portable builds require manual updates." \
+              --notes-file release-notes.md \
               --generate-notes \
               --latest
           fi
