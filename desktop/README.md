@@ -4,6 +4,8 @@ This desktop entry point reuses `web/app/CalculatorApp.tsx` and the same Python 
 
 Current desktop tools are free without account sign-in or device licensing. The desktop app does not bill, collect analytics, or retain LandXML remotely. It stores recovery snapshots, recent-project paths, and bounded support logs locally. Unsigned Windows installers support updates with explicit download/restart approval. Unsigned Mac and portable builds check for releases and require manual downloads. Signed builds retain publisher verification.
 
+For normal downloads, edition/platform choices, and an explanation of the GitHub release assets, see the [release download guide](../docs/RELEASE_ASSETS.md).
+
 See the [production desktop readiness plan](../docs/desktop-production-readiness.md) for implementation status and remaining release acceptance.
 
 ## Build and run
