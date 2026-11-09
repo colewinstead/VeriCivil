@@ -24,6 +24,7 @@ VeriCivil connects focused engineering calculations to practical design and fiel
 
 - **Superelevation:** enter curve data or import supported LandXML, calculate transitions, review lane slopes and stations, save a project, and export PDF reports, ORD CSV, or overlay DXF. Review the deliverables against project criteria and in OpenRoads Designer or MicroStation before production use.
 - **Crushed Stone Base:** estimate compacted roadway base volume and order tonnage across construction segments using the focused browser calculator.
+- **Guardrail:** calculate near-side and opposing-side lengths with the version-pinned Guardrail Python engine; save/reopen browser JSON projects and download calculation PDFs with optional MDOT references. See `docs/GUARDRAIL_BROWSER.md` for source ownership and engineering limits. DXF and LandXML overlays remain in its separate Windows application.
 - **RoadStation:** import supported LandXML from iOS Files, confirm project CRS and exact units, select an alignment, and read approximate station and LT/RT offset in the field. Satellite is the default map context; street maps and an engineering-grid fallback are available. Saved projects support return visits; manual inspection works without live location permission.
 
 ## Capabilities and Constraints

@@ -22,5 +22,17 @@
     "access": "Free",
     "engine_version": "1.1.0",
     "route": "/calculators/crushed-stone-base"
+  },
+  {
+    "id": "guardrail",
+    "slug": "guardrail",
+    "title": "Guardrail Length-of-Need Calculator",
+    "short_title": "Guardrail",
+    "description": "Calculate near-side and opposing-side guardrail lengths, save a project, and download a calculation-sheet PDF with optional MDOT references.",
+    "category": "Roadside Design",
+    "status": "available",
+    "access": "Free",
+    "engine_version": "V8.5.2",
+    "route": "/calculators/guardrail"
   }
 ]

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 from typing import Any
 
 from app_info import CALCULATION_ENGINE_VERSION
@@ -43,6 +45,14 @@ _STONE_MODULES = [
     "calculators/crushed_stone_base/service.py",
 ]
 
+_GUARDRAIL_ROOT = "calculators/guardrail/upstream/"
+_GUARDRAIL_SOURCE = json.loads((Path(__file__).parent / "guardrail/upstream/source.json").read_text())
+_GUARDRAIL_MODULES = [
+    "vericivil_service.py", "calculators/__init__.py", "calculators/guardrail/__init__.py",
+    "calculators/guardrail/service.py", _GUARDRAIL_ROOT + "source.json",
+    *[_GUARDRAIL_ROOT + name for name in _GUARDRAIL_SOURCE["sha256"] if name.endswith(".py")],
+]
+
 
 CALCULATORS: tuple[dict[str, Any], ...] = (
     {
@@ -77,6 +87,18 @@ CALCULATORS: tuple[dict[str, Any], ...] = (
             "modules": _STONE_MODULES,
             "pyodide_packages": [],
             "micropip_packages": [],
+        },
+    },
+    {
+        "id": "guardrail", "slug": "guardrail", "title": "Guardrail Length-of-Need Calculator",
+        "short_title": "Guardrail", "description": "Calculate near-side and opposing-side guardrail lengths, save a project, and download a calculation-sheet PDF with optional MDOT references.",
+        "category": "Roadside Design", "status": "available", "access": "Free",
+        "engine_version": _GUARDRAIL_SOURCE["version"], "route": "/calculators/guardrail",
+        "runtime": {
+            "modules": _GUARDRAIL_MODULES,
+            "assets": [_GUARDRAIL_ROOT + name for name in _GUARDRAIL_SOURCE["sha256"] if name.endswith(".pdf")],
+            "pyodide_packages": ["micropip", "Pillow", "fonttools"],
+            "micropip_packages": ["reportlab==4.4.7", "pypdf==5.9.0"],
         },
     },
 )

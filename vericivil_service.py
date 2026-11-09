@@ -14,6 +14,10 @@ def _service(calculator: str):
         from calculators.crushed_stone_base import service
 
         return service
+    if calculator == "guardrail":
+        from calculators.guardrail import service
+
+        return service
     raise ValueError(f"Unsupported calculator: {calculator}")
 
 

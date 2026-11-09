@@ -212,3 +212,52 @@ On browser widths up to `600px`, reflow lane names, slopes, widths, and pivot la
 - **Don't** substitute decorative imagery for the engineering diagram or obscure its axes and legend.
 - **Don't** use character glyphs as substitutes for the authored control icons.
 - **Don't** turn preview access, unsigned packaging, or local processing into claims of production release readiness.
+
+
+# Scoped Extension: Guardrail Browser Calculator
+
+## Overview
+
+This guidance applies only to `/calculators/guardrail`, implemented by `web/app/GuardrailCalculator.tsx`, `web/app/guardrail.css`, and its page wrapper. It extends the existing public browser calculator family. The desktop tokens and rules above retain their original scope; this extension neither replaces them nor changes `.impeccable/design.json`.
+
+Keep the compact site header and footer, practical input groups, and side-by-side near/opposing review. The working graphic is the calculation table. Product truth and engineering boundaries remain in `PRODUCT.md` and `docs/GUARDRAIL_BROWSER.md`.
+
+## Colors
+
+Use the public website roles from `web/app/globals.css`: dark paper, panel and raised fields; reading ink and muted helpers; divider borders; teal actions and current results; amber file status; red errors. Do not import Electron appearance overrides. The PDF action has a scoped deep teal fill with white text (`#126e5e`, hover `#105e50`); retain its readable text contrast rather than inheriting the brighter global primary-button fill.
+
+## Typography
+
+Use the website's Manrope sans stack for headings, controls and table labels, and IBM Plex Mono for numeric table cells. The compact page title is `2rem`, weight `650`, line-height `1.2`, with `-.025em` tracking; it reduces to `1.6rem` on phones. Section headings are `1.1rem`; field text is `.9rem`; labels are `.85rem`; helpers and table text are `.8rem`. The phone table is `.75rem`. Keep sentence-case table labels, right-aligned tabular numerals, explicit feet in the caption, and four decimal places in both exposure columns.
+
+## Layout
+
+The centered shell caps at `1360px`, with `40px 24px 72px` padding. Two equal, flexible columns have a `40px` gap: grouped roadway/traffic and hazard/barrier inputs on the left; length review, PDF options, and source/applicability on the right. Optional project metadata stays in a disclosure below the input groups. Related fields use two columns with `18px` row and `16px` column gaps.
+
+At `1000px` and below, stack the header runtime status and then the workspace, inputs before review, with a `32px` gap. At `600px` and below, use one field column, shell padding `28px 16px 48px`, `16px` review padding, a wrapped file-toolbar metadata row, and the smaller table type. Preserve both near/opposing columns and their row labels without shrinking the entire workspace.
+
+## Elevation & Depth
+
+The Guardrail workspace uses flat surfaces, fine borders, and spacing rather than new shadows or decoration. Button hover changes color without translation. Loading, error and current-input review messages occupy the result region; avoid decorative placeholders that could be mistaken for engineering output.
+
+## Shapes
+
+Fields use `6px` corners, `1px` divider borders, raised fill, and a minimum height of `44px`. The review panel uses `12px` corners and `24px` padding before the phone reduction. Retain inherited website button shapes; PDF download is full width with a minimum height of `44px`.
+
+## Components
+
+The file toolbar exposes Open project and Save project, textual unsaved status, engine version, and feet/mph context. Preserve native labeled inputs and selects, adjacent units/helpers, a real table with a caption and scoped headers, and native project-details disclosure. Within this shell, buttons, fields, selects, disclosure summaries and links receive a visible teal outline (`2px`, offset `3px`); text selection uses teal with paper-colored text. Disabled actions retain their disabled behavior and muted treatment. Runtime and file notices use status semantics; errors use alert semantics.
+
+**The Accepted Inputs Rule.** An input edit immediately hides the previous results and blocks project/PDF export until current inputs calculate successfully. Keep the waiting, invalid-input, engine-loading and engine-error messages distinct. Python supplies accepted results after the typing pause; the interface must not reproduce engineering arithmetic. File operations use one captured input set and block duplicate actions while busy.
+
+All current calculation selections remain available without a paywall. The PDF group retains its three upstream styles and optional facility-selected MDOT references. Keep source V8.5.2 / `c5df84a`, the simplified clear-zone transcription notice, and inherited engineering limits alongside the review. These labels establish provenance, not engineering approval.
+
+**The Local Project Rule.** Save downloads a versioned browser JSON file; Open validates and recalculates before replacing state. Retain malformed-import feedback, source-revision-change notice, project-replacement confirmation, and unsaved navigation/unload handling subject to browser support. Saving a PDF does not save the project. There is no cloud project storage or automatic recovery; DXF/LandXML remain outside this browser workflow.
+
+## Do's and Don'ts
+
+- **Do** preserve units, both exposure columns, source applicability, readable numeric alignment, and current-input export gating.
+- **Do** keep the browser's responsive input-first reading order and accessible native controls.
+- **Don't** transfer the desktop palette, window minimum, independent pane scrolling, or desktop export composition into this page.
+- **Don't** treat local calculation processing as an offline-availability guarantee or browser-managed downloads as durable project storage.
+- **Don't** expand source claims, engineering approval, or supported exports beyond the implemented integration.
