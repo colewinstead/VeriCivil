@@ -1180,7 +1180,7 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
         <button onClick={loadSampleCalculation} disabled={runtime !== "ready" || !!busy}>Load synthetic sample</button>
         <button onClick={newProject}>New project</button>
         <button onClick={saveProject} disabled={runtime !== "ready" || !!busy}>Save project</button>
-        <button onClick={() => setUpdatesOpen(true)}>Updates{updateAvailable ? ` · ${updateAvailable}` : ""}</button>
+        <button className={updateAvailable ? "desktop-update-highlight" : undefined} onClick={() => setUpdatesOpen(true)}>{updateAvailable ? `Update available · ${updateAvailable}` : "Updates"}</button>
       </header> : <header className="topbar">
         <div className="brand-mark">SE</div>
         <div><p className="eyebrow">Civil design workspace</p><h1>Superelevation Calculator</h1></div>
@@ -1189,6 +1189,11 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
         <div className={`runtime ${runtime}`}><span></span>{runtime === "ready" ? "Private browser engine ready" : runtimeMessage}</div>
         {runtime === "ready" && <button onClick={startWorker} disabled={!!busy} title="Load the latest Python engine while keeping your project and curve inputs">Reload engine</button>}
       </header>}
+
+      {desktop && updateAvailable && <section className="desktop-update-notice" aria-label="Desktop update available">
+        <div role="status"><strong>Desktop update available · {updateAvailable}</strong><p>Review the release notes and update options when you’re ready.</p></div>
+        <button className="desktop-update-highlight" onClick={() => setUpdatesOpen(true)}>Review update</button>
+      </section>}
 
       {upgradeFeature && <UpgradeNotice feature={upgradeFeature} onClose={() => setUpgradeFeature("")} />}
       {desktop && <DesktopUpdates host={desktop} open={updatesOpen} onClose={() => setUpdatesOpen(false)} />}

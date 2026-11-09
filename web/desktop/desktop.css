@@ -35,6 +35,12 @@ button:disabled { opacity: .55; }
 .desktop-update-dialog .update-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
 .desktop-recovery { padding: 12px 20px; border-bottom: 1px solid var(--line); }
 .desktop-recovery p { flex: 1 1 300px; margin: 0; }
+.desktop-update-notice { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; padding: 16px 20px; background: var(--raised); border-bottom: 1px solid var(--amber); }
+.desktop-update-notice > div { flex: 1 1 300px; }
+.desktop-update-notice strong { color: var(--amber); font-size: 16px; font-weight: 650; }
+.desktop-update-notice p { margin: 4px 0 0; color: var(--ink); font-size: 13px; }
+.desktop-workspace .desktop-update-highlight { background: var(--amber); border-color: var(--amber); color: var(--panel); }
+.desktop-workspace .desktop-update-highlight:hover { background: var(--panel); color: var(--amber); }
 .desktop-toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .desktop-toolbar > div:first-child { display: flex; align-items: baseline; gap: 12px; margin-right: auto; }
 .desktop-toolbar h1 { font-size: 19px; font-weight: 650; letter-spacing: -.025em; margin: 0; }

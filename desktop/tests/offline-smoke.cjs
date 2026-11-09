@@ -238,6 +238,33 @@ original.start().then(async (window) => {
   console.log('PASS: update descriptions show readable text, decoded entities and separate list items without inserting remote HTML.');
   await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Close').click()");
   assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), false);
+  for (const status of ['current', 'available', 'manual', 'downloaded', 'disabled']) {
+    const visible = ['available', 'manual', 'downloaded'].includes(status);
+    window.webContents.send('desktop:update', { status, version: '1.9.0', nextVersion: visible ? '1.9.1' : '' });
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (await window.webContents.executeJavaScript(`!!document.querySelector('.desktop-update-notice') === ${visible}`)) break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-update-notice')"), visible, status);
+    assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.desktop-toolbar .desktop-update-highlight')"), visible, status);
+    assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), false, 'Update notice does not interrupt work');
+    if (!visible) continue;
+    assert.match(await window.webContents.executeJavaScript("document.querySelector('.desktop-update-notice [role=status]').textContent"), /1\.9\.1/);
+    if (status === 'available' && process.env.VERICIVIL_CAPTURE_DIR) {
+      const { mkdir, writeFile } = require('node:fs/promises');
+      await mkdir(process.env.VERICIVIL_CAPTURE_DIR, { recursive: true });
+      for (const theme of ['light', 'dark']) {
+        nativeTheme.themeSource = theme;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR, `desktop-update-notice-${theme}.png`), (await window.capturePage()).toPNG());
+      }
+      nativeTheme.themeSource = 'system';
+    }
+    await window.webContents.executeJavaScript("document.querySelector('.desktop-update-notice button').click()");
+    assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('dialog[open]')"), true, 'Review update opens existing dialog');
+    await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Close').click()");
+  }
+  console.log('PASS: desktop update notice and toolbar highlight persist for available/manual/downloaded updates; review opens the dialog without forcing it.');
   await window.webContents.executeJavaScript(`(() => {
     window.confirm = () => true;
     const original = Worker.prototype.postMessage;
