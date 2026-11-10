@@ -20,28 +20,19 @@ Start each candidate with a private workspace created outside the repository usi
 - [ ] Dependency versions and security advisories are reviewed.
 - [ ] No customer data, credentials, signing keys, Bentley files, or confidential fixtures are present in the repository or build context.
 
-## Windows build and signing
+## Windows build and distribution
 
-Deferred while the desktop edition is Coming soon. Run the manual Windows Build workflow and complete this section before distributing a Windows build.
+Current public desktop releases are free, unsigned Windows x64 builds. Code signing work and all Mac desktop builds are paused. Paid-pilot authorization above remains separate from public release packaging.
 
-- [ ] Build on the supported clean Windows x64 image with `scripts\build_windows.ps1 -BuildInstaller`.
+- [ ] Retain the Windows x64 Full Release artifacts for the intended commit and both editions.
 - [ ] Confirm EXE ProductVersion/FileVersion matches `app_info.py`.
-- [ ] Sign the EXE and installer with the approved Authenticode certificate; record whether the pilot self-signed certificate or a public certificate was used.
-- [ ] Verify both signatures and trusted timestamps using `scripts\verify_windows_release.ps1 -RequireTimestamp`, then regenerate/verify SHA-256 checksums for the signed artifacts.
-- [ ] For a self-signed pilot, confirm each recipient independently verifies the public-certificate thumbprint before trusting it; never distribute the private key or a PFX.
+- [ ] Verify the downloaded SHA-256 checksums and label the app and installer unsigned. Do not claim publisher verification.
 - [ ] Scan release artifacts using the organization's approved malware controls.
-- [ ] Install and uninstall using a standard (non-administrator) pilot account.
-- [ ] Confirm Windows Defender/SmartScreen behavior is acceptable on each pilot Windows version.
+- [ ] Install, upgrade, and uninstall using a standard Windows account; verify project/recovery preservation and edition coexistence.
+- [ ] Confirm Windows Defender/SmartScreen behavior and unknown-publisher prompts are documented accurately.
+- [ ] Verify user-approved update downloads/restarts and the correct unsigned feed for each edition. Portable previews require manual replacement.
 
-## macOS build
-
-Deferred while the desktop edition is Coming soon. Run the manual macOS Build workflow and complete this section before distributing a macOS build.
-
-- [ ] Build and retain the native Apple Silicon and Intel DMGs from the release workflow.
-- [ ] Confirm the application version and minimum macOS version in each bundle match `app_info.py` and the supported release target.
-- [ ] Verify `SHA256SUMS-macOS.txt` against both downloaded disk images.
-- [ ] Mount each DMG, copy the application into Applications, launch it on macOS 15 or newer, and record the processor architecture used.
-- [ ] Confirm any operating-system installation prompts and the approved first-launch procedure are accurately documented for recipients.
+No Apple or signing workflow runs in the active release process. Existing Mac packages remain historical downloads; resuming Mac distribution requires separate platform acceptance.
 
 ## Built-application acceptance
 
@@ -54,7 +45,6 @@ Deferred while the desktop edition is Coming soon. Run the manual macOS Build wo
 - [ ] Export DXF and verify coordinates, units, levels/layers, text style, rotation, and placement in the target DGN.
 - [ ] Save/reload a new project and approved v1/v2 compatibility fixtures; compare calculations and metadata.
 - [ ] Force one failure for each file workflow and confirm the message, rotating log, and Open Log Folder action.
-- [ ] Repeat the approved golden calculation, LandXML, project save/load, PDF, ORD CSV, and DXF checks on each supported macOS architecture before pilot delivery.
 
 ## Browser build acceptance
 
@@ -66,12 +56,12 @@ Deferred while the desktop edition is Coming soon. Run the manual macOS Build wo
 
 ## Delivery and support
 
-- [ ] Publish immutable, versioned browser and checksum assets with release notes. Add Windows, macOS, and installer assets only when desktop distribution resumes and their platform acceptance sections are complete.
-- [ ] Verify downloaded hashes and signatures on a clean pilot machine.
-- [ ] Launch the current desktop release with GitHub available and unavailable; confirm the update check stays silent, then test a mocked older build and confirm its download points to the correct Windows or macOS asset.
+- [ ] Publish immutable, versioned browser and checksum assets with release notes. Publish Windows installers, portable previews, and update feeds only after their platform acceptance checks pass. Do not add new Mac artifacts while builds are paused.
+- [ ] Verify downloaded hashes on a clean Windows machine and record that the current artifacts are unsigned.
+- [ ] Launch the current desktop release with GitHub available and unavailable; confirm the update check stays silent, then test a mocked older build and confirm its download points to the correct Windows asset and edition.
 - [ ] Provide installation, onboarding, limitations, privacy/log-sharing, backup, update, and rollback instructions.
 - [ ] Record the 3–5 authorized pilot users, their application versions, and the support contact.
-- [ ] Retain the prior signed installer for rollback; do not silently auto-update pilot machines.
+- [ ] Retain the prior validated Windows installer for rollback; do not silently auto-update pilot machines.
 - [ ] Archive test output, golden comparisons, screenshots, signatures, hashes, release notes, and approval records.
 - [ ] Generate a no-project-file diagnostic bundle and verify any explicitly selected application log is redacted before support transmission.
 - [ ] Confirm release, engineering acceptance, pilot operations, and legal approval owners signed the private acceptance record.

@@ -15,7 +15,7 @@ Calculate superelevation transitions, review lane slopes and stationing, and pre
 | **Superelevation Calculator** | Calculate roadway transitions, inspect lane slopes and cross sections, save projects, and export PDF, ORD CSV, and overlay DXF. | [Browser workspace](https://vericivil.com/calculators/superelevation) |
 | **Guardrail** | Calculate near/opposing lengths, save projects and generate PDFs with optional MDOT references. | [Free browser calculator](https://vericivil.com/calculators/guardrail) |
 | **Crushed Stone Base** | Estimate compacted base volume and order tonnage across multiple construction segments. | [Free calculator](https://vericivil.com/calculators/crushed-stone-base) |
-| **Electron desktop preview** | Use the Superelevation workspace with a bundled offline calculation and export runtime. Current desktop tools are free without account sign-in. | [Downloads](https://vericivil.com/downloads) · [Build guide](desktop/README.md) |
+| **Electron desktop preview** | Use the Superelevation workspace on Windows x64 with a bundled offline calculation and export runtime. Current desktop tools are free without account sign-in. | [Downloads](https://vericivil.com/downloads) · [Build guide](desktop/README.md) |
 
 [RoadStation by VeriCivil](https://vericivil.com/roadstation) is a separate iPhone product for LandXML alignment, station, and LT/RT offset workflows. Its native implementation lives in the [Road-Stationing-App repository](https://github.com/colewinstead/Road-Stationing-App).
 
@@ -79,7 +79,7 @@ npm --prefix web run desktop:dev
 
 This builds and opens the native window. It does not watch for edits; close the app and rerun after changes. The first build needs internet access to bundle the offline runtime.
 
-See the [desktop guide](desktop/README.md) for packaging, installers, the neutral **Superelevation Calculator** edition, local recovery, updates, and signing. Automated previews are unsigned. Windows installers support user-approved updates; unsigned Mac and portable builds require manual replacement. Check the [download page](https://vericivil.com/downloads) and [code signing policy](https://vericivil.com/code-signing) for distribution status.
+See the [desktop guide](desktop/README.md) for packaging, installers, the neutral **Superelevation Calculator** edition, local recovery, and updates. Desktop releases focus on unsigned Windows x64 installers and portable previews. Code signing work and Mac desktop builds are paused. Windows installers support user-approved updates; portable builds require manual replacement. Check the [download page](https://vericivil.com/downloads) and [code signing policy](https://vericivil.com/code-signing) for distribution status.
 
 ## Engineering notes
 

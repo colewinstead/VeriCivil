@@ -2,14 +2,13 @@
 
 import { useSyncExternalStore } from "react";
 
-type PreferredPlatform = "windows" | "mac" | "browser";
+type PreferredPlatform = "windows" | "browser";
 
 const subscribe = () => () => {};
 
 function detectPlatform(): PreferredPlatform {
   const platform = `${navigator.platform} ${navigator.userAgent}`.toLowerCase();
   if (platform.includes("win")) return "windows";
-  if (platform.includes("mac")) return "mac";
   return "browser";
 }
 
@@ -24,16 +23,7 @@ export default function DownloadCards() {
         <p>WINDOWS 10 / 11 · x64</p>
         <h3>Windows</h3>
         <span>Optional desktop edition</span>
-        <div className="download-button desktop-coming-soon" role="status">Coming soon</div>
-      </article>
-
-      <article className={preferred === "mac" ? "preferred" : ""}>
-        {preferred === "mac" && <span className="recommended">Recommended for this device</span>}
-        <div className="platform-mark mac-mark" aria-hidden="true">●</div>
-        <p>MACOS 15+ · NATIVE BUILDS</p>
-        <h3>macOS</h3>
-        <span>Optional desktop edition</span>
-        <div className="download-button desktop-coming-soon" role="status">Coming soon</div>
+        <a className="download-button" href="/downloads">Windows downloads <b>↗</b></a>
       </article>
 
       <article className={preferred === "browser" ? "preferred" : ""}>

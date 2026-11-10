@@ -10,7 +10,7 @@ For imported XML, the browser's **Input edits apply to** selector makes the edit
 
 ## Sources and rights
 
-Clearance action plan and an unsent publisher request: [AASHTO permission request](aashto-permission-request.md). The request must cover public source, browser/desktop runtime distribution, downstream reuse, and possible commercial sales. SignPath code signing does not grant these rights.
+Clearance action plan and an unsent publisher request: [AASHTO permission request](aashto-permission-request.md). The request must cover public source, browser/desktop runtime distribution, downstream reuse, and possible commercial sales. Code signing does not grant these rights.
 
 - AASHTO, *A Policy on Geometric Design of Highways and Streets*, seventh edition, 2018: Tables 3-8 through 3-12; §§3.3.5, 3.3.5.1, 3.3.8.2.1–3.3.8.2.3, 3.3.8.4.6, and 3.3.8.6; Table 3-15; Table 3-16a; Equations 3-23, 3-24, and 3-25; Figure 3-8. Publication information: [AASHTO bookstore](https://store.transportation.org/).
 - [October 2019 seventh-edition errata](https://downloads.transportation.org/GDHS-7-Errata.pdf): corrected Table 3-12 radius, Table 3-16 runoff values, and Figure 3-8 positioning. Equation 3-11 also has an erratum; this profile does not implement the continuous Method 5 equations that use it.
