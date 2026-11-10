@@ -10,17 +10,10 @@ export function desktopDownloads(value: unknown): { version: string; downloads: 
   const base = `https://github.com/colewinstead/VeriCivil/releases/download/${release.tag_name}/`;
   const assets = release.assets.filter((asset): asset is Asset => !!asset && typeof asset.name === "string" && typeof asset.browser_download_url === "string" && asset.browser_download_url === base + asset.name);
   const downloads: DesktopDownload[] = [];
-  for (const [label, os, arch, legacy] of [
-    ["Windows x64", "win", "x64", "Windows-x64.zip"],
-    ["Mac · Apple Silicon", "mac", "arm64", "macOS-Apple-Silicon.dmg"],
-    ["Mac · Intel", "mac", "x64", "macOS-Intel.dmg"],
-  ]) {
-    const prefix = `VeriCivil-Superelevation-${version}-${os}-${arch}`;
-    const extension = os === "win" ? "exe" : "dmg";
-    const names = [`${prefix}.${extension}`, `${prefix}-unsigned.${extension}`, `Superelevation-Desktop-Preview-${version}-${legacy}`];
-    const asset = names.map(name => assets.find(asset => asset.name === name)).find(Boolean);
-    if (asset) downloads.push({ label, url: asset.browser_download_url, filename: asset.name, unsigned: asset.name.includes("-unsigned.") || asset.name.startsWith("Superelevation-Desktop-Preview-"), portable: asset.name.endsWith(".zip") });
-  }
+  const prefix = `VeriCivil-Superelevation-${version}-win-x64`;
+  const names = [`${prefix}.exe`, `${prefix}-unsigned.exe`, `Superelevation-Desktop-Preview-${version}-Windows-x64.zip`];
+  const asset = names.map(name => assets.find(asset => asset.name === name)).find(Boolean);
+  if (asset) downloads.push({ label: "Windows x64", url: asset.browser_download_url, filename: asset.name, unsigned: asset.name.includes("-unsigned.") || asset.name.startsWith("Superelevation-Desktop-Preview-"), portable: asset.name.endsWith(".zip") });
   return { version, downloads };
 }
 

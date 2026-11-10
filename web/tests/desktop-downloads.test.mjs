@@ -3,15 +3,25 @@ import test from 'node:test';
 import { desktopDownloads } from '../lib/desktop-downloads.ts';
 
 const asset = name => ({ name, browser_download_url: `https://github.com/colewinstead/VeriCivil/releases/download/v1.7.0/${name}` });
-test('downloads prefer signed installers and retain unsigned/legacy fallbacks', () => {
+test('downloads offer Windows only, preserving installer preference and legacy fallbacks', () => {
   const data = desktopDownloads({ tag_name: 'v1.7.0', assets: [
     asset('VeriCivil-Superelevation-1.7.0-win-x64-unsigned.exe'), asset('VeriCivil-Superelevation-1.7.0-win-x64.exe'),
     asset('VeriCivil-Superelevation-1.7.0-mac-arm64-unsigned.dmg'), asset('Superelevation-Desktop-Preview-1.7.0-macOS-Intel.dmg'),
   ] });
-  assert.equal(data.downloads.length, 3);
+  assert.equal(data.downloads.length, 1);
+  assert.equal(data.downloads[0].label, 'Windows x64');
   assert.equal(data.downloads[0].unsigned, false);
-  assert.equal(data.downloads[1].unsigned, true);
-  assert.equal(data.downloads[2].unsigned, true);
+  for (const name of ['VeriCivil-Superelevation-1.7.0-win-x64-unsigned.exe', 'Superelevation-Desktop-Preview-1.7.0-Windows-x64.zip']) {
+    const fallback = desktopDownloads({ tag_name: 'v1.7.0', assets: [asset(name)] }).downloads;
+    assert.equal(fallback.length, 1);
+    assert.equal(fallback[0].unsigned, true);
+    assert.equal(fallback[0].portable, name.endsWith('.zip'));
+  }
+  assert.deepEqual(desktopDownloads({ tag_name: 'v1.7.0', assets: [
+    asset('VeriCivil-Superelevation-1.7.0-mac-arm64.dmg'),
+    asset('VeriCivil-Superelevation-1.7.0-mac-x64-unsigned.dmg'),
+    asset('Superelevation-Desktop-Preview-1.7.0-macOS-Intel.dmg'),
+  ] }).downloads, []);
 });
 test('downloads reject draft/prerelease metadata, foreign URLs, and wrong versions', () => {
   assert.equal(desktopDownloads({ tag_name: 'v1.7.0', draft: true, assets: [] }), null);

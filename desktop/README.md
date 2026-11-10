@@ -2,7 +2,7 @@
 
 This desktop entry point reuses `web/app/CalculatorApp.tsx` and the same Python modules as the browser and Tkinter editions. It bundles Pyodide, its nine required packages, and the pinned ReportLab/ezdxf wheels. Engineering processing runs locally without an internet connection. Formulas, criteria, project schemas, and export implementations are unchanged.
 
-Current desktop tools are free without account sign-in or device licensing. The desktop app does not bill, collect analytics, or retain LandXML remotely. It stores recovery snapshots, recent-project paths, and bounded support logs locally. Unsigned Windows installers support updates with explicit download/restart approval. Unsigned Mac and portable builds check for releases and require manual downloads. Signed builds retain publisher verification.
+Current desktop tools are free without account sign-in or device licensing. The desktop app does not bill, collect analytics, or retain LandXML remotely. It stores recovery snapshots, recent-project paths, and bounded support logs locally. Unsigned Windows installers support updates with explicit download/restart approval. Portable Windows builds require manual replacement. Code signing work and all Mac desktop builds are paused; older Mac assets remain in release history.
 
 For normal downloads, edition/platform choices, and an explanation of the GitHub release assets, see the [release download guide](../docs/RELEASE_ASSETS.md).
 
@@ -21,14 +21,14 @@ npm --prefix web run desktop:dev
 `desktop:dev` builds and launches the packaged application source. The explicit Electron install step downloads the pinned runtime after npm installs dependencies without running package scripts. On this Mac, use a standard Node installation (for example the existing Homebrew Node), rather than the Node executable embedded in a signed application; the latter can reject native build bindings with a different-Team-ID error.
 
 ```sh
-npm --prefix web run desktop:package
 npm --prefix web run desktop:package:windows
+# On Windows:
 npm --prefix web run desktop:installer
 ```
 
-The first command packages the host platform: the current Mac architecture, or Windows x64 when run on Windows. The second packages Windows x64, including from a Mac. Outputs are under `desktop/releases/`. Runtime downloads and generated application assets are ignored by Git. The runtime cache records dependency URLs and verified SHA-256 values in `desktop/runtime/checksums.json`. Repeated builds verify cached bytes before use.
+The package command targets Windows x64, including from a Mac development host. Build and accept installers on Windows CI. Outputs are under `desktop/releases/`. Runtime downloads and generated application assets are ignored by Git. The runtime cache records dependency URLs and verified SHA-256 values in `desktop/runtime/checksums.json`. Repeated builds verify cached bytes before use.
 
-`desktop:installer` builds an unsigned NSIS installer on Windows, or DMG and update ZIP on Mac, under `desktop/installers/`. The installer uses the stable identity `com.vericivil.superelevation`. Windows creates Start menu/desktop shortcuts and an uninstaller; upgrades and uninstall preserve user projects and the local profile. Local Windows Application Control can prevent NSIS from executing its unsigned build stub; use the clean Windows CI runner for acceptance rather than bypassing that policy.
+`desktop:installer` builds an unsigned NSIS installer on Windows under `desktop/installers/`. The installer uses the stable identity `com.vericivil.superelevation`. Windows creates Start menu/desktop shortcuts and an uninstaller; upgrades and uninstall preserve user projects and the local profile. Local Windows Application Control can prevent NSIS from executing its unsigned build stub; use the clean Windows CI runner for acceptance rather than bypassing that policy.
 
 ## Neutral desktop edition
 
@@ -41,17 +41,17 @@ DESKTOP_EDITION=neutral npm --prefix web run desktop:dev
 DESKTOP_EDITION=neutral npm --prefix web run desktop:package
 DESKTOP_EDITION=neutral npm --prefix web run desktop:installer
 DESKTOP_EDITION=neutral npm --prefix web run desktop:test:offline
-python3 scripts/package_electron_release.py --platform darwin --arch arm64 --edition neutral
-python3 scripts/stage_desktop_installers.py --platform darwin --arch arm64 --edition neutral
+python3 scripts/package_electron_release.py --platform win32 --arch x64 --edition neutral
+python3 scripts/stage_desktop_installers.py --platform win32 --arch x64 --edition neutral
 ```
 
-On Windows PowerShell, set `$env:DESKTOP_EDITION = 'neutral'` before the npm commands and use `--platform win32 --arch x64` with the Python commands. Clear that environment variable to return to the default edition. Each staging/archive command requires the corresponding package to have been built first. The neutral app stages under `desktop/app-neutral/`, preview packages under `desktop/releases/neutral/`, and installers under `desktop/installers/neutral/`.
+On Windows PowerShell, set `$env:DESKTOP_EDITION = 'neutral'` before the npm commands and use `python` for the Python commands. Clear that environment variable to return to the default edition. Each staging/archive command requires the corresponding package to have been built first. The neutral app stages under `desktop/app-neutral/`, preview packages under `desktop/releases/neutral/`, and installers under `desktop/installers/neutral/`.
 
 The neutral installer has its own app identity, shortcuts, uninstaller, updater cache, and `Superelevation Calculator` profile directory under the OS application-data folder. It can coexist with VeriCivil without migrating or sharing recovery data. It opens existing `.json` and `.vericivil` projects, saves new projects as `.json`, and registers neither extension, leaving existing file associations alone. The neutral workspace omits the desktop promotional label and footer. Required ownership information stays in About and the bundled license; engineering verification guidance remains in About.
 
-Both editions are built by each platform's release job. Neutral installers/previews and separate checksums are public GitHub Release assets, but the website's download buttons ignore them. Windows neutral installers use `latest-neutral-unsigned-win32-x64.yml`, accept only matching neutral installer filenames, and still require approval before downloading or restarting. Unsigned Macs and portable apps check for matching neutral assets and require manual replacement. Missing neutral assets never fall back to a branded download. A public GitHub asset is unadvertised, not access-restricted.
+Both editions are built by the Windows x64 release job. Neutral installers/previews and separate checksums are public GitHub Release assets, but the website's download buttons ignore them. Windows neutral installers use `latest-neutral-unsigned-win32-x64.yml`, accept only matching neutral installer filenames, and still require approval before downloading or restarting. Portable apps check for matching neutral assets and require manual replacement. Missing neutral assets never fall back to a branded download. A public GitHub asset is unadvertised, not access-restricted.
 
-Protected signing workflows remain VeriCivil-only; requesting a signed neutral build fails explicitly. Regenerate the neutral geometric SE artwork with `python3 scripts/create_neutral_desktop_icons.py` (Pillow required).
+Signing workflows are paused. Existing signed-build validation remains in the packaging code; requesting a signed neutral build fails explicitly. Regenerate the neutral geometric SE artwork with `python3 scripts/create_neutral_desktop_icons.py` (Pillow required).
 
 ## Projects, recovery, and support
 
@@ -63,22 +63,15 @@ On Windows, **Restart and install** applies the approved update silently in the 
 
 The profile is `%APPDATA%/VeriCivil Superelevation` on Windows and `~/Library/Application Support/VeriCivil Superelevation` on Mac. It contains recovery/project data and recent paths; do not include the profile in public reports. Help → Export diagnostics writes only versions, platform/architecture, and bounded event/error-code logs, excluding project contents, file paths, and credentials. No diagnostic upload is performed.
 
-## Signed production releases
+## Windows release status
 
-The public [Code signing policy](https://vericivil.com/code-signing) records pending SignPath approval and current unsigned status. See [SignPath onboarding](../docs/signpath-onboarding.md) for the protected **Windows SignPath Review** workflow, required configuration after approval, and remaining Electron/NSIS production gates. Its outputs are review artifacts only, not installable signed production releases or update feeds.
+Desktop releases target unsigned Windows x64 builds. Code signing work and Mac desktop builds are paused. The public [Code signing policy](https://vericivil.com/code-signing) describes the current status and desktop privacy. Provider onboarding and the protected signing workflows have been retired. Existing credential-backed packaging helpers and signature-verification code remain dormant; no signing credentials are needed for the active release pipeline.
 
-Signing identities are not currently configured. PR/main builds remain unsigned. Main releases publish a separate `latest-unsigned-win32-x64.yml` feed for Windows installers; PR builds never publish releases. Unsigned Windows updates use HTTPS and SHA-512 checksums without publisher-signature verification, so trust depends on the GitHub release account and delivery service. Signed feeds stay separate and retain publisher verification. Existing manual-only Windows builds need one manual upgrade to gain this capability. Production packaging fails when required signing credentials are absent. Keep secrets in the protected GitHub environment `desktop-production`, restricted to `main`, with release approval:
+Main releases publish separate `latest-unsigned-win32-x64.yml` and `latest-neutral-unsigned-win32-x64.yml` feeds. PR builds never publish releases. Windows installer updates use HTTPS and SHA-512 checksums without publisher-signature verification, so trust depends on the GitHub release account and delivery service. Users approve downloads and restarts. Windows may display unknown-publisher or SmartScreen warnings. Portable builds require manual replacement. Existing manual-only Windows builds need one manual upgrade to gain in-app installation.
 
-The environment is configured to allow only the `main` branch and requires approval by the repository owner. Signing secrets still need to be supplied.
+Keep any existing signing identities outside the repository. Retaining dormant Apple packaging or local credentials does not mean current Mac releases are signed, notarized, or supported. Resuming either platform or signing requires a separate, validated change.
 
-- Windows: `WINDOWS_CSC_LINK` (certificate path/secure URL/base64 supported by electron-builder), `WINDOWS_CSC_KEY_PASSWORD`, and `WINDOWS_PUBLISHER` matching the certificate identity.
-- Mac: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` for signing and notarization.
-
-After a successful main release, run **Signed Desktop Release** with that latest stable tag. It checks out the released main commit, tests/builds each target, requires signing, verifies Windows signatures and Mac notarization, and uploads binaries before the architecture-specific update metadata. The workflow does not create a public release from a PR. The updater uses GitHub Releases; `https://vericivil.com/downloads` discovers those artifacts and labels unsigned builds. Do not put signing keys in this repository or paste them into chat.
-
-The updater implementation uses pinned electron-builder/electron-updater versions. Signing, tampered-package rejection by real OS signatures, and signed N-to-N+1 installation on each Mac architecture require credential-backed acceptance before production distribution. Mocked updater tests are not evidence of those OS checks.
-
-The Mac app bundle and Windows executable use the VeriCivil icon, and the running window uses the same artwork. The portable ZIP itself keeps the operating system's archive icon; extract it to see the branded executable. Native icons in `desktop/icons/` come from `web/public/brand/vericivil-icon.png`. To regenerate them with Pillow installed, run from the repository root:
+The Windows executable uses the VeriCivil icon, and the running window uses the same artwork. The portable ZIP itself keeps the operating system's archive icon; extract it to see the branded executable. Native icons in `desktop/icons/` come from `web/public/brand/vericivil-icon.png`. To regenerate them with Pillow installed, run from the repository root:
 
 ```sh
 python -c "from PIL import Image; im = Image.open('web/public/brand/vericivil-icon.png'); im.save('desktop/icons/vericivil.ico', sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)]); im.save('desktop/icons/vericivil.icns')"
@@ -87,20 +80,18 @@ python -c "from PIL import Image; im = Image.open('web/public/brand/vericivil-ic
 To create a downloadable archive after packaging, run the matching command from the repository root:
 
 ```sh
-python3 scripts/package_electron_release.py --platform darwin --arch arm64
-# Intel Mac: use --arch x64 instead.
 python scripts/package_electron_release.py --platform win32 --arch x64
 ```
 
-Mac DMG creation requires macOS. Windows ZIP creation can also run on a Mac using `python3`. Archives and matching SHA-256 files are written to `desktop/release-assets/`; filenames include the app version and target platform. The helper refuses missing packages and stale staged versions. A Windows ZIP contains the full portable application folder; extract it before launching the EXE.
+Windows ZIP creation can also run on a Mac using `python3`. Archives and matching SHA-256 files are written to `desktop/release-assets/`; filenames include the app version and target platform. The helper refuses missing packages and stale staged versions. A Windows ZIP contains the full portable application folder; extract it before launching the EXE.
 
 ## Automated builds and GitHub Releases
 
-The **Full Release** workflow validates `APP_VERSION` before building Electron previews for macOS arm64 (`macos-15`), macOS x64 (`macos-15-intel`), and Windows x64 (`windows-latest`). Opening, updating, reopening, or marking a version-bumped PR ready for review runs the builds, including on draft PRs. Documentation-only changes skip packaging, and invalid/reused versions stop before desktop jobs run.
+The **Full Release** workflow validates `APP_VERSION` before building Windows x64 Electron installers and portable previews (`windows-latest`). Opening, updating, reopening, or marking a version-bumped PR ready for review runs the builds, including on draft PRs. Documentation-only changes skip packaging, and invalid/reused versions stop before desktop jobs run.
 
-Each native runner installs the pinned Electron runtime, checks the save/security boundaries, packages the app, exercises the offline runtime against native Python, and creates its DMG or portable ZIP plus checksum. PR runs have read-only repository permissions and upload `desktop-release-<version>-<target>` Actions artifacts retained for 30 days. They do not publish a GitHub Release or use signing secrets.
+The Windows runner installs the pinned Electron runtime, checks the save/security boundaries, packages the app, exercises the offline runtime against native Python, and creates its portable ZIP plus checksum. PR runs have read-only repository permissions and upload `desktop-release-<version>-<target>` Actions artifacts retained for 30 days. They do not publish a GitHub Release or use signing secrets.
 
-After merge to `main`, desktop and browser builds run against the merged source. The public versioned GitHub Release is published only after all release build jobs succeed, and includes unsigned installers, both preview Mac DMGs, the portable Windows ZIP, checksums, and the browser archive. Windows CI installs version N, upgrades to a synthetic N+1, and uninstalls, checking that project and recovery data survive. The **Legacy Tkinter macOS Build** and **Legacy Tkinter Windows Build** jobs remain manual rollback builds. Website publishing remains a separate `Ship main` operation.
+After merge to `main`, desktop and browser builds run against the merged source. The public versioned GitHub Release is published only after all release build jobs succeed, and includes unsigned Windows installers and portable ZIPs for both editions, checksums, update feeds, and the browser archive. Windows CI installs version N, upgrades to a synthetic N+1, and uninstalls, checking that project and recovery data survive. The **Legacy Tkinter Windows Build** job remains a manual rollback build. Mac and signed-desktop workflows have been removed while that work is paused. Website publishing remains a separate `Ship main` operation.
 
 ## Interface and file handling
 
@@ -126,4 +117,4 @@ The Windows x64 package was built and copied to the LAN test PC in an isolated t
 
 ## Rollback and scope
 
-The browser build remains its own entry point. `python3 super_app.py`, the PyInstaller specifications, and manual legacy build workflows remain available. Unsigned preview archives and installers use the normal release workflow; signing and update-feed publication use the separate protected manual workflow. Website publication still requires Ship main. Production licensing is intentionally deferred while desktop tools remain free.
+The browser build remains its own entry point. `python3 super_app.py`, the PyInstaller specifications, and the manual legacy Windows workflow remain available. Unsigned Windows preview archives, installers, and update feeds use the normal release workflow. Mac packaging scripts remain in source for a future resumption; no workflow currently publishes Mac or signed desktop builds. Website publication still requires Ship main. Production licensing is intentionally deferred while desktop tools remain free.

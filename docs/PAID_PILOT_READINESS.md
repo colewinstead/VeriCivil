@@ -1,5 +1,7 @@
 # Paid Pilot Readiness Assessment and Roadmap
 
+Current distribution scope (November 9, 2026): free, unsigned Windows x64 desktop builds; code signing work and Mac desktop builds are paused. The commercial-pilot requirements below are a separate historical assessment, not prerequisites for the active unsigned public release channel. See [current desktop readiness](desktop-production-readiness.md).
+
 ## 2026-07-19 commercial-foundation update
 
 The owner reports that PE validation has been completed for the recorded calculator version and scope; the controlled evidence and reviewer identity remain outside this public repository. This is not a public or personal PE-certification claim, does not automatically cover later engineering-behavior changes, and does not replace independent verification by the responsible project PE. See `docs/COMMERCIAL_READINESS.md` for the current commercial status, entitlement architecture, remaining legal and acceptance blockers, and user-responsibility position. The original assessment below is retained as the baseline that defined the validation work.

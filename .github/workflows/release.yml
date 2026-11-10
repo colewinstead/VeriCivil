@@ -127,14 +127,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
-            platform: darwin
-            arch: arm64
-            target: macOS-Apple-Silicon
-          - runner: macos-15-intel
-            platform: darwin
-            arch: x64
-            target: macOS-Intel
           - runner: windows-latest
             platform: win32
             arch: x64

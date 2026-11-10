@@ -1,5 +1,7 @@
 # Paid-Pilot Operations Manual
 
+Current free desktop releases target unsigned Windows x64 builds. Code signing work and Mac desktop builds are paused. This paid-pilot process does not describe the active public release channel; see [desktop readiness](desktop-production-readiness.md).
+
 This manual defines the minimum operating process for a controlled pilot. It does not activate payment, create contractual service levels, or replace attorney-approved terms.
 
 ## Roles and records

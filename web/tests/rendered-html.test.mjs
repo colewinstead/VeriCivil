@@ -31,16 +31,20 @@ test("desktop downloads show trusted release files and unsigned status", async (
     assert.match(html, /1.7.0-win-x64-unsigned.exe/);
     assert.match(html, /Current desktop tools are free/);
     assert.match(html, /Windows installers support updates with your approval/);
+    assert.match(html, /Code signing work and Mac desktop builds are paused/);
+    assert.doesNotMatch(html, /SignPath|Download for Mac|Mac disk image/i);
     assert.match(html, /href="\/code-signing"/);
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test("code signing policy states pending approval and explains desktop network access", async () => {
+test("code signing policy states Windows scope and explains desktop network access", async () => {
   const response = await render("/code-signing");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /SignPath signing is not active/);
-  assert.match(html, /Signing the outer Windows installer does not sign/);
+  assert.match(html, /Current status: unsigned Windows builds/);
+  assert.match(html, /Code signing work and Mac desktop builds are paused/);
+  assert.match(html, /without publisher-signature verification/);
+  assert.doesNotMatch(html, /SignPath|approval pending|signpath\.io|signpath\.org/i);
   assert.match(html, /automatically check GitHub Releases/);
   assert.match(html, /IP address/);
   assert.match(html, /no account sign-in, billing, product analytics/);
