@@ -22,6 +22,21 @@ checksums are recorded in `calculators/guardrail/upstream/source.json`.
 After the upstream change is reviewed and tested, create an issue-linked VeriCivil
 branch from current `main`, check out the desired Guardrail commit locally, and run:
 
+**Windows PowerShell** (from the VeriCivil repository root; replace the source path
+and revision with your local checkout and reviewed full commit SHA):
+
+```powershell
+python scripts/update_guardrail.py --source "C:\Coding Projects\Guardrail-Calculator" --revision FULL_40_CHARACTER_COMMIT_SHA
+python scripts/update_guardrail.py
+python -m unittest -v
+Set-Location web
+npm exec tsc -- --noEmit
+npm run lint
+npm test
+```
+
+**macOS/Linux** (from the VeriCivil repository root):
+
 ```sh
 python3 scripts/update_guardrail.py --source /path/to/Guardrail-Calculator --revision FULL_40_CHARACTER_COMMIT_SHA
 python3 scripts/update_guardrail.py
@@ -85,6 +100,33 @@ Run the renderer smoke with the dev server running at `http://localhost:3001`
 using `npm run test:guardrail:browser` from `web`. Set `GUARDRAIL_TEST_URL` to the
 full calculator URL when using another port. On hosts inheriting
 `ELECTRON_RUN_AS_NODE=1`, run `env -u ELECTRON_RUN_AS_NODE npm run test:guardrail:browser`.
+
+In **Windows PowerShell**, start the server in one terminal from the VeriCivil
+repository root and leave it running:
+
+```powershell
+npm --prefix web run dev -- --port 3001
+```
+
+In a second PowerShell terminal, also starting at the repository root, run:
+
+```powershell
+Set-Location web
+Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+npm run test:guardrail:browser
+```
+
+`Remove-Item` clears the inherited Electron flag for the current terminal session.
+For another port, set the full URL before running the smoke test:
+
+```powershell
+$env:GUARDRAIL_TEST_URL = "http://localhost:3002/calculators/guardrail"
+npm run test:guardrail:browser
+```
+
+To return to the default URL in that terminal, run
+`Remove-Item Env:\GUARDRAIL_TEST_URL -ErrorAction SilentlyContinue`.
+
 The renderer test writes local desktop/phone captures under the ignored
 `.impeccable/review/guardrail/` and refreshes the catalog's authentic result crop.
 When adopting a new crop, embed its screenshot origin with Impeccable's
