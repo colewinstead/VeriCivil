@@ -22,18 +22,43 @@ checksums are recorded in `calculators/guardrail/upstream/source.json`.
 After the upstream change is reviewed and tested, create an issue-linked VeriCivil
 branch from current `main`, check out the desired Guardrail commit locally, and run:
 
-**Windows PowerShell** (from the VeriCivil repository root; replace the source path
-and revision with your local checkout and reviewed full commit SHA):
+**Windows PowerShell: import the update**
+
+Copy this entire block into PowerShell. These paths match the local workspace;
+change them only if your repositories are elsewhere. The commit SHA is selected
+automatically from the Guardrail checkout's current `HEAD`:
 
 ```powershell
-python scripts/update_guardrail.py --source "C:\Coding Projects\Guardrail-Calculator" --revision FULL_40_CHARACTER_COMMIT_SHA
-python scripts/update_guardrail.py
+Set-Location "C:\Coding Projects\VeriCivil"
+$guardrailSource = "C:\Coding Projects\Guardrail-Calculator"
+$guardrailRevision = git -C $guardrailSource rev-parse --verify HEAD
+if ($LASTEXITCODE -ne 0) { throw "Could not read the Guardrail commit. Check the source path." }
+python scripts/update_guardrail.py --source $guardrailSource --revision $guardrailRevision
+if ($LASTEXITCODE -ne 0) { throw "Guardrail import failed. Stop here and review the error." }
+```
+
+This imports the committed version currently checked out locally. Update and review
+that checkout first if you want a newer upstream commit. Successful import prints
+`Verified Guardrail` followed by the imported version and full commit SHA.
+
+**Windows PowerShell: validate the imported update**
+
+Run this after the import succeeds. `PYTHONUTF8` enables consistent UTF-8 handling
+for native/Pyodide comparisons in this terminal session:
+
+```powershell
+Set-Location "C:\Coding Projects\VeriCivil"
+$env:PYTHONUTF8 = "1"
 python -m unittest -v
-Set-Location web
+Push-Location web
 npm exec tsc -- --noEmit
 npm run lint
 npm test
+Pop-Location
 ```
+
+`python scripts/update_guardrail.py` without `--source` and `--revision` only checks
+the already imported files. Use the import block above to bring in an update.
 
 **macOS/Linux** (from the VeriCivil repository root):
 
