@@ -104,6 +104,23 @@ app.whenReady().then(async () => {
   assert.equal(await js("document.querySelector('[name=adt]').value"), "6,000", "Bad imports preserve current inputs");
   await change("adt", "6000");
   await wait("!!document.querySelector('.guardrail-results')");
+  await change("clear_zone_criteria", "3r");
+  assert.equal(await js("!!document.querySelector('.guardrail-results')"), false, "Changing criteria hides stale results");
+  await wait("Array.from(document.querySelectorAll('.guardrail-help')).some(p=>p.textContent.includes('LA used: 14.0000 ft'))");
+  const threeRSaved = await takeDownload("Save project");
+  assert.equal(JSON.parse(threeRSaved.toString()).values.clear_zone_criteria, "3r");
+  await change("speed", "70");
+  await wait("document.querySelector('.guardrail-error')?.textContent.includes('3R clear-zone lookup')");
+  assert.equal(await js(`${button("Download calculation PDF")}.disabled`), true);
+  await open(threeRSaved.toString());
+  await wait("document.querySelector('[name=clear_zone_criteria]').value === '3r' && !!document.querySelector('.guardrail-results')");
+  writeFileSync(path.join(capture, "three-r-package.pdf"), await takeDownload("Download calculation PDF"));
+  const legacy = JSON.parse(saved.toString());
+  delete legacy.values.clear_zone_criteria;
+  await open(JSON.stringify(legacy));
+  await wait("document.querySelector('[name=clear_zone_criteria]').value === 'new_construction' && !!document.querySelector('.guardrail-results')");
+  await change("clear_zone_criteria", "3r");
+  await wait("!!document.querySelector('.guardrail-results')");
   await js("document.querySelector('.guardrail-project').open=true");
   await change("project", "Synthetic browser acceptance");
   await wait("!!document.querySelector('.guardrail-results')");
@@ -122,7 +139,7 @@ app.whenReady().then(async () => {
     }
   }
   assert.deepEqual(errors, [], "No renderer errors");
-  console.log("Guardrail renderer smoke passed: calculations, stale results, project downloads/imports, PDF appendices, unsaved navigation, desktop/mobile overflow.");
-  clearTimeout(timer); window.destroy(); app.exit(0);
+  console.log("Guardrail renderer smoke passed: calculations, clear-zone criteria, 3R speed validation, legacy and current projects, PDF appendices, unsaved navigation, desktop/mobile overflow.");
+  clearTimeout(timer); app.exit(0);
 }).catch(error => { console.error(error); clearTimeout(timer); app.exit(1); });
 app.on("quit", () => rmSync(temp, { recursive: true, force: true }));

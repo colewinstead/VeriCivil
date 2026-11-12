@@ -45,6 +45,7 @@ export default function GuardrailCalculator() {
   const result = calculation?.signature === signature ? calculation.data : null;
   const divided = values.facility === "divided_highway";
   const clearzone = values.offset_source === "clearzone";
+  const threeR = values.clear_zone_criteria === "3r";
 
   const request = useCallback(<T,>(operation: string, payload: object): Promise<T> => {
     const id = ++nextId.current;
@@ -207,6 +208,7 @@ export default function GuardrailCalculator() {
           <section><h2>Hazard &amp; barrier</h2><div className="guardrail-fields">
             {select("offset_source", "Hazard offset source", [["clearzone", "Select from clear-zone table"], ["direct", "Enter LA directly"]])}
             {clearzone ? <>
+              {select("clear_zone_criteria", "Clear-zone criteria", [["new_construction", "New construction · Table 9-2-A"], ["3r", "3R rural non-freeway · Table 12-2-B"]])}
               {select("slope", "Roadside slope", [["6:1_or_flatter", "6:1 or flatter"], ["5:1_to_4:1", "5:1 to 4:1"]])}
               {select("clear_zone_selection", "Clear-zone selection", [["min", "Minimum"], ["mid", "Midpoint"], ["max", "Maximum"], ["custom", "Custom"]])}
               {values.clear_zone_selection === "custom" && field("custom_clear_zone", "Custom clear zone", "ft")}
@@ -216,7 +218,11 @@ export default function GuardrailCalculator() {
             {select("terminal_mode", "Terminal section", [["default", "Default · 25 ft"], ["custom", "Custom length"]])}
             {values.terminal_mode === "custom" && field("terminal", "Custom terminal section", "ft")}
             {select("flare_rate", "Flare rate (a:b)", manifest.flare_rates.map(rate => [String(rate), rate === 0 ? "Non-flared" : `${rate}:1`]))}
-          </div><p className="guardrail-help">{result ? <>LA used: <strong>{format(result.LA)} ft</strong> · L1: {format(result.L1)} ft · Terminal: {format(result.terminal)} ft</> : "Complete the active fields to calculate. Lengths are entered in decimal feet."}</p></section>
+          </div>
+          {clearzone && threeR && (
+            <p className="guardrail-help">3R applies to recoverable fill slopes on non-curbed rural non-freeways where Chapter 9 is infeasible. Supported design speeds are 30–65 mph. The starred 15-ft allowance requires project review and is not applied automatically.</p>
+          )}
+          <p className="guardrail-help">{result ? <>LA used: <strong>{format(result.LA)} ft</strong> · L1: {format(result.L1)} ft · Terminal: {format(result.terminal)} ft</> : "Complete the active fields to calculate. Lengths are entered in decimal feet."}</p></section>
           <details className="guardrail-project"><summary>Project details <span>Optional · included in the PDF</span></summary><div className="guardrail-fields">
             {field("project", "Project")}{field("route_location", "Route / location")}{field("job_number", "Job number")}
             {field("prepared_by", "Prepared by")}{field("checked_by", "Checked by")}{field("calculation_date", "Calculation date", undefined, { type: "date", hint: "Uses the generation date when blank." })}
@@ -238,10 +244,10 @@ export default function GuardrailCalculator() {
         </> : <div className="guardrail-empty"><h3>{runtime === "error" ? "Reload to restart the engine" : runtime === "loading" ? "Preparing local calculations" : "Review the active inputs"}</h3><p>{runtime === "loading" ? "The Python engine runs on your device. Initial loading needs an internet connection." : error || "Updated results appear here after the inputs are accepted. Old results are hidden when inputs change."}</p></div>}
         <fieldset className="guardrail-pdf" disabled={busy}><legend>Calculation PDF</legend>
           {select("pdf_style", "Package content", [["1", "Summary calculation sheet"], ["2", "Detailed calculations"], ["3", "Complete calculation package"]])}
-          <label className="guardrail-checkbox"><input type="checkbox" checked={values.include_appendices === "yes"} onChange={event => update("include_appendices", event.target.checked ? "yes" : "no")} /><span>Append MDOT reference documents<small>Roadway manual + {divided ? "GR-4" : "GR-4a"}, selected for this facility.</small></span></label>
+          <label className="guardrail-checkbox"><input type="checkbox" checked={values.include_appendices === "yes"} onChange={event => update("include_appendices", event.target.checked ? "yes" : "no")} /><span>Append MDOT reference documents<small>Roadway manual + {divided ? "GR-4" : "GR-4a"}, selected for this facility. {clearzone && threeR && "For 3R, obtain the Table 12-2-B source page separately."}</small></span></label>
           <button type="button" className="primary" disabled={!result || runtime !== "ready" || busy} onClick={() => void exportFile("export_pdf")}>Download calculation PDF</button>
         </fieldset>
-        <section className="guardrail-method"><h3>Source &amp; applicability</h3><p>{manifest.references.TABLE_9_6_A}. Clear-zone selection uses the existing simplified Table 9-2-A transcription.</p><p>{manifest.limitations}</p><a href={`https://github.com/colewinstead/Guardrail-Calculator/tree/${manifest.source_commit}`} target="_blank" rel="noreferrer">Guardrail {manifest.calculation_engine_version} · source {manifest.source_commit.slice(0, 7)}</a></section>
+        <section className="guardrail-method"><h3>Source &amp; applicability</h3><p>{manifest.references.TABLE_9_6_A}. {clearzone ? manifest.references[threeR ? "TABLE_12_2_B" : "TABLE_9_2_A"] : "LA is entered directly."}</p><p>{manifest.limitations}</p><a href={`https://github.com/colewinstead/Guardrail-Calculator/tree/${manifest.source_commit}`} target="_blank" rel="noreferrer">Guardrail {manifest.calculation_engine_version} · source {manifest.source_commit.slice(0, 7)}</a></section>
       </aside>
     </div>
   </main>;

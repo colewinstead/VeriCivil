@@ -34,8 +34,16 @@ class GuardrailSourceTests(unittest.TestCase):
 
     def test_pin_matches_every_imported_file(self):
         pin = update_guardrail.verify()
-        self.assertEqual(pin["commit"], "c5df84ad9376442e6ba0cac1d37611a3cd34df2b")
-        self.assertEqual(pin["version"], "V8.5.2")
+        self.assertEqual(pin["commit"], "4fe8b323b35644ce1cf32888607effbe6ffec999")
+        self.assertEqual(pin["version"], "V9.0.2")
+
+    def test_report_runtime_includes_vector_math(self):
+        from calculators.catalog import browser_runtime_manifest
+
+        runtime = browser_runtime_manifest()["calculators"]["guardrail"]
+        self.assertIn("guardrail_pdf_math.py", update_guardrail.FILES)
+        self.assertIn("calculators/guardrail/upstream/guardrail_pdf_math.py", runtime["modules"])
+        self.assertIn("matplotlib", runtime["pyodide_packages"])
 
     def test_modified_source_or_incomplete_manifest_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

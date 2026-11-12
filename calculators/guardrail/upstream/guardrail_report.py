@@ -3,7 +3,7 @@
 import re
 from datetime import datetime
 from typing import Optional
-from guardrail_design import APP_VERSION
+from guardrail_design import APP_VERSION, ClearZoneCriteria, HazardOffsetSource
 from guardrail_models import ReportModel
 from guardrail_parsing import parse_number as _first_number
 from guardrail_presentation import fmt_ft_in
@@ -70,6 +70,11 @@ def build_pdf_data(
         "__generated_time": generated_time,
         "__pdf_style": int(pdf_style_num),
         "__facility_code": facility,
+        "__math_inputs": {
+            "LA": f"{LA:.4f}", "LR": f"{LR:.4f}", "L1": f"{L1:.4f}",
+            "L2_near": f"{L2:.4f}", "L2_opp": f"{L2_opp:.4f}",
+            "q": f"{b_over_a:.4f}", "flared": a_over_b != 0,
+        },
         "__x_eq_opp": x_eq_opp,
         "__x_eq_near": x_eq_near,
         "__b_required_eq": (
@@ -173,7 +178,7 @@ def report_payload(report: ReportModel) -> dict:
     snapshot = report.snapshot
     inputs, project = snapshot.inputs, snapshot.project
     road, barrier = inputs.roadway, inputs.barrier
-    return build_pdf_data(
+    data = build_pdf_data(
         project.project, road.facility.value, inputs.speed, inputs.adt, barrier.LA,
         road.L2, road.L2_opp, road.lane_width, barrier.L1, barrier.terminal,
         barrier.flare_rate, report.style.value, snapshot.result.as_dict(),
@@ -181,3 +186,18 @@ def report_payload(report: ReportModel) -> dict:
         job_number=project.job_number, prepared_by=project.prepared_by,
         checked_by=project.checked_by, calculation_date=project.calculation_date,
     )
+    if barrier.offset_source == HazardOffsetSource.CLEAR_ZONE:
+        three_r = barrier.clear_zone_criteria == ClearZoneCriteria.THREE_R
+        data["Clear-Zone Criteria"] = (
+            "Table 12-2-B - 3R Rural Non-Freeway" if three_r
+            else "Table 9-2-A - New Construction"
+        )
+        data["Clear-Zone Slope"] = barrier.slope.value.replace("_", " ")
+        data["Clear-Zone Selection"] = barrier.clear_zone_selection.value
+        if three_r:
+            data["Clear-Zone Note"] = (
+                "Recoverable fill slopes, non-curbed facilities only. Use where Chapter 9 is "
+                "infeasible. The starred 15-ft allowance requires project review; "
+                "it is not applied automatically."
+            )
+    return data
