@@ -4,3 +4,5 @@ ezdxf>=1.4,<2.0
 certifi>=2026.4.22,<2027.0
 # PDF report validation in the test suite.
 pypdf>=5.9,<6.0
+# Guardrail's upstream vector PDF equations.
+matplotlib==3.10.8

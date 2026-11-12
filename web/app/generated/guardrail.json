@@ -1,7 +1,7 @@
 {
   "name": "Guardrail Length-of-Need Calculator",
-  "calculation_engine_version": "V8.5.2",
-  "source_commit": "c5df84ad9376442e6ba0cac1d37611a3cd34df2b",
+  "calculation_engine_version": "V9.0.2",
+  "source_commit": "4fe8b323b35644ce1cf32888607effbe6ffec999",
   "defaults": {
     "project": "",
     "route_location": "",
@@ -15,6 +15,7 @@
     "offset_source": "clearzone",
     "LA": "30",
     "slope": "6:1_or_flatter",
+    "clear_zone_criteria": "new_construction",
     "clear_zone_selection": "mid",
     "custom_clear_zone": "",
     "L2": "10",
@@ -58,8 +59,9 @@
   "references": {
     "TABLE_9_6_A": "MDOT Roadway Design Manual (2020), Table 9-6-A",
     "TABLE_9_2_A": "MDOT Roadway Design Manual, Table 9-2-A (existing simplified transcription)",
+    "TABLE_12_2_B": "MDOT Roadway Design Manual (2020), Table 12-2-B, recoverable fill slopes/non-curbed rural non-freeways",
     "DEFAULT_L1_FT": "MDOT Example 9-6-1",
     "DEFAULT_TERMINAL_SECTION_FT": "GR-4 (existing application interpretation)"
   },
-  "limitations": "Preserves Guardrail V8.5.2 behavior; regression parity is not independent engineering approval. The simplified clear-zone table, ADT boundaries, terminal contributions, minimum rail lengths, and opposing-hazard interpretation require project-specific verification against governing MDOT criteria. DXF and LandXML overlays are available only in the separate Windows application."
+  "limitations": "Preserves Guardrail V9.0.2 behavior; regression parity is not independent engineering approval. The clear-zone tables, ADT boundaries, terminal contributions, minimum rail lengths, and opposing-hazard interpretation require project-specific verification against governing MDOT criteria. DXF and LandXML overlays are available only in the separate Windows application."
 }

@@ -12,7 +12,7 @@ TARGET = ROOT / "calculators" / "guardrail" / "upstream"
 FILES = (
     "LICENSE", "guardrail_design.py", "guardrail_models.py", "guardrail_parsing.py",
     "guardrail_validation.py", "guardrail_engine.py", "guardrail_presentation.py",
-    "guardrail_report.py", "guardrail_pdf.py", "guardrail_pdf_files.py", "guardrail_resources.py",
+    "guardrail_report.py", "guardrail_pdf.py", "guardrail_pdf_math.py", "guardrail_pdf_files.py", "guardrail_resources.py",
     "gr manual.pdf", "GR-4.pdf", "GR-4a.pdf", "test_fixtures/phase3_baseline.json",
 )
 
@@ -49,7 +49,7 @@ def main():
             path = TARGET / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        (TARGET / "source.json").write_text(json.dumps(pin, indent=2) + "\n", encoding="utf-8")
+        (TARGET / "source.json").write_text(json.dumps(pin, indent=2) + "\n", encoding="utf-8", newline="\n")
         verify()
     print(f"Verified Guardrail {pin['version']} at {pin['commit']} ({len(FILES)} unchanged files).")
 

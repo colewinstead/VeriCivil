@@ -8,7 +8,7 @@ import tempfile
 
 from guardrail_design import (
     APP_VERSION, DEFAULT_L1_FT, DEFAULT_TERMINAL_SECTION_FT, DESIGN_REFERENCES,
-    SUPPORTED_SPEEDS, SUPPORTED_FLARE_RATES, ClearZoneSelection, HazardOffsetSource,
+    SUPPORTED_SPEEDS, SUPPORTED_FLARE_RATES, ClearZoneCriteria, ClearZoneSelection, HazardOffsetSource,
     ReportStyle, SideSlope,
 )
 from guardrail_engine import create_snapshot, resolve_clear_zone
@@ -23,7 +23,8 @@ DEFAULTS = {
     "project": "", "route_location": "", "job_number": "", "prepared_by": "",
     "checked_by": "", "calculation_date": "", "facility": "two_lane_two_way",
     "speed": "60", "adt": "6000", "offset_source": "clearzone", "LA": "30",
-    "slope": "6:1_or_flatter", "clear_zone_selection": "mid", "custom_clear_zone": "",
+    "slope": "6:1_or_flatter", "clear_zone_criteria": "new_construction",
+    "clear_zone_selection": "mid", "custom_clear_zone": "",
     "L2": "10", "lane_width": "12", "lanes_this": "2", "lanes_opposing": "2",
     "median_width": "40", "opposing_distance_mode": "manual", "added_distance": "",
     "L1_mode": "standard", "L1": str(DEFAULT_L1_FT),
@@ -31,8 +32,8 @@ DEFAULTS = {
     "flare_rate": "30", "pdf_style": "3", "include_appendices": "yes",
 }
 LIMITATIONS = (
-    "Preserves Guardrail V8.5.2 behavior; regression parity is not independent engineering approval. "
-    "The simplified clear-zone table, ADT boundaries, terminal contributions, minimum rail lengths, "
+    f"Preserves Guardrail {APP_VERSION} behavior; regression parity is not independent engineering approval. "
+    "The clear-zone tables, ADT boundaries, terminal contributions, minimum rail lengths, "
     "and opposing-hazard interpretation require project-specific verification against governing MDOT criteria. "
     "DXF and LandXML overlays are available only in the separate Windows application."
 )
@@ -61,6 +62,7 @@ def _values(raw):
     for name, choices in {
         "facility": ("two_lane_two_way", "divided_highway"),
         "offset_source": ("direct", "clearzone"), "slope": tuple(item.value for item in SideSlope),
+        "clear_zone_criteria": tuple(item.value for item in ClearZoneCriteria),
         "clear_zone_selection": tuple(item.value for item in ClearZoneSelection),
         "opposing_distance_mode": ("manual", "calculated"), "L1_mode": ("standard", "custom"),
         "terminal_mode": ("default", "custom"), "pdf_style": ("1", "2", "3"),
@@ -93,7 +95,8 @@ def snapshot(values):
     source = HazardOffsetSource(values["offset_source"])
     clearzone = source == HazardOffsetSource.CLEAR_ZONE
     LA = (resolve_clear_zone(speed, adt, values["slope"], values["clear_zone_selection"],
-                            number("custom_clear_zone") if values["clear_zone_selection"] == "custom" else None)
+                            number("custom_clear_zone") if values["clear_zone_selection"] == "custom" else None,
+                            criteria=values["clear_zone_criteria"])
           if clearzone else number("LA"))
     divided = values["facility"] == "divided_highway"
     road = create_roadway(
@@ -108,6 +111,7 @@ def snapshot(values):
         DEFAULT_TERMINAL_SECTION_FT if values["terminal_mode"] == "default" else number("terminal"),
         flare, source, SideSlope(values["slope"]) if clearzone else None,
         ClearZoneSelection(values["clear_zone_selection"]) if clearzone else None,
+        clear_zone_criteria=ClearZoneCriteria(values["clear_zone_criteria"]),
     )
     project = ProjectMetadata(**{name: values[name].strip() for name in asdict(ProjectMetadata())})
     if not project.calculation_date:
@@ -135,7 +139,10 @@ def dispatch(operation, payload_json="{}"):
         if (project.get("format") != "vericivil.guardrail" or type(project.get("version")) is not int
                 or project["version"] != 1):
             raise ValueError("Unsupported Guardrail project format or version.")
-        values = _values(project.get("values"))
+        stored_values = _object(project.get("values"), "Inputs").copy()
+        # Projects saved before V9 used only the new-construction table.
+        stored_values.setdefault("clear_zone_criteria", "new_construction")
+        values = _values(stored_values)
         result = calculate(values)
         return {"values": values, "calculation": result,
                 "engine_changed": project.get("source_commit") != SOURCE["commit"]}

@@ -97,7 +97,7 @@ CALCULATORS: tuple[dict[str, Any], ...] = (
         "runtime": {
             "modules": _GUARDRAIL_MODULES,
             "assets": [_GUARDRAIL_ROOT + name for name in _GUARDRAIL_SOURCE["sha256"] if name.endswith(".pdf")],
-            "pyodide_packages": ["micropip", "Pillow", "fonttools"],
+            "pyodide_packages": ["micropip", "Pillow", "fonttools", "matplotlib"],
             "micropip_packages": ["reportlab==4.4.7", "pypdf==5.9.0"],
         },
     },

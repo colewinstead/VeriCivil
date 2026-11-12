@@ -165,7 +165,8 @@ test("renders the free Guardrail workflow and identifies its upstream source", a
   const html = await response.text();
   for (const text of ["Guardrail Length-of-Need Calculator", "Length review", "Save project", "Open project",
     "Download calculation PDF", "Append MDOT reference documents", "Divided highway", "Source &amp; applicability",
-    "not independent engineering approval", "V8.5.2"]) assert.ok(html.includes(text), text);
+    "Clear-zone criteria", "New construction", "3R rural non-freeway", "Table 12-2-B",
+    "not independent engineering approval", "V9.0.2"]) assert.ok(html.includes(text), text);
   assert.match(html, /https:\/\/vericivil.com\/calculators\/guardrail/);
   assert.doesNotMatch(html, /Upgrade to Pro/);
   const catalog = await (await render("/calculators")).text();

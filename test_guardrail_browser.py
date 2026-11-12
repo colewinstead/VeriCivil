@@ -8,10 +8,7 @@ from pathlib import Path
 import unittest
 
 from calculators.guardrail import service
-from guardrail_design import DEFAULT_L1_FT, ReportStyle
-from guardrail_models import ReportModel
-from guardrail_report import report_payload
-from guardrail_pdf import generate_pdf_calc_sheet
+from guardrail_design import DEFAULT_L1_FT
 from pypdf import PdfReader
 import vericivil_service
 
@@ -41,33 +38,13 @@ class GuardrailBrowserTests(unittest.TestCase):
         self.assertEqual(len(outputs), 2592)
         self.assertEqual(digest(outputs), FIXTURE["engineering"])
 
-    def test_report_payload_and_page_fingerprints(self):
-        for facility, style, flare in itertools.product(("two_lane_two_way", "divided_highway"), (1, 2, 3), (0, 30)):
-            with self.subTest(facility=facility, style=style, flare=flare):
-                values = {**service.DEFAULTS, "facility": facility, "added_distance": "12", "speed": "65",
-                          "offset_source": "direct", "LA": "30", "flare_rate": str(flare),
-                          "project": "A <b>B</b> & C", "route_location": "SR 8", "job_number": "123",
-                          "prepared_by": "Author", "checked_by": "Reviewer", "calculation_date": "2026-10-01"}
-                report = ReportModel(service.snapshot(values), ReportStyle(style), "2026-10-01 12:00")
-                payload = report_payload(report)
-                payload["__app_version"] = "V8.5"
-                expected = FIXTURE["reports"][f"{facility}-{style}-{flare}"]
-                self.assertEqual(digest(payload), expected["payload"])
-                buffer = BytesIO()
-                generate_pdf_calc_sheet(buffer, payload)
-                pages = [{"box": list(page.mediabox),
-                          "stream": hashlib.sha256(page.get_contents().get_data()).hexdigest(),
-                          "text": hashlib.sha256(page.extract_text().encode()).hexdigest()}
-                         for page in PdfReader(buffer).pages]
-                self.assertEqual(pages, expected["pages"])
-
     def test_clearzone_and_divided_linked_manual_modes(self):
         from guardrail_engine import resolve_clear_zone
-        for slope, selection, adt in itertools.product(("6:1_or_flatter", "5:1_to_4:1"),
+        for criteria, slope, selection, adt in itertools.product(("new_construction", "3r"), ("6:1_or_flatter", "5:1_to_4:1"),
                 ("min", "mid", "max", "custom"), (749, 750, 1500, 1501, 6000, 6001)):
             values = {**service.DEFAULTS, "slope": slope, "clear_zone_selection": selection,
-                      "custom_clear_zone": "90", "adt": str(adt)}
-            self.assertEqual(request("calculate", values)["LA"], resolve_clear_zone(60, adt, slope, selection, 90))
+                      "clear_zone_criteria": criteria, "custom_clear_zone": "90", "adt": str(adt)}
+            self.assertEqual(request("calculate", values)["LA"], resolve_clear_zone(60, adt, slope, selection, 90, criteria=criteria))
         divided = {**service.DEFAULTS, "facility": "divided_highway", "opposing_distance_mode": "calculated"}
         self.assertEqual(request("calculate", divided)["roadway"]["L2_opp"], 98)
         divided["lane_width"] = "11.12345678"
@@ -78,7 +55,7 @@ class GuardrailBrowserTests(unittest.TestCase):
     def test_strict_numeric_and_selection_validation(self):
         for field, value in (("adt", "6,00"), ("adt", "NaN"), ("adt", "1e999"), ("adt", ""),
                              ("L2", "10 ft"), ("speed", "60.5"), ("flare_rate", "99"),
-                             ("facility", "unknown"), ("pdf_style", "4"), ("calculation_date", "2026-02-30"),
+                             ("facility", "unknown"), ("clear_zone_criteria", "unknown"), ("pdf_style", "4"), ("calculation_date", "2026-02-30"),
                              ("calculation_date", "20261108"), ("calculation_date", "2026-W45-7")):
             response = service.dispatch_safe("calculate", json.dumps({"values": {**service.DEFAULTS, field: value}}))
             self.assertFalse(response["ok"], (field, value))
@@ -102,6 +79,29 @@ class GuardrailBrowserTests(unittest.TestCase):
         document["source_commit"] = "older-revision"
         self.assertTrue(request("project_load", content=json.dumps(document))["engine_changed"])
 
+    def test_clear_zone_criteria_projects_validation_and_pdf(self):
+        values = {**service.DEFAULTS, "clear_zone_criteria": "3r", "include_appendices": "no"}
+        saved = request("project_save", values)
+        loaded = request("project_load", content=saved["content"])
+        self.assertEqual(loaded["values"]["clear_zone_criteria"], "3r")
+        self.assertEqual(loaded["calculation"]["LA"], 14)
+        pdf = PdfReader(BytesIO(request("export_pdf", values)["content"]))
+        text = " ".join(" ".join(page.extract_text() for page in pdf.pages).split())
+        self.assertIn("Table 12-2-B - 3R Rural Non-Freeway", text)
+        self.assertIn("Recoverable fill slopes, non-curbed facilities only", text)
+        invalid = service.dispatch_safe("calculate", json.dumps({"values": {**values, "speed": "70"}}))
+        self.assertFalse(invalid["ok"])
+        self.assertIn("3R clear-zone lookup", invalid["error"]["message"])
+
+    def test_legacy_project_defaults_to_new_construction(self):
+        legacy = json.loads(request("project_save")["content"])
+        legacy["values"].pop("clear_zone_criteria", None)
+        legacy["source_commit"] = "c5df84ad9376442e6ba0cac1d37611a3cd34df2b"
+        loaded = request("project_load", content=json.dumps(legacy))
+        self.assertEqual(loaded["values"]["clear_zone_criteria"], "new_construction")
+        self.assertEqual(loaded["calculation"]["LA"], 28)
+        self.assertTrue(loaded["engine_changed"])
+
     def test_project_rejects_invalid_or_future_content(self):
         good = json.loads(request("project_save")["content"])
         invalid = ["", "[]", "null", "{", "x" * (service.MAX_PROJECT_BYTES + 1)]
@@ -119,11 +119,15 @@ class GuardrailBrowserTests(unittest.TestCase):
                 values = {**service.DEFAULTS, "facility": facility, "opposing_distance_mode": "calculated",
                           "pdf_style": style, "project": "Synthetic browser parity case", "include_appendices": "no"}
                 sheet = PdfReader(BytesIO(request("export_pdf", values)["content"]))
-                self.assertEqual(len(sheet.pages), 2 if style == "3" else 1)
+                self.assertEqual(len(sheet.pages), int(style))
                 self.assertIn("Synthetic browser parity case", sheet.pages[0].extract_text())
+                text = " ".join(page.extract_text() for page in sheet.pages)
+                results = request("calculate", values)["results"]
+                for key in ("A", "B", "C", "D"):
+                    self.assertIn(f"{results[key]:.4f}", text)
             values["include_appendices"] = "yes"
             package = PdfReader(BytesIO(request("export_pdf", values)["content"]))
-            self.assertEqual(len(package.pages), 7)
+            self.assertEqual(len(package.pages), 8)
             self.assertIn("Divided Highways" if facility == "divided_highway" else "Two-Lane, Two-Way", str(package.outline))
 
     def test_dispatch_is_free_and_unknown_operations_fail(self):

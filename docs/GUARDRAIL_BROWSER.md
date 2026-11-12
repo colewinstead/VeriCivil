@@ -3,7 +3,7 @@
 VeriCivil's free `/calculators/guardrail` workspace uses the separately maintained
 [Guardrail Calculator](https://github.com/colewinstead/Guardrail-Calculator).
 The calculation engine and report modules are bundled unchanged from commit
-`c5df84ad9376442e6ba0cac1d37611a3cd34df2b` (V8.5.2). The exact source files,
+`4fe8b323b35644ce1cf32888607effbe6ffec999` (V9.0.2). The exact source files,
 bundled references, upstream characterization fixture, MIT license and SHA-256
 checksums are recorded in `calculators/guardrail/upstream/source.json`.
 
@@ -48,6 +48,7 @@ for native/Pyodide comparisons in this terminal session:
 
 ```powershell
 Set-Location "C:\Coding Projects\VeriCivil"
+python -m pip install -r requirements-lock.txt
 $env:PYTHONUTF8 = "1"
 python -m unittest -v
 Push-Location web
@@ -65,6 +66,7 @@ the already imported files. Use the import block above to bring in an update.
 ```sh
 python3 scripts/update_guardrail.py --source /path/to/Guardrail-Calculator --revision FULL_40_CHARACTER_COMMIT_SHA
 python3 scripts/update_guardrail.py
+python3 -m pip install -r requirements-lock.txt
 python3 -m unittest -v
 cd web
 npm exec tsc -- --noEmit
@@ -92,17 +94,29 @@ LA, custom clear zone, standard/custom transition and terminal lengths, supporte
 flare ratios and non-flared mode are retained. Divided-roadway opposing distances
 can remain manually entered or be linked to the lane/median dimensions. Linked
 values are resolved by upstream Python, without JavaScript engineering arithmetic.
+The clear-zone criteria selector offers new-construction Table 9-2-A and 3R rural
+non-freeway Table 12-2-B. Both resolve through upstream Python. The 3R lookup supports
+30–65 mph and preserves upstream restrictions for recoverable fill slopes and
+non-curbed facilities, including project review of the starred 15-ft allowance.
 
 All three report styles reuse the upstream report layout. Optional appendices
 include `gr manual.pdf` plus `GR-4.pdf` for divided highways or `GR-4a.pdf` for
-two-lane/two-way highways, with their original page sizes. Missing references fail
+two-lane/two-way highways. V9 renders searchable vector equations through the
+unchanged upstream `guardrail_pdf_math.py` and Matplotlib. Summary, detailed and
+combined reports have one, two and three pages respectively. The upstream report
+rotates Figure 9-6-A to landscape while preserving the other reference page sizes.
+Missing references fail
 the requested export rather than silently producing an incomplete package.
+For 3R projects, obtain the Table 12-2-B source page separately. The bundled
+reference PDFs contain the existing Chapter 9 and GR-4/GR-4a material.
 
 Version 1 `vericivil.guardrail` JSON files contain raw inputs, mode selections,
 project metadata, PDF preferences, source commit and engine version. Imports are
 limited to 64 KiB and validate supported fields, types, selections and active
 engineering inputs before replacing current state. Saved results are never trusted:
-reopening recalculates. A changed source revision is reported to the user. These
+reopening recalculates. The selected clear-zone criteria are saved with the inputs.
+Older browser projects without that selection reopen using new construction.
+A changed source revision is reported to the user. These
 files do not establish Windows project-file interoperability. File downloads are
 browser-managed; keep the downloaded JSON to reopen the project. There is no cloud
 project storage or automatic session recovery.
@@ -114,10 +128,26 @@ on unload prompts (especially on mobile). Saving a PDF does not save the project
 
 ## Validation and engineering boundaries
 
-`test_guardrail_browser.py` exercises the new JSON boundary against the upstream
-2,592-case numerical baseline and 12 report-payload/page fingerprints. The same
-tests run natively and through `web/tests/guardrail-parity.mjs` in Pyodide, including
-both facility-specific appendix packages. `web/tests/guardrail-smoke.mjs` tests the
+Engineering and report regressions belong to the Guardrail repository's own test
+suite. VeriCivil's `guardrail-upstream` CI job checks out the exact commit recorded
+in `source.json` and runs that suite unchanged, including its report-layout fixtures.
+Do not regenerate report fingerprints in VeriCivil to make an upgrade pass.
+
+To run the original upstream suite locally, use the Guardrail checkout at that same
+pinned commit:
+
+```powershell
+Push-Location "C:\Coding Projects\Guardrail-Calculator"
+$env:PYTHONUTF8 = "1"
+python -m unittest -v
+Pop-Location
+```
+
+`test_guardrail_browser.py` covers VeriCivil's JSON boundary, saved projects,
+adapter parity against the upstream 2,592-case numerical baseline, and PDF downloads
+with both facility-specific appendix packages. These integration tests run natively
+and through `web/tests/guardrail-parity.mjs` in Pyodide. They do not duplicate the
+upstream report fingerprints. `web/tests/guardrail-smoke.mjs` tests the
 rendered page, automatic calculation, stale-result protection, JSON download/reopen,
 PDF downloads, malformed imports, responsive layouts and unsaved navigation.
 
@@ -161,8 +191,8 @@ These are software regression and integration checks, not independent engineerin
 approval. Preserve the upstream architecture's unresolved questions about clear-zone
 interpretation, traffic direction/physical sides, terminal contributions, minimum
 rail lengths, opposing-hazard geometry and ADT table boundaries. Reports preserve
-the upstream contents; the existing sheet does not record the complete LA-selection
-provenance. Verify inputs, references, assumptions and applicability for the project.
+the upstream contents, including the clear-zone criteria, slope and selection for
+table-derived LA. Verify inputs, references, assumptions and applicability for the project.
 The upstream license accompanies its source; included MDOT PDFs are reference
 material, not a claim that the upstream MIT license licenses agency publications.
 
