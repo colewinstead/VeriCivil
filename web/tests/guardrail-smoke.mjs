@@ -1,7 +1,8 @@
 // Run with: env -u ELECTRON_RUN_AS_NODE web/node_modules/.bin/electron web/tests/guardrail-smoke.mjs
 import assert from "node:assert/strict";
 import { app, BrowserWindow } from "electron";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -142,4 +143,9 @@ app.whenReady().then(async () => {
   console.log("Guardrail renderer smoke passed: calculations, clear-zone criteria, 3R speed validation, legacy and current projects, PDF appendices, unsaved navigation, desktop/mobile overflow.");
   clearTimeout(timer); app.exit(0);
 }).catch(error => { console.error(error); clearTimeout(timer); app.exit(1); });
-app.on("quit", () => rmSync(temp, { recursive: true, force: true }));
+app.on("quit", () => {
+  // Windows keeps Electron profile files locked until this process exits.
+  spawn(process.execPath, ["-e", "require('node:fs').rmSync(process.argv[1], { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });", temp], {
+    detached: true, windowsHide: true, stdio: "ignore", env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+  }).unref();
+});
