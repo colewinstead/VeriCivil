@@ -174,7 +174,10 @@ export default function GuardrailCalculator() {
 
   return <main className="guardrail-shell">
     <header className="guardrail-header">
-      <div><h1>Guardrail <span>Length of Need</span></h1><p>Review near-side and opposing-side lengths, then carry the calculation into a PDF. Free to use; calculations and project files stay in this browser.</p></div>
+      <div>
+        <h1>Guardrail <span>Length of Need</span></h1>
+        <p>Calculate near-side and opposing-side lengths using Mississippi Department of Transportation (MDOT) design criteria and export a PDF calculation sheet. Free to use. Calculations and project files stay in this browser.</p>
+      </div>
       <p className={`guardrail-runtime ${runtime}`} role="status">{status}</p>
     </header>
     <div className="guardrail-toolbar" aria-label="Project files">
