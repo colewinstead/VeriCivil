@@ -34,6 +34,7 @@ _SUPER_MODULES = [
     "super_qa.py",
     "super_service.py",
     "super_transition.py",
+    "super_reverse.py",
     "super_ui.py",
 ]
 

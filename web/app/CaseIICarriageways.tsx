@@ -9,11 +9,11 @@ export const CASE_II_DEFAULTS = Object.fromEntries(["left", "right"].map(side =>
   acknowledge_spiral_override: false, e_manual: "", Lr_manual: "", Lt_manual: "",
 }]));
 
-export function CaseIIInputs({ value, settings, result, onChange, onSettingsChange, speeds, spiral, lengthsOnly }: {
+export function CaseIIInputs({ value, settings, result, onChange, onSettingsChange, speeds, spiral, lengthsOnly, reverseTangent = false }: {
   value: Dict; settings: Dict; result?: Dict; onChange: (changes: Dict) => void; onSettingsChange: (changes: Dict) => void;
-  speeds: string[]; spiral: boolean; lengthsOnly: boolean;
+  speeds: string[]; spiral: boolean; lengthsOnly: boolean; reverseTangent?: boolean;
 }) {
-  const derived = settings.case_ii_geometry_mode === "shared_corridor";
+  const derived = reverseTangent || settings.case_ii_geometry_mode === "shared_corridor";
   const coordinated = settings.case_ii_placement_mode === "coordinated";
   const changePlacement = (mode: string) => {
     const left = value?.left || {};
@@ -27,10 +27,10 @@ export function CaseIIInputs({ value, settings, result, onChange, onSettingsChan
         ? { runoff_tangent_percent: left.runoff_tangent_percent, circular_placement_basis: left.circular_placement_basis } : {}) });
   };
   return <div className="case-ii-inputs full">
-    <p className="helper">Both carriageways use the common baseline stations. Left/right look ahead along increasing station. Each median-side travel-lane edge is a fixed pivot at the same relative elevation.</p>
+    <p className="helper">{reverseTangent ? "Both curves share these carriageway sections and offsets; baseline radii are entered above." : "Both carriageways use the common baseline stations."} Left/right look ahead along increasing station. Each median-side travel-lane edge is a fixed pivot at the same relative elevation.</p>
     <div className="form-grid">
-      <label className="field full"><span>Carriageway geometry</span><select aria-label="Case II geometry" value={settings.case_ii_geometry_mode || "explicit_radii"} onChange={event => onSettingsChange({case_ii_geometry_mode:event.target.value, ...(event.target.value === "shared_corridor" ? {case_ii_placement_mode:"coordinated"} : {})})}><option value="shared_corridor">Shared corridor — derive radii</option><option value="explicit_radii">Engineer-entered design radii</option></select></label>
-      {derived && <label className="field full"><span>Baseline radius (ft) <b>*</b></span><input aria-label="Case II baseline radius" readOnly={settings.geometry_provenance?.source === "LandXML"} type="number" min="0" step="any" value={settings.radius ?? ""} onChange={event => onSettingsChange({radius:event.target.value})} /><small>The baseline may be at a pavement edge, roadway centerline, or median. Imported baseline geometry remains unchanged.</small></label>}
+      {!reverseTangent && <label className="field full"><span>Carriageway geometry</span><select aria-label="Case II geometry" value={settings.case_ii_geometry_mode || "explicit_radii"} onChange={event => onSettingsChange({case_ii_geometry_mode:event.target.value, ...(event.target.value === "shared_corridor" ? {case_ii_placement_mode:"coordinated"} : {})})}><option value="shared_corridor">Shared corridor — derive radii</option><option value="explicit_radii">Engineer-entered design radii</option></select></label>}
+      {derived && !reverseTangent && <label className="field full"><span>Baseline radius (ft) <b>*</b></span><input aria-label="Case II baseline radius" readOnly={settings.geometry_provenance?.source === "LandXML"} type="number" min="0" step="any" value={settings.radius ?? ""} onChange={event => onSettingsChange({radius:event.target.value})} /><small>The baseline may be at a pavement edge, roadway centerline, or median. Imported baseline geometry remains unchanged.</small></label>}
       {!lengthsOnly && <label className="field full"><span>Transition coordination</span><select aria-label="Case II placement" value={settings.case_ii_placement_mode || "independent"} onChange={event => changePlacement(event.target.value)}><option value="coordinated">Coordinated full-super stations</option><option value="independent">Independent placement</option></select></label>}
       {coordinated && !spiral && !lengthsOnly && <>
         <label className="field"><span>Common circular placement basis</span><select aria-label="Case II common placement basis" value={settings.circular_placement_basis || "runoff"} onChange={event => onSettingsChange({circular_placement_basis:event.target.value})}><option value="runoff">Runoff only</option><option value="runoff_runout">Runoff + runout</option></select></label>
@@ -44,8 +44,8 @@ export function CaseIIInputs({ value, settings, result, onChange, onSettingsChan
       const field = (key: string, label: string, required = true) => <label className="field"><span>{label}{required && <b> *</b>}</span><input aria-label={`${side} carriageway ${label}`} type="number" step="any" value={inputs[key] ?? ""} onChange={event => update(key, event.target.value)} /></label>;
       const negative = String(inputs.initial_slope).startsWith("-");
       return <fieldset key={side} className="case-ii-side"><legend>{side === "left" ? "Left" : "Right"} carriageway</legend><div className="form-grid">
-        <label className="field"><span>Design speed <b>*</b></span><select aria-label={`${side} carriageway design speed`} value={inputs.speed} onChange={event => update("speed", event.target.value)}><option value="">Select mph</option>{speeds.map(speed => <option key={speed}>{speed}</option>)}</select></label>
-        {derived ? <label className="field"><span>Derived design radius (ft)</span><input aria-label={`${side} carriageway derived radius`} readOnly value={result?.carriageways?.[side]?.radius_provenance?.source === "baseline_offset" ? result.carriageways[side].radius_provenance.design_radius_ft : ""} /></label> : field("radius", "Design radius (ft)")}
+        {!reverseTangent && <label className="field"><span>Design speed <b>*</b></span><select aria-label={`${side} carriageway design speed`} value={inputs.speed} onChange={event => update("speed", event.target.value)}><option value="">Select mph</option>{speeds.map(speed => <option key={speed}>{speed}</option>)}</select></label>}
+        {!reverseTangent && (derived ? <label className="field"><span>Derived design radius (ft)</span><input aria-label={`${side} carriageway derived radius`} readOnly value={result?.carriageways?.[side]?.radius_provenance?.source === "baseline_offset" ? result.carriageways[side].radius_provenance.design_radius_ft : ""} /></label> : field("radius", "Design radius (ft)"))}
         <label className="field"><span>Same-direction lanes</span><select aria-label={`${side} carriageway lanes`} value={inputs.lane_count} onChange={event => update("lane_count", Number(event.target.value))}>{[1,2,3,4,5,6,7].map(count => <option key={count}>{count}</option>)}</select></label>
         {field("lane_width", "Lane width (ft)")}
         {field("pivot_offset", "Pivot baseline offset (ft)", derived || !lengthsOnly)}
@@ -58,7 +58,7 @@ export function CaseIIInputs({ value, settings, result, onChange, onSettingsChan
           <label className="field"><span>Circular placement basis</span><select aria-label={`${side} carriageway placement basis`} value={inputs.circular_placement_basis} onChange={event => update("circular_placement_basis", event.target.value)}><option value="runoff">Runoff only</option><option value="runoff_runout">Runoff + runout</option></select></label>
           {field("runoff_tangent_percent", `${inputs.circular_placement_basis === "runoff_runout" ? "Total transition" : "Runoff"} on tangent (%)`)}
         </>)}
-      </div><details><summary>Carriageway overrides</summary><div className="form-grid">{field("e_manual", "Manual e (decimal)", false)}{field("Lr_manual", "Runoff Lr (ft)", false)}{field("Lt_manual", "Runout Lt (ft)", false)}</div></details></fieldset>;
+      </div>{!reverseTangent && <details><summary>Carriageway overrides</summary><div className="form-grid">{field("e_manual", "Manual e (decimal)", false)}{field("Lr_manual", "Runoff Lr (ft)", false)}{field("Lt_manual", "Runout Lt (ft)", false)}</div></details>}</fieldset>;
     })}</div>
     <p className="helper">Uniform slope per carriageway, travel lanes only. {derived ? "Constant pavement offsets derive the design radii; no new carriageway alignment is constructed." : "Design radii are engineer-entered; the pavement reference is not inferred."} Shoulders and separate carriageway alignments are outside this model.</p>
   </div>;

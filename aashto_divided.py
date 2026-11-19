@@ -17,6 +17,18 @@ def is_case_ii(result: dict) -> bool:
     return result.get("transition_method") == METHOD
 
 
+def common_curve_demand(children, percent, basis):
+    """Existing Case II common full-super offset from each circular boundary."""
+    demands = []
+    for child in children.values():
+        if child["no_transition_required"]:
+            continue
+        fraction = section.circular_runoff_fraction(percent, basis, child["Lr"], child["Lt"])
+        demands.append((1 - percent / 100) * (child["Lr"] + child["Lt"]) if basis == "runoff_runout"
+                       else (1 - fraction) * child["Lr"])
+    return max(demands, default=0.0)
+
+
 def calculate(values: dict, station_equations=None, alignment_range=None, *, lengths_only=False) -> dict:
     from app_info import CALCULATION_ENGINE_VERSION
     from criteria_info import criteria_metadata, normalize_profile_id
@@ -108,16 +120,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
         if active:
             percent = section._number(values, "runoff_tangent_percent")
             basis = values.get("circular_placement_basis", "runoff")
-            demands = []
-            for child in active:
-                fraction = section.circular_runoff_fraction(percent, basis, child["Lr"], child["Lt"])
-                # RC can have runout only; total-transition placement still has a curve-side demand.
-                demand = ((1 - percent / 100) * (child["Lr"] + child["Lt"]) if basis == "runoff_runout"
-                          else (1 - fraction) * child["Lr"])
-                demands.append(demand)
+            demand = common_curve_demand(children, percent, basis)
             equations = Super.strict_station_equations(station_equations)
-            full_anchors = (section._station(values, "pc", "PC", equations, alignment_range) + max(demands),
-                            section._station(values, "pt", "PT", equations, alignment_range) - max(demands))
+            full_anchors = (section._station(values, "pc", "PC", equations, alignment_range) + demand,
+                            section._station(values, "pt", "PT", equations, alignment_range) - demand)
         for side in SIDES:
             try:
                 children[side] = section.calculate(requests[side], station_equations, alignment_range,

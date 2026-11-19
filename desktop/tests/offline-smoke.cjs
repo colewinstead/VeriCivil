@@ -1,5 +1,5 @@
 const { app, dialog, nativeImage, nativeTheme } = require('electron');
-const { mkdtemp, readFile, readdir, rm } = require('node:fs/promises');
+const { mkdtemp, readFile, readdir, rm, writeFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
@@ -287,6 +287,59 @@ original.start().then(async (window) => {
     await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Close').click()");
   }
   console.log('PASS: desktop update notice and toolbar highlight persist for available/manual/downloaded updates; review opens the dialog without forcing it.');
+  await window.webContents.executeJavaScript(`window.setReverseField = (name, value) => {
+    const label = Array.from(document.querySelectorAll('.inputs-panel label')).find(label => label.querySelector('span')?.textContent.replaceAll('*','').trim() === name);
+    const field = document.querySelector('[aria-label="' + name + '"]') || label?.querySelector('input,select');
+    if (!field) throw new Error('Missing reverse field: ' + name);
+    const prototype = field.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype,'value').set.call(field,value);
+    field.dispatchEvent(new Event(field.tagName === 'SELECT' ? 'change' : 'input',{bubbles:true}));
+  }; undefined`);
+  const setReverseField = (name, value) => window.webContents.executeJavaScript(`window.setReverseField(${JSON.stringify(name)},${JSON.stringify(value)})`);
+  const waitReverse = async () => {
+    for (let attempt=0; attempt<200; attempt++) {
+      const state = await window.webContents.executeJavaScript(`({value:document.querySelector('.results-panel .metric-grid strong')?.textContent,error:document.querySelector('.notice.error')?.textContent})`);
+      if (state.value?.endsWith(' ft')) return Number.parseFloat(state.value);
+      await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    throw new Error('Reverse tangent result did not appear: ' + await window.webContents.executeJavaScript("document.querySelector('.inputs-panel').innerText"));
+  };
+  await setReverseField('Manual calculation','reverse');
+  for (const profile of ['mdot','tdot','aashto']) {
+    const profileId = await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('option')).find(option=>option.value.startsWith(${JSON.stringify(profile)}))?.value`);
+    await setReverseField('Governing standard',profileId);
+    await setReverseField('Design speed','65');
+    await setReverseField('Curve 1 radius (ft)','4000');
+    await setReverseField('Curve 2 radius (ft)','3000');
+    if (profile.startsWith('aashto')) {
+      await setReverseField('Circular placement basis','runoff_runout');
+      await setReverseField('Total transition on tangent (%)','50');
+    }
+    const demand = await waitReverse();
+    const expected = JSON.parse(execFileSync(python,['-c','import json,super_reverse,sys; print(json.dumps(super_reverse.required_reverse_tangent({"criteria_profile":sys.argv[1],"speed":65,"runoff_tangent_percent":50,"circular_placement_basis":"runoff_runout"},4000,3000)))',profileId],{cwd:root,encoding:'utf8'}));
+    assert.equal(demand,Number(expected.independent_tangent_ft.toFixed(2)));
+    assert.equal(await window.webContents.executeJavaScript("Array.from(document.querySelectorAll('.inputs-panel label span')).some(span=>['PC station','PT station','Manual e'].includes(span.textContent.trim()))"),false);
+  }
+  await setReverseField('Curve 2 radius (ft)','3500');
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('.results-panel .metric-grid strong')"),false,'changed radius hides stale advice');
+  await waitReverse();
+  await setReverseField('Roadway','divided_case_ii');
+  await setReverseField('left carriageway Pivot baseline offset (ft)','-12');
+  await setReverseField('right carriageway Pivot baseline offset (ft)','12');
+  await waitReverse();
+  assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.results-panel tbody tr').length"),4);
+  assert.equal(await window.webContents.executeJavaScript("!!document.querySelector('[aria-label=\"Case II geometry\"]')"),false);
+  if (process.env.VERICIVIL_CAPTURE_DIR) {
+    await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR,'reverse-tangent-case-ii.png'),(await window.capturePage()).toPNG());
+  }
+  await setReverseField('Roadway','one_way');
+  await setReverseField('Rotation axis','left_edge');
+  await waitReverse();
+  assert.equal(await window.webContents.executeJavaScript("document.querySelectorAll('.results-panel tbody tr').length"),2);
+  if (process.env.VERICIVIL_CAPTURE_DIR) {
+    await writeFile(path.join(process.env.VERICIVIL_CAPTURE_DIR,'reverse-tangent-ramp.png'),(await window.capturePage()).toPNG());
+  }
+  console.log('PASS: station-free reverse tangent UI covers MDOT, TDOT, AASHTO, Case II and ramps; stale advice clears and station fields stay hidden.');
   await window.webContents.executeJavaScript(`(() => {
     window.confirm = () => true;
     const original = Worker.prototype.postMessage;
