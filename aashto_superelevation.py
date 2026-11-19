@@ -30,6 +30,57 @@ def circular_runoff_fraction(percent: float, basis: str, runoff: float, runout: 
     return (fraction * (runoff + runout) - runout) / runoff if runoff else 0.0
 
 
+def circular_layout(runoff, runout, percent, basis, full_super_offset=None):
+    """Transition offsets relative to PC (exit placement is mirrored at PT)."""
+    p = circular_runoff_fraction(percent, basis, runoff, runout)
+    full = (1 - p) * runoff if full_super_offset is None else full_super_offset
+    run_start = -p * runoff if full_super_offset is None else full - runoff
+    return {"fraction": p, "full": full, "run_start": run_start, "start": run_start - runout}
+
+
+def circular_pc_bank(layout, runoff, runout, initial_bank, zero_bank, target_bank, bank_sign, coordinated=False):
+    """Actual bank at the circular boundary, shared with station-free advice."""
+    start, run_start, p = layout["start"], layout["run_start"], layout["fraction"]
+    if coordinated:
+        if 0 <= start:
+            return bank_sign * initial_bank
+        if 0 < run_start and runout:
+            return bank_sign * (initial_bank - start / runout * (zero_bank - initial_bank))
+        if runoff:
+            return bank_sign * (zero_bank + min(1, -run_start / runoff) * (target_bank - zero_bank))
+        return bank_sign * target_bank
+    if p >= 0:
+        return abs(zero_bank + p * (bank_sign * abs(target_bank) - zero_bank))
+    return bank_sign * (initial_bank - start / runout * (zero_bank - initial_bank))
+
+
+def circular_bank_limit(speed, radius, rate, pc_bank):
+    attained = pc_bank / rate
+    return 2.15 / (1 + attained) * speed**2 / (32.2 * radius) if pc_bank > 0 else math.inf
+
+
+def circular_length_demand(result, percent, basis, full_super_offset=None):
+    """Evaluate circular placement without constructing a stationed curve."""
+    if result["no_transition_required"]:
+        return 0.0
+    layout = circular_layout(result["Lr"], result["Lt"], percent, basis, full_super_offset)
+    design = result["circular_design"]
+    if result["e"]:
+        bank = circular_pc_bank(layout, result["Lr"], result["Lt"], design["initial_bank"],
+                                design["zero_bank"], design["target_bank"], design["bank_sign"],
+                                full_super_offset is not None)
+        limit = circular_bank_limit(design["speed"], design["radius"], result["e"], bank)
+        if bank >= limit:
+            message = f"Superelevation at PC/PT ({bank:.5f} ft/ft) fails Equation 3-25 (< {limit:.5f}); reduce tangent runoff proportion or review a spiral transition."
+            raise TransitionError(message, [{"code": "PC_BANK_LIMIT", "severity": "block", "message": message}])
+        if percent in {0, 100}:
+            result["warnings"].append("Review project placement: runoff entirely on tangent or curve; AASHTO §3.3.8.2.3.")
+    result["calculation_metadata"]["calculation_sources"].append({
+        "component": "Transition placement", "reference": f"Project input: {percent:g}% of {basis}; AASHTO §3.3.8.2.3; Equation 3-25 bank check",
+        "mode": "project_input"})
+    return max(0.0, -layout["start"])
+
+
 def _number(values, key, default=None):
     raw = values.get(key, default)
     if raw in (None, ""):
@@ -421,6 +472,8 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             "result_type": "spiral_length_check",
             "e": e, "e_source": rate_source["reference"], "e_note": rate_source.get("selection", ""),
             "Lr": Lr, "Lt": Lt, "crown_state": crown_state,
+            "circular_design": {"speed": speed, "radius": radius, "initial_bank": initial_bank,
+                                "zero_bank": zero_bank, "target_bank": target_bank, "bank_sign": bank_sign},
             "no_transition_required": no_transition, "section_transition": section_transition,
             "minimum_spiral_on_tangent_ft": Lr,
             "minimum_spiral_in_spiral_ft": Lr + Lt,
@@ -589,22 +642,19 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
                 pc,
                 pt,
             )
-        run_start, run_end = pc - p * Lr, pt + p * Lr
-        start, zero_start, zero_end, end = (
-            run_start - Lt,
-            run_start,
-            run_end,
-            run_end + Lt,
-        )
-        pc_full, pt_full = pc + (1 - p) * Lr, pt - (1 - p) * Lr
+        layout = circular_layout(Lr, Lt, placement_percent, placement_basis)
+        pc_full, pt_full = pc + layout["full"], pt - layout["full"]
         if _full_super_anchors is not None and not no_transition:
             if not _case_ii:
                 raise ValueError("Common full-super anchors require a paired Case II calculation.")
             pc_full, pt_full = _full_super_anchors
             if not all(math.isfinite(s) for s in (pc_full, pt_full)):
                 raise ValueError("Common full-super anchors must be finite.")
-            run_start, run_end = pc_full - Lr, pt_full + Lr
-            start, zero_start, zero_end, end = run_start - Lt, run_start, run_end, run_end + Lt
+            layout = circular_layout(Lr, Lt, placement_percent, placement_basis, pc_full - pc)
+        run_start, run_end = pc + layout["run_start"], pt - layout["run_start"]
+        if _full_super_anchors is not None and not no_transition:
+            run_end = pt_full + Lr
+        start, zero_start, zero_end, end = run_start - Lt, run_start, run_end, run_end + Lt
         anchors = {"PC": pc, "PT": pt}
         sources.append(
             {
@@ -616,21 +666,10 @@ def calculate(values: dict, station_equations=None, alignment_range=None, *, len
             }
         )
         if e and not no_transition:
-            if _full_super_anchors is not None:
-                if pc <= start:
-                    pc_bank = bank_sign * initial_bank
-                elif pc < run_start and Lt:
-                    pc_bank = bank_sign * (initial_bank + (pc - start) / Lt * (zero_bank - initial_bank))
-                elif Lr:
-                    pc_bank = bank_sign * (zero_bank + min(1, (pc - run_start) / Lr) * (target_bank - zero_bank))
-                else:
-                    pc_bank = bank_sign * target_bank
-            elif p >= 0:
-                pc_bank = abs(zero_bank + p * (bank_sign * e - zero_bank))
-            else:
-                pc_bank = bank_sign * (initial_bank + (pc - start) / Lt * (zero_bank - initial_bank))
-            attained = pc_bank / e
-            limit = 2.15 / (1 + attained) * speed**2 / (32.2 * radius) if pc_bank > 0 else math.inf
+            actual_layout = {**layout, "start": start - pc, "run_start": run_start - pc}
+            pc_bank = circular_pc_bank(actual_layout, Lr, Lt, initial_bank, zero_bank, target_bank, bank_sign,
+                                       _full_super_anchors is not None)
+            limit = circular_bank_limit(speed, radius, e, pc_bank)
             if pc_bank >= limit and len(compound_sides) < 2:
                 finding(
                     "PC_BANK_LIMIT",

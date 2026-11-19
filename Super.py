@@ -1352,6 +1352,7 @@ def _calculate_tdot_superelevation(
     Lt_manual_input: str,
     station_equations: list[dict] | None,
     alignment_station_range: tuple[float, float] | None,
+    *, lengths_only: bool = False,
 ) -> dict:
     """Calculate the TDOT RD11 table profile without changing MDOT behavior."""
     speed_mph = parse_required(speed_input, "Design speed")
@@ -1383,16 +1384,6 @@ def _calculate_tdot_superelevation(
         )
     lookup = tdot_criteria.lookup_superelevation(speed_mph, radius_ft, area)
     n1, bw, lanes_used = tdot_criteria.lane_factors(lanes_rotated)
-
-    pc_civil_ft = parse_station(pc_input)
-    pt_civil_ft = parse_station(pt_input) if pt_input.strip() else None
-    normalized_equations = normalize_station_equations(station_equations)
-    pc_ft = civil_to_internal_station(pc_civil_ft, normalized_equations, alignment_station_range)
-    pt_ft = (
-        civil_to_internal_station(pt_civil_ft, normalized_equations, alignment_station_range)
-        if pt_civil_ft is not None
-        else None
-    )
 
     if str(rel_grad_input or "").strip():
         relative_gradient, rel_grad_note = parse_relative_gradient(rel_grad_input, speed_mph)
@@ -1440,21 +1431,6 @@ def _calculate_tdot_superelevation(
             Lt = L * normal_crown / e
 
     total_transition = L + Lt
-    pnc_ft = pc_ft - total_transition / 2.0
-    zero_crown_ft = pnc_ft + Lt
-    reverse_section_ft = zero_crown_ft + Lt
-    full_super_ft = pc_ft + total_transition / 2.0
-
-    full_super_out_ft = None
-    zero_crown_out_ft = None
-    reverse_section_out_ft = None
-    pnc_out_ft = None
-    if pt_ft is not None:
-        full_super_out_ft = pt_ft - total_transition / 2.0
-        zero_crown_out_ft = full_super_out_ft + L
-        reverse_section_out_ft = zero_crown_out_ft - Lt
-        pnc_out_ft = pt_ft + total_transition / 2.0
-
     warnings: list[str] = []
     if lookup.get("below_minimum_radius") and e_manual is None:
         warnings.append(str(lookup["note"]))
@@ -1495,10 +1471,6 @@ def _calculate_tdot_superelevation(
         },
         "facility": layout,
         "area_type": area,
-        "pc_ft": pc_ft,
-        "pt_ft": pt_ft,
-        "station_equations": normalized_equations,
-        "alignment_station_range": alignment_station_range,
         "e": e,
         "e_max": float(lookup["e_max"]),
         "e_source": e_source,
@@ -1522,17 +1494,7 @@ def _calculate_tdot_superelevation(
         "crown_state": "Normal crown" if normal_crown_only else "See standard drawings",
         "normal_crown_only": normal_crown_only,
         "transition_method": "tdot_simple_curve_half_total",
-        "pnc_ft": pnc_ft,
-        "zero_crown_ft": zero_crown_ft,
-        "reverse_section_ft": reverse_section_ft,
         # Compatibility names used by existing reports and project files.
-        "reverse_crown_ft": zero_crown_ft,
-        "full_super_ft": full_super_ft,
-        "pnc_out_ft": pnc_out_ft,
-        "zero_crown_out_ft": zero_crown_out_ft,
-        "reverse_section_out_ft": reverse_section_out_ft,
-        "reverse_crown_out_ft": zero_crown_out_ft,
-        "full_super_out_ft": full_super_out_ft,
         "segments": {
             "runoff_Lr": L,
             "runout_Lt": Lt,
@@ -1542,6 +1504,50 @@ def _calculate_tdot_superelevation(
         "warnings": warnings,
     }
     result["calculation_metadata"]["criteria"] = criteria_for_result(result)
+    if lengths_only:
+        result["below_minimum_radius"] = bool(lookup.get("below_minimum_radius"))
+    if not lengths_only:
+        pc_civil_ft = parse_station(pc_input)
+        pt_civil_ft = parse_station(pt_input) if pt_input.strip() else None
+        normalized_equations = normalize_station_equations(station_equations)
+        pc_ft = civil_to_internal_station(pc_civil_ft, normalized_equations, alignment_station_range)
+        pt_ft = (
+            civil_to_internal_station(pt_civil_ft, normalized_equations, alignment_station_range)
+            if pt_civil_ft is not None
+            else None
+        )
+
+        pnc_ft = pc_ft - total_transition / 2.0
+        zero_crown_ft = pnc_ft + Lt
+        reverse_section_ft = zero_crown_ft + Lt
+        full_super_ft = pc_ft + total_transition / 2.0
+
+        full_super_out_ft = None
+        zero_crown_out_ft = None
+        reverse_section_out_ft = None
+        pnc_out_ft = None
+        if pt_ft is not None:
+            full_super_out_ft = pt_ft - total_transition / 2.0
+            zero_crown_out_ft = full_super_out_ft + L
+            reverse_section_out_ft = zero_crown_out_ft - Lt
+            pnc_out_ft = pt_ft + total_transition / 2.0
+
+        result.update({
+            "pc_ft": pc_ft,
+            "pt_ft": pt_ft,
+            "station_equations": normalized_equations,
+            "alignment_station_range": alignment_station_range,
+            "pnc_ft": pnc_ft,
+            "zero_crown_ft": zero_crown_ft,
+            "reverse_section_ft": reverse_section_ft,
+            "reverse_crown_ft": zero_crown_ft,
+            "full_super_ft": full_super_ft,
+            "pnc_out_ft": pnc_out_ft,
+            "zero_crown_out_ft": zero_crown_out_ft,
+            "reverse_section_out_ft": reverse_section_out_ft,
+            "reverse_crown_out_ft": zero_crown_out_ft,
+            "full_super_out_ft": full_super_out_ft,
+        })
     return result
 
 
@@ -1566,6 +1572,7 @@ def calculate_superelevation(
     profile_options: dict | None = None,
     *,
     compound_sides: tuple[str, ...] = (),
+    lengths_only: bool = False,
 ) -> dict:
     profile_id = normalize_profile_id(criteria_profile)
     from aashto_criteria import PROFILE_ID as AASHTO_PROFILE_ID
@@ -1577,7 +1584,7 @@ def calculate_superelevation(
                   "area": area_type, "e_manual": e_manual_input, "normal_crown": normal_crown_input,
                   "Lr_manual": L_manual_input, "Lt_manual": Lt_manual_input,
                   "friction":friction_input, "rel_grad":rel_grad_input}
-        return calculate(values, station_equations, alignment_station_range, compound_sides=compound_sides)
+        return calculate(values, station_equations, alignment_station_range, compound_sides=compound_sides, lengths_only=lengths_only)
     if profile_options and str(profile_options.get("override_standard_placement")).lower() in {"true","1"}:
         from aashto_superelevation import override_circular_placement
         result = calculate_superelevation(pc_input, pt_input, speed_input, radius_input, facility, area_type,
@@ -1602,6 +1609,7 @@ def calculate_superelevation(
             Lt_manual_input,
             station_equations,
             alignment_station_range,
+            lengths_only=lengths_only,
         )
     speed_mph = parse_required(speed_input, "Design speed")
     radius_ft = parse_required(radius_input, "Curve radius")
@@ -1612,11 +1620,6 @@ def calculate_superelevation(
     L_manual = parse_optional(L_manual_input, None)
     Lt_manual = parse_optional(Lt_manual_input, None)
 
-    pc_civil_ft = parse_station(pc_input)
-    pt_civil_ft = parse_station(pt_input) if pt_input.strip() else None
-    normalized_equations = normalize_station_equations(station_equations)
-    pc_ft = civil_to_internal_station(pc_civil_ft, normalized_equations, alignment_station_range)
-    pt_ft = civil_to_internal_station(pt_civil_ft, normalized_equations, alignment_station_range) if pt_civil_ft is not None else None
     area = (area_type or "rural").strip().lower() or "rural"
     if area.startswith("local"):
         facility = "centerline"
@@ -1706,18 +1709,6 @@ def calculate_superelevation(
     else:
         Lt = compute_tangent_runout(lane_width_ft, n1, normal_crown, relative_gradient, bw)
 
-    reverse_crown_ft = pc_ft - 0.7 * L
-    pnc_ft = reverse_crown_ft - Lt
-    full_super_ft = pc_ft + 0.3 * L
-
-    full_super_out_ft = None
-    reverse_crown_out_ft = None
-    pnc_out_ft = None
-    if pt_ft is not None:
-        full_super_out_ft = pt_ft - 0.3 * L
-        reverse_crown_out_ft = pt_ft + 0.7 * L
-        pnc_out_ft = reverse_crown_out_ft + Lt
-
     result = {
         "calculation_metadata": {
             "engine_version": CALCULATION_ENGINE_VERSION,
@@ -1750,10 +1741,6 @@ def calculate_superelevation(
         },
         "facility": facility,
         "area_type": area,
-        "pc_ft": pc_ft,
-        "pt_ft": pt_ft,
-        "station_equations": normalized_equations,
-        "alignment_station_range": alignment_station_range,
         "e": e,
         "e_max": e_max,
         "e_source": e_source,
@@ -1777,12 +1764,6 @@ def calculate_superelevation(
         "crown_state": crown_state,
         "normal_crown_only": normal_crown_only,
         "transition_method": "mdot_70_30_runoff",
-        "pnc_ft": pnc_ft,
-        "reverse_crown_ft": reverse_crown_ft,
-        "full_super_ft": full_super_ft,
-        "pnc_out_ft": pnc_out_ft,
-        "reverse_crown_out_ft": reverse_crown_out_ft,
-        "full_super_out_ft": full_super_out_ft,
         "segments": {
             "runoff_Lr": L,
             "runout_Lt": Lt,
@@ -1792,6 +1773,36 @@ def calculate_superelevation(
         },
     }
     result["calculation_metadata"]["criteria"] = criteria_for_result(result)
+    if not lengths_only:
+        pc_civil_ft = parse_station(pc_input)
+        pt_civil_ft = parse_station(pt_input) if pt_input.strip() else None
+        normalized_equations = normalize_station_equations(station_equations)
+        pc_ft = civil_to_internal_station(pc_civil_ft, normalized_equations, alignment_station_range)
+        pt_ft = civil_to_internal_station(pt_civil_ft, normalized_equations, alignment_station_range) if pt_civil_ft is not None else None
+        reverse_crown_ft = pc_ft - 0.7 * L
+        pnc_ft = reverse_crown_ft - Lt
+        full_super_ft = pc_ft + 0.3 * L
+
+        full_super_out_ft = None
+        reverse_crown_out_ft = None
+        pnc_out_ft = None
+        if pt_ft is not None:
+            full_super_out_ft = pt_ft - 0.3 * L
+            reverse_crown_out_ft = pt_ft + 0.7 * L
+            pnc_out_ft = reverse_crown_out_ft + Lt
+
+        result.update({
+            "pc_ft": pc_ft,
+            "pt_ft": pt_ft,
+            "station_equations": normalized_equations,
+            "alignment_station_range": alignment_station_range,
+            "pnc_ft": pnc_ft,
+            "reverse_crown_ft": reverse_crown_ft,
+            "full_super_ft": full_super_ft,
+            "pnc_out_ft": pnc_out_ft,
+            "reverse_crown_out_ft": reverse_crown_out_ft,
+            "full_super_out_ft": full_super_out_ft,
+        })
     return result
 
 

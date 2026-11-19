@@ -1,6 +1,8 @@
 "use client";
 
 import ControlIcon from "./ControlIcon";
+import ReverseTangentResults from "./ReverseTangentResults";
+import { reverseTangentRequest } from "../lib/reverse-tangent";
 import { CASE_II_DEFAULTS, CaseIIInputs, CaseIIResults } from "./CaseIICarriageways";
 import type { DesktopBranding, DesktopHost, DesktopProject } from "../lib/desktop";
 import DesktopUpdates from "./DesktopUpdates";
@@ -51,6 +53,7 @@ const INITIAL_INPUTS: Dict = {
   aashto_tables: null, case_ii: CASE_II_DEFAULTS,
   case_ii_geometry_mode: "shared_corridor", case_ii_placement_mode: "coordinated",
   manual_spiral_length_check: false,
+  manual_reverse_tangent_check: false, reverse_radius: "",
   project_name: "",
   route_name: "",
   alignment_name: "",
@@ -132,7 +135,7 @@ function calculationInputKey(inputs: Dict) {
     pc: inputs.pc,
     pt: inputs.pt,
     speed: inputs.speed,
-    radius: inputs.radius,
+    radius: inputs.radius, reverse_radius: inputs.reverse_radius, manual_reverse_tangent_check: inputs.manual_reverse_tangent_check,
     facility: inputs.facility,
     area: inputs.area,
     lane_width: inputs.lane_width,
@@ -179,6 +182,8 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
   const [spiralLengthCheck, setSpiralLengthCheck] = useState<Dict | null>(null);
   const isCaseII = inputs.roadway === "divided_case_ii" && String(inputs.criteria_profile).startsWith("aashto");
   const lengthCheckMode = !!inputs.manual_spiral_length_check && String(inputs.criteria_profile).startsWith("aashto") && !landxml;
+  const reverseTangentMode = !!inputs.manual_reverse_tangent_check && !landxml;
+  const adviceMode = lengthCheckMode || reverseTangentMode;
   const [landxmlPreset, setLandxmlPreset] = useState(0);
   const [allowLandxmlRetention, setAllowLandxmlRetention] = useState(false);
   const [retentionReady, setRetentionReady] = useState(false);
@@ -223,7 +228,7 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
   const nativeReady = useRef(false);
   const autosaveContent = useRef<() => string | null>(() => null);
   const saveAsRequested = useRef(false);
-  const compoundPreviewPending = !isCaseII && !lengthCheckMode && inputs.geometry_provenance?.source === "LandXML"
+  const compoundPreviewPending = !isCaseII && !adviceMode && inputs.geometry_provenance?.source === "LandXML"
     && requiresCompoundCalculation(landxml?.curve_presets?.[landxmlPreset]?.compound_neighbor_indexes, excludedCurveIndexes, selectedCurve >= 0);
   const selectedInputsMode = !!landxml && landxmlPreset >= 0 && inputScope === "selected";
   const calculateSelectedCurves = compoundPreviewPending || selectedInputsMode;
@@ -422,18 +427,18 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
   const calculate = async () => {
     if (compoundPreviewPending) return;
     const sequence = ++calculationSequence.current;
-    const result = await run("Calculating", () => call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs, curves, curve_index: selectedCurve }));
+    const result = await run("Calculating", () => call(reverseTangentMode ? "required_reverse_tangent" : lengthCheckMode ? "required_spiral_lengths" : "calculate", reverseTangentMode ? reverseTangentRequest(inputs) : { inputs, curves, curve_index: selectedCurve }));
     if (result && sequence === calculationSequence.current) {
       setBlockedFindings([]);
-      setCalculation(lengthCheckMode ? null : result);
-      setSpiralLengthCheck(lengthCheckMode ? { ...result, inputKey: calculationInputKey(inputs) } : null);
+      setCalculation(adviceMode ? null : result);
+      setSpiralLengthCheck(adviceMode ? { ...result, inputKey: calculationInputKey(inputs) } : null);
       setLookupResult(null);
       setDirty(true);
       const key = calculationInputKey(inputs);
       if (lastTrackedCalculation.current !== key) {
         lastTrackedCalculation.current = key;
         trackCalculatorEvent("superelevation", "calculation_completed");
-        trackEngineeringCalculation(inputs);
+        if (!reverseTangentMode) trackEngineeringCalculation(inputs);
       }
     } else if (!result) {
       setCalculation(null);
@@ -459,7 +464,9 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
     if (loadedCurve?.key === calculationKey && loadedCurve.request === calculationRequest) return;
     loadedCurveCalculation.current = null;
     const aashto = String(inputs.criteria_profile).startsWith("aashto");
-    const readyToCalculate = (isCaseII
+    const readyToCalculate = reverseTangentMode
+      ? ["speed", "radius", "reverse_radius"].every(key => String(inputs[key] ?? "").trim())
+      : (isCaseII
       ? (inputs.case_ii_geometry_mode !== "shared_corridor" || String(inputs.radius ?? "").trim())
         && ["left", "right"].every(side => (inputs.case_ii_geometry_mode === "shared_corridor" ? ["speed", "pivot_offset"] : lengthCheckMode ? ["speed", "radius"] : ["speed", "radius", "pivot_offset"]).every(key => String(inputs.case_ii?.[side]?.[key] ?? "").trim()))
       : String(inputs.speed ?? "").trim() && String(inputs.radius ?? "").trim())
@@ -481,16 +488,16 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
       setNotice("");
       setBusy("Calculating");
       try {
-        const result = await call(lengthCheckMode ? "required_spiral_lengths" : "calculate", { inputs, curves, curve_index: selectedCurve });
+        const result = await call(reverseTangentMode ? "required_reverse_tangent" : lengthCheckMode ? "required_spiral_lengths" : "calculate", reverseTangentMode ? reverseTangentRequest(inputs) : { inputs, curves, curve_index: selectedCurve });
         if (sequence !== calculationSequence.current) return;
-        setCalculation(lengthCheckMode ? null : result);
-        setSpiralLengthCheck(lengthCheckMode ? { ...result, inputKey: calculationKey } : null);
+        setCalculation(adviceMode ? null : result);
+        setSpiralLengthCheck(adviceMode ? { ...result, inputKey: calculationKey } : null);
         setBlockedFindings([]);
         setLookupResult(null);
         if (lastTrackedCalculation.current !== calculationKey) {
           lastTrackedCalculation.current = calculationKey;
           trackCalculatorEvent("superelevation", "calculation_completed");
-          trackEngineeringCalculation(inputs);
+          if (!reverseTangentMode) trackEngineeringCalculation(inputs);
         }
       } catch (reason) {
         if (sequence === calculationSequence.current) {
@@ -510,7 +517,7 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
     return () => window.clearTimeout(timer);
     // calculationKey intentionally captures only values that affect calculation output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode, compoundPreviewPending, selectedInputsMode]);
+  }, [calculationKey, calculationRequest, runtime, call, entitlement, lengthCheckMode, reverseTangentMode, adviceMode, compoundPreviewPending, selectedInputsMode]);
 
   const diagramCurves = useMemo(() => {
     if (!curves.length) return calculation?.results ? [{ results: calculation.results, meta }] : [];
@@ -640,7 +647,7 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
     }
   };
 
-  const curveObject = () => !lengthCheckMode && calculation ? { results: calculation.results, meta, notes: inputs.curve_notes || "" } : null;
+  const curveObject = () => !adviceMode && calculation ? { results: calculation.results, meta, notes: inputs.curve_notes || "" } : null;
 
   const selectAlignment = async (alignmentIndex: number) => {
     if (!landxml) return;
@@ -1054,9 +1061,10 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
   );
 
   const lengthCheckResult = lengthCheckMode && spiralLengthCheck?.inputKey === calculationKey ? spiralLengthCheck : null;
-  const result = lengthCheckMode ? null : calculation?.results;
+  const reverseTangentResult = reverseTangentMode && spiralLengthCheck?.inputKey === calculationKey ? spiralLengthCheck : null;
+  const result = adviceMode ? null : calculation?.results;
   const lanes = calculation?.lanes || {};
-  const criteria = (lengthCheckResult || result)?.calculation_metadata?.criteria || {};
+  const criteria = (reverseTangentResult || lengthCheckResult || result)?.calculation_metadata?.criteria || {};
   const activeProfileId = inputs.criteria_profile || "mdot-rdsd-2026-04-22";
   const activeProfile = manifest?.criteria_profiles?.find((profile: Dict) => profile.profile_id === activeProfileId);
   const profileOptions = manifest?.options?.profiles?.[activeProfileId] || {};
@@ -1261,7 +1269,7 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
               </div>}
             </div>)}
           </div>
-          <div className="button-grid"><button onClick={addCurve} disabled={lengthCheckMode || compoundPreviewPending}>Add {proChip(CAPABILITIES.multiCurve)}</button><button onClick={updateCurve} disabled={lengthCheckMode}>{landxml && landxmlPreset >= 0 && !calculation ? "Save curve inputs" : "Update"} {proChip(CAPABILITIES.multiCurve)}</button><button onClick={removeCurve}>Remove</button></div>
+          <div className="button-grid"><button onClick={addCurve} disabled={adviceMode || compoundPreviewPending}>Add {proChip(CAPABILITIES.multiCurve)}</button><button onClick={updateCurve} disabled={adviceMode}>{landxml && landxmlPreset >= 0 && !calculation ? "Save curve inputs" : "Update"} {proChip(CAPABILITIES.multiCurve)}</button><button onClick={removeCurve}>Remove</button></div>
         </aside>
 
         <section className="panel inputs-panel">
@@ -1280,15 +1288,16 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
           }}><option value="curve">{landxml.curve_presets[landxmlPreset]?.curve_name || `Curve ${landxmlPreset + 1}`} only</option><option value="selected">Selected XML curves</option></select><small>{inputScope === "curve" ? "Edits stay with this curve, even if calculation is blocked. Add selected uses each curve's saved inputs." : "Each input you change updates the checked curves. Other curve-specific settings are retained."}</small></label>}
           <div className="form-grid">{input("alignment_name", "Alignment name")}{input("curve_name", "Curve name")}
             <label className="field full"><span>Governing standard</span><select value={activeProfileId} onChange={(e) => updateCriteriaProfile(e.target.value)}>{manifest?.criteria_profiles?.map((profile: Dict) => <option value={profile.profile_id} key={profile.profile_id}>{profile.governing_authority} · {profile.revision}{!profile.profile_id.startsWith("mdot") && !allows(entitlement, CAPABILITIES.allDotProfiles) ? " · Pro" : ""}</option>)}</select><small>{activeProfile?.profile_name}</small></label>
-            <label className="field"><span>Curve direction</span><select value={inputs.curve_direction} onChange={(e) => update("curve_direction", e.target.value)}><option value="left">Left</option><option value="right">Right</option></select></label>
-            {isAashto && !landxml && profileOptions.manual_spiral_length_check && <label className="field"><span>Manual calculation</span><select value={lengthCheckMode ? "lengths" : "transitions"} onChange={e=>update("manual_spiral_length_check",e.target.value === "lengths")}><option value="transitions">Transition stations</option><option value="lengths">Required spiral lengths</option></select><small>{lengthCheckMode ? "Check minimum lengths without TS/ST. PC/PT are optional curve references." : "Enter established curve and spiral stations."}</small></label>}
-            {isAashto && !lengthCheckMode && <label className="field"><span>Existing alignment type</span><select value={inputs.alignment_type} onChange={e=>update("alignment_type",e.target.value)}><option value="circular">Circular curve</option><option value="spiral">Spiral–circular–spiral</option></select></label>}
-            {isAashto && !lengthCheckMode && inputs.alignment_type === "spiral" && input("ts","TS station",true)}
-            {input("pc", !lengthCheckMode && inputs.alignment_type === "spiral" ? "SC station" : "PC station", !lengthCheckMode)}{input("pt", !lengthCheckMode && inputs.alignment_type === "spiral" ? "CS station" : "PT station",isAashto && !lengthCheckMode)}
-            {isAashto && !lengthCheckMode && inputs.alignment_type === "spiral" && input("st","ST station",true)}
-            {!isCaseII && <>
+            <label className="field"><span>{reverseTangentMode ? "First curve direction" : "Curve direction"}</span><select value={inputs.curve_direction} onChange={(e) => update("curve_direction", e.target.value)}><option value="left">Left</option><option value="right">Right</option></select></label>
+            {!landxml && <label className="field"><span>Manual calculation</span><select value={reverseTangentMode ? "reverse" : lengthCheckMode ? "lengths" : "transitions"} onChange={e=>updateInputs({manual_reverse_tangent_check:e.target.value === "reverse", manual_spiral_length_check:e.target.value === "lengths", ...(e.target.value === "reverse" ? {alignment_type:"circular", case_ii_geometry_mode:"shared_corridor"} : {})})}><option value="transitions">Transition stations</option>{isAashto && <option value="lengths">Required spiral lengths</option>}<option value="reverse">Required reverse-curve tangent</option></select><small>{reverseTangentMode ? "Two opposite circular curves. Automatic rates and lengths; no stations or LandXML required." : lengthCheckMode ? "Check minimum lengths without TS/ST. PC/PT are optional curve references." : "Enter established curve and spiral stations."}</small></label>}
+            {isAashto && !adviceMode && <label className="field"><span>Existing alignment type</span><select value={inputs.alignment_type} onChange={e=>update("alignment_type",e.target.value)}><option value="circular">Circular curve</option><option value="spiral">Spiral–circular–spiral</option></select></label>}
+            {isAashto && !adviceMode && inputs.alignment_type === "spiral" && input("ts","TS station",true)}
+            {!reverseTangentMode && <>{input("pc", !adviceMode && inputs.alignment_type === "spiral" ? "SC station" : "PC station", !lengthCheckMode)}{input("pt", !adviceMode && inputs.alignment_type === "spiral" ? "CS station" : "PT station",isAashto && !lengthCheckMode)}</>}
+            {isAashto && !adviceMode && inputs.alignment_type === "spiral" && input("st","ST station",true)}
+            {(!isCaseII || reverseTangentMode) && <>
             <label className="field"><span>Design speed <b>*</b></span><select value={inputs.speed} onChange={(e) => update("speed", e.target.value)}><option value="">Select mph</option>{speedOptions.map((speed: string) => <option key={speed}>{speed}</option>)}</select></label>
-            {input("radius", "Curve radius (ft)", true, "number")}
+            {input("radius", reverseTangentMode ? (isCaseII ? "Curve 1 baseline radius (ft)" : "Curve 1 radius (ft)") : "Curve radius (ft)", true, "number")}
+            {reverseTangentMode && input("reverse_radius", isCaseII ? "Curve 2 baseline radius (ft)" : "Curve 2 radius (ft)", true, "number")}
             </>}
             {!isAashto && <label className="field"><span>{isTdot ? "Roadway layout" : "Facility / rotation"}</span><select value={inputs.facility} disabled={!isTdot && inputs.area === "local"} onChange={(e) => update("facility", e.target.value)}>{(profileOptions.facility || manifest?.options?.facility || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>}
             <label className="field"><span>Area type</span><select value={inputs.area} onChange={(e) => { const area = e.target.value; updateInputs({ area, speed: isTdot && area === "urban" && Number(inputs.speed) > 60 ? "" : inputs.speed }); }}>{(profileOptions.area || manifest?.options?.area || []).map((value: string) => <option value={value} key={value}>{value.replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select></label>
@@ -1305,26 +1314,28 @@ export default function CalculatorApp({ desktop, desktopBranding, intro }: { des
                 <label className="field"><span>Initial slope (%) <b>*</b></span><input type="number" min="1.5" max="2" step="0.1" value={["","-"].includes(String(inputs.initial_slope)) ? "" : Math.abs(Number(inputs.initial_slope))*100} onChange={e=>update("initial_slope",`${String(inputs.initial_slope).startsWith("-") ? "-" : ""}${e.target.value === "" ? "" : Math.abs(Number(e.target.value))/100}`)} /><small>Enter the magnitude: 2 means 2%.</small></label>
                 <label className="field"><span>Initial drainage direction</span><select value={String(inputs.initial_slope).startsWith("-") ? "left" : "right"} onChange={e=>update("initial_slope",`${e.target.value === "left" ? "-" : ""}${["","-"].includes(String(inputs.initial_slope)) ? "" : Math.abs(Number(inputs.initial_slope))}`)}><option value="left">Drains left</option><option value="right">Drains right</option></select><small>Looking ahead along increasing alignment station, regardless of the rotation edge.</small></label>
               </> : <>{input("crown_from_left","Crown distance from left edge (ft)")}{input("left_normal_slope","Left normal slope (decimal)")}{input("right_normal_slope","Right normal slope (decimal)")}</>}
-              {!lengthCheckMode && inputs.alignment_type === "spiral" && <><label className="field"><span>Tangent runout placement</span><select value={inputs.runout_placement} onChange={e=>update("runout_placement",e.target.value)}><option value="on_tangent">On tangent</option><option value="in_spiral">In spiral</option></select></label><label className="check full"><input type="checkbox" checked={inputs.acknowledge_spiral_override} onChange={e=>update("acknowledge_spiral_override",e.target.checked)}/>Acknowledge project-specific minimum-length placement and zero-crown drainage review.</label></>}
+              {!adviceMode && inputs.alignment_type === "spiral" && <><label className="field"><span>Tangent runout placement</span><select value={inputs.runout_placement} onChange={e=>update("runout_placement",e.target.value)}><option value="on_tangent">On tangent</option><option value="in_spiral">In spiral</option></select></label><label className="check full"><input type="checkbox" checked={inputs.acknowledge_spiral_override} onChange={e=>update("acknowledge_spiral_override",e.target.checked)}/>Acknowledge project-specific minimum-length placement and zero-crown drainage review.</label></>}
               </>}
-              {isCaseII && <CaseIIInputs value={inputs.case_ii} settings={inputs} result={result} onChange={changes => updateInputs({case_ii: changes})} onSettingsChange={updateInputs} speeds={speedOptions} spiral={inputs.alignment_type === "spiral"} lengthsOnly={lengthCheckMode} />}
+              {isCaseII && <CaseIIInputs value={inputs.case_ii} settings={inputs} result={result} onChange={changes => updateInputs({case_ii: changes})} onSettingsChange={updateInputs} speeds={speedOptions} spiral={inputs.alignment_type === "spiral"} lengthsOnly={lengthCheckMode} reverseTangent={reverseTangentMode} />}
             </>}
-            {!activeProfileId.startsWith("aashto") && <label className="check full"><input type="checkbox" checked={inputs.override_standard_placement} onChange={e=>update("override_standard_placement",e.target.checked)}/>Override standard circular transition placement</label>}
-            {!isCaseII && (!lengthCheckMode && activeProfileId.startsWith("aashto") && inputs.alignment_type !== "spiral" || !activeProfileId.startsWith("aashto") && inputs.override_standard_placement) && <>
+            {!reverseTangentMode && !activeProfileId.startsWith("aashto") && <label className="check full"><input type="checkbox" checked={inputs.override_standard_placement} onChange={e=>update("override_standard_placement",e.target.checked)}/>Override standard circular transition placement</label>}
+            {!isCaseII && (!lengthCheckMode && activeProfileId.startsWith("aashto") && inputs.alignment_type !== "spiral" || !reverseTangentMode && !activeProfileId.startsWith("aashto") && inputs.override_standard_placement) && <>
               <label className="field"><span>Circular placement basis</span><select value={inputs.circular_placement_basis} onChange={e=>update("circular_placement_basis",e.target.value)}><option value="runoff">Runoff only (Lr)</option><option value="runoff_runout">Runoff + runout (Lr + Lt)</option></select><small>{inputs.circular_placement_basis === "runoff_runout" ? "Split the entire transition around PC/PT." : "Split runoff around PC/PT; runout sits beyond its tangent end."} With zero runout, both choices give the same placement.</small></label>
               <label className="field"><span>{inputs.circular_placement_basis === "runoff_runout" ? "Total transition" : "Runoff"} on tangent (%) <b>*</b></span><input type="number" min="0" max="100" value={inputs.runoff_tangent_percent} onChange={e=>update("runoff_tangent_percent",e.target.value)}/><small>{inputs.runoff_tangent_percent !== "" ? `${100-Number(inputs.runoff_tangent_percent)}% on curve` : "Explicit project input required"}. Bank and available-length checks still apply.</small></label>
             </>}
           </div>
-          <button className="advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><span>Advanced settings</span><small>Optional criteria overrides and stationing</small><ControlIcon name={advancedOpen ? "minus" : "plus"} /></button>
+          {!reverseTangentMode && <><button className="advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(!advancedOpen)}><span>Advanced settings</span><small>Optional criteria overrides and stationing</small><ControlIcon name={advancedOpen ? "minus" : "plus"} /></button>
           {advancedOpen && <div className="advanced-grid">{!isCaseII && input("e_manual", "Manual e")}{!isAashto && <>{input("friction", "Side friction")}{input("rel_grad", "Relative gradient")}{input("normal_crown", "Normal crown")}</>}{!isCaseII && <>{input("Lr_manual", "Runoff Lr (ft)")}{input("Lt_manual", "Runout Lt (ft)")}</>}{input("station_equations", "Station equations")}{input("alignment_station_range", "Internal station range")}<small>Repeated station labels require a region suffix, for example 10+00R2, or a narrower internal range.</small></div>}
+          </>}
+          {reverseTangentMode && !isAashto && input("normal_crown", "Normal crown (decimal)", true, "number")}
           <label className="field full"><span>Curve notes</span><textarea value={inputs.curve_notes} onChange={(e) => update("curve_notes", e.target.value)} rows={3} /></label>
           {compoundPreviewPending && <p className="field-note">Input edits are kept without computing. This curve joins an adjoining curve directly; Calculate selected curves uses the individual inputs to build their shared transition.</p>}
-          <div className="compute-bar"><label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station format</label><span className="auto-status">{calculateSelectedCurves ? "Inputs kept · calculate selected curves" : "Calculates automatically"}</span><button onClick={() => { setInputs((current) => ({ ...INITIAL_INPUTS, project_name: current.project_name, route_name: current.route_name })); setCalculation(null); }}>Clear curve</button><button className="primary" onClick={calculateSelectedCurves ? addAll : calculate} disabled={runtime !== "ready" || !!busy}>{busy || (calculateSelectedCurves ? "Calculate selected curves" : lengthCheckMode ? "Check lengths" : calculation ? "Recompute now" : "Compute now")}</button></div>
+          <div className="compute-bar">{!reverseTangentMode && <label className="check"><input type="checkbox" checked={inputs.station_format} onChange={(e) => update("station_format", e.target.checked)} /> Station format</label>}<span className="auto-status">{calculateSelectedCurves ? "Inputs kept · calculate selected curves" : "Calculates automatically"}</span><button onClick={() => { setInputs((current) => ({ ...INITIAL_INPUTS, project_name: current.project_name, route_name: current.route_name })); setCalculation(null); }}>Clear curve</button><button className="primary" onClick={calculateSelectedCurves ? addAll : calculate} disabled={runtime !== "ready" || !!busy}>{busy || (calculateSelectedCurves ? "Calculate selected curves" : adviceMode ? "Check lengths" : calculation ? "Recompute now" : "Compute now")}</button></div>
         </section>
 
         <section className="panel results-panel">
-          <div className="panel-heading"><div><p className="step">03</p><h2>{lengthCheckMode ? "Required spiral lengths" : "Results"}</h2></div>{(result || lengthCheckResult) && <span className="criteria-tag">{criteria.governing_authority || "Criteria"} sources recorded</span>}</div>
-          {lengthCheckMode ? lengthCheckResult ? <>
+          <div className="panel-heading"><div><p className="step">03</p><h2>{reverseTangentMode ? "Required reverse-curve tangent" : lengthCheckMode ? "Required spiral lengths" : "Results"}</h2></div>{(result || lengthCheckResult || reverseTangentResult) && <span className="criteria-tag">{criteria.governing_authority || "Criteria"} sources recorded</span>}</div>
+          {reverseTangentMode ? <ReverseTangentResults result={reverseTangentResult} /> : lengthCheckMode ? lengthCheckResult ? <>
             {lengthCheckResult.carriageways ? <CaseIIResults result={lengthCheckResult} /> : <>
             <div className="metric-grid" aria-live="polite"><article><span>{lengthCheckResult.section_transition ? "Curve cross slope" : "Rate e"}</span><strong>{lengthCheckResult.section_transition?.target_slope_label || Number(lengthCheckResult.e).toFixed(4)}</strong><small>{lengthCheckResult.e_source}</small></article><article><span>Runoff Lr</span><strong>{Number(lengthCheckResult.Lr).toFixed(2)}′</strong><small>Required transition length</small></article><article><span>Runout Lt</span><strong>{Number(lengthCheckResult.Lt).toFixed(2)}′</strong><small>Tangent runout</small></article></div>
             <div className="lane-tables"><div style={{gridColumn:"1 / -1"}}><h4>Minimum spiral length for each runout placement</h4><table><thead><tr><th>Runout placement</th><th>Minimum spiral (ft)</th><th>Includes</th></tr></thead><tbody><tr><td>On tangent</td><td>{Number(lengthCheckResult.minimum_spiral_on_tangent_ft).toFixed(3)}</td><td>Runoff only</td></tr><tr><td>In spiral</td><td>{Number(lengthCheckResult.minimum_spiral_in_spiral_ft).toFixed(3)}</td><td>Runoff + runout</td></tr></tbody></table></div></div>

@@ -20,7 +20,7 @@ export function editLandxmlInputs(state: LandxmlInputs, changes: Dict, index: nu
 export function curveInputValues(curve: Dict): Dict {
   const values = curve.results.inputs || {};
   const restored: Dict = {
-    ...values, ...curve.meta, manual_spiral_length_check: false,
+    ...values, ...curve.meta, manual_spiral_length_check: false, manual_reverse_tangent_check: false,
     ...(values.roadway === "divided_case_ii" ? {
       case_ii_geometry_mode: values.case_ii_geometry_mode ?? "explicit_radii",
       case_ii_placement_mode: values.case_ii_placement_mode ?? (values.case_ii_geometry_mode === "shared_corridor" ? "coordinated" : "independent"),

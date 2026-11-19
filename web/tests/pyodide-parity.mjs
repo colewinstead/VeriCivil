@@ -48,6 +48,21 @@ const convertWorkerResult = runInNewContext(
   `${await readFile(new URL("../public/pyodide-worker.js", import.meta.url), "utf8")}\nconvertResult;`,
   { self: { location: { protocol: "https:" } } },
 );
+for (const profile of ["mdot", "tdot", "aashto"]) {
+  const request = {entitlement:proEntitlement, radius_1:4000, radius_2:3000,
+    inputs:{criteria_profile:profile, speed:65, area:"rural", runoff_tangent_percent:50,
+      circular_placement_basis:"runoff_runout"}};
+  assert.deepEqual(browser("required_reverse_tangent",request),native("required_reverse_tangent",request));
+}
+for (const mode of ["coordinated", "independent"]) {
+  const request={entitlement:proEntitlement,radius_1:4000,radius_2:3000,inputs:{criteria_profile:"aashto",speed:65,
+    roadway:"divided_case_ii",case_ii_geometry_mode:"shared_corridor",case_ii_placement_mode:mode,
+    runoff_tangent_percent:50,circular_placement_basis:"runoff_runout",
+    case_ii:Object.fromEntries(["left","right"].map(side=>[side,{lane_count:side==="left"?2:4,lane_width:12,
+      pivot_offset:side==="left"?-12:12,initial_slope:side==="left"?-.02:.02,
+      runoff_tangent_percent:50,circular_placement_basis:"runoff_runout"}]))}};
+  assert.deepEqual(browser("required_reverse_tangent",request),native("required_reverse_tangent",request));
+}
 for (const direction of ["left", "right"]) {
   const request = { entitlement: proEntitlement, inputs: {
     criteria_profile: "aashto-green-book-2018-2019-10", roadway: "divided_case_ii", pc: "1000", pt: "3000", curve_direction: direction,

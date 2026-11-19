@@ -508,8 +508,13 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
     required_capability = _OPERATION_CAPABILITIES.get(operation)
     if required_capability is not None:
         require_capability(entitlement, required_capability)
-    if operation == "required_spiral_lengths":
+    if operation in {"required_spiral_lengths", "required_reverse_tangent"}:
         require_profile_access(entitlement, normalize_profile_id(payload.get("inputs", {}).get("criteria_profile")))
+    if operation.startswith("export_") and any(
+        c.get("results", {}).get("result_type") in {"reverse_tangent_check", "reverse_curve_length_check"}
+        for c in payload.get("curves", [])
+    ):
+        raise ValueError("A reverse-tangent check has no established stations and cannot be exported as a calculated curve.")
     if operation.startswith("export_") and operation!="export_pdf" and any(c.get("results",{}).get("transition_method")=="aashto_fixed_pivot" for c in payload.get("curves",[])):
         if any(f.get("severity")=="block" for f in (payload.get("corridor_qa") or {}).get("findings",[])):
             raise ValueError("AASHTO export blocked by Corridor QA; resolve the blocking findings.")
@@ -522,6 +527,8 @@ def dispatch(operation: str, payload_json: str = "{}") -> Any:
             payload.get("inputs", payload), payload.get("entitlement"), payload.get("curves"), payload.get("curve_index", -1)
         ),
         "required_spiral_lengths": lambda: required_spiral_lengths(payload.get("inputs", {})),
+        "required_reverse_tangent": lambda: __import__("super_reverse").required_reverse_tangent(
+            payload.get("inputs", {}), payload.get("radius_1"), payload.get("radius_2")),
         "import_aashto_workbook": lambda: __import__("aashto_criteria").import_workbook(payload["content_base64"]),
         "present_results": lambda: present_results(
             payload["results"], payload.get("direction", "left"), bool(payload.get("station_format", True))

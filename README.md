@@ -29,6 +29,8 @@ Calculate superelevation transitions, review lane slopes and stationing, and pre
 
 To explore without project data, open the workspace and choose **Load synthetic sample** after the engine is ready. Hosted features follow the current account entitlement; local development defaults to Pro for testing.
 
+For a station-free spacing check, choose **Manual calculation → Required reverse-curve tangent**. Enter two radii, design speed and shared roadway settings using MDOT, TDOT or AASHTO. AASHTO retains explicit project placement; Case II uses baseline radii and pavement offsets. Results show the space for independent superelevation transitions and, where eligible, the existing MDOT linked-reversal project-rule alternative. Signing, sight distance, drainage, arc-length adequacy and a complete agency minimum are not evaluated. This on-screen advice does not create stationed curves or engineering exports.
+
 <details>
 <summary>View an example calculation report</summary>
 
